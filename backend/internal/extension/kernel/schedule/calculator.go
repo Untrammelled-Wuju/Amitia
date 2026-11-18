@@ -68,6 +68,8 @@ func (c *ScheduleCalculator) CalculateNext(def *ScheduleContributionDefinition, 
 		}
 	case TriggerTypeCalendar:
 		nextScheduled, dstDecision, err = c.nextCalendar(def, loc, baseTime, now)
+	case TriggerTypeRRule:
+		nextScheduled, dstDecision, err = c.nextRRule(def, baseTime, now)
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrInvalidTriggerType, def.Trigger.Type)
 	}
@@ -109,6 +111,29 @@ func (c *ScheduleCalculator) CalculateNext(def *ScheduleContributionDefinition, 
 		CalculationReason: reason,
 		DSTDecision:       dstDecision,
 	}, nil
+}
+
+func (c *ScheduleCalculator) nextRRule(def *ScheduleContributionDefinition, baseTime, now time.Time) (*time.Time, string, error) {
+	if def.Trigger.RRule == nil {
+		return nil, "", fmt.Errorf("%w: rrule definition missing", ErrInvalidTriggerType)
+	}
+	parsed, err := parseRRuleDefinition(def.Trigger.RRule.Rule)
+	if err != nil {
+		return nil, "", err
+	}
+	if def.Timezone != "" && def.Timezone != parsed.location.String() {
+		return nil, "", fmt.Errorf("%w: rrule timezone %s does not match schedule timezone %s", ErrInvalidTimezone, parsed.location.String(), def.Timezone)
+	}
+	searchStart := baseTime
+	if searchStart.Before(now) {
+		searchStart = now
+	}
+	next := parsed.rule.After(searchStart, false)
+	if next.IsZero() {
+		return nil, "rrule_exhausted", nil
+	}
+	utcNext := next.UTC()
+	return &utcNext, "rrule_local_time", nil
 }
 
 func (c *ScheduleCalculator) nextCron(def *ScheduleContributionDefinition, loc *time.Location, baseTime, now time.Time) (*time.Time, string, error) {
@@ -268,6 +293,9 @@ func GenerateDefinitionHash(def *ScheduleContributionDefinition) string {
 	copy := *def
 	copy.DefinitionHash = ""
 	copy.EnabledByDefault = false
+	if copy.SessionPromptScope != nil {
+		copy.Target.SessionPromptScope = copy.SessionPromptScope
+	}
 	if copy.Target.Type == TargetTypeHostWorkload {
 		var input map[string]json.RawMessage
 		if json.Unmarshal(copy.Target.InputTemplate, &input) == nil {

@@ -78,6 +78,7 @@ function transformSlotSnapshot(entry: BackendSlotSnapshotEntry): SlotSnapshot {
     parentSlotId: entry.parentSlotId,
     dynamic: entry.dynamic,
     scope: entry.scope,
+    allowRootChild: entry.allowRootChild,
     declarationEpoch: entry.declarationEpoch,
     performanceBudget: entry.performanceBudget,
     contributions: entry.contributions.map(transformContribution),

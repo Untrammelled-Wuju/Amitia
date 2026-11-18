@@ -30,12 +30,17 @@ func RegisterPublicUIModuleRouter(group *gin.RouterGroup, runtime *Runtime) {
 	if container == nil || container.UIProviderRegistry == nil {
 		return
 	}
-	handler := ui_handler.NewHTTPHandler(nil, nil, nil)
+	handler := ui_handler.NewHTTPHandler(container.UIHost, container.SlotRegistry, container.PageHost)
 	handler.SetExtensionRoot(container.ExtRoot)
 	handler.SetProviderRegistry(container.UIProviderRegistry)
+	handler.SetHostRegistry(container.DeviceRegistry)
+	handler.SetAuthorizer(permission.NewUISessionAuthorizer(container.PermissionBroker, container.ScopeManager))
 	mux := http.NewServeMux()
 	handler.RegisterPublicModuleRoutes(mux)
 	group.Any("/ui/provider-module/*modulePath", gin.WrapH(mux))
+	group.Any("/ui/contribution-module/*modulePath", gin.WrapH(mux))
+	group.Any("/ui/page-module/*modulePath", gin.WrapH(mux))
+	group.Any("/ui/runtime-module/*modulePath", gin.WrapH(mux))
 }
 
 func (api *UIAPI) RegisterRoutes(extensions *gin.RouterGroup, parent *gin.RouterGroup) {

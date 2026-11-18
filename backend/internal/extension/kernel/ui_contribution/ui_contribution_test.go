@@ -127,6 +127,29 @@ func TestValidateAgainstSlotSuccess(t *testing.T) {
 	}
 }
 
+func TestValidateAgainstSlotAllowsWebPage(t *testing.T) {
+	def := makeValidDefinition()
+	def.Kind = UIContributionWebPage
+	def.Entry.Type = SandboxClientModule
+	def.Sandbox.Type = SandboxClientModule
+	slot := DefaultSlots["extension.settings.page"]
+	if err := ValidateAgainstSlot(def, slot); err != nil {
+		t.Fatalf("validate web page against slot: %v", err)
+	}
+}
+
+func TestValidateAgainstSettingsSectionAllowsSettingsSection(t *testing.T) {
+	def := makeValidDefinition()
+	def.Kind = UIContributionSettingsSection
+	def.Slot = UISlotReference{SlotID: "extension.settings.section", ContractVersion: 1}
+	def.Entry.Type = SandboxClientModule
+	def.Sandbox.Type = SandboxClientModule
+	slot := DefaultSlots["extension.settings.section"]
+	if err := ValidateAgainstSlot(def, slot); err != nil {
+		t.Fatalf("validate settings section against slot: %v", err)
+	}
+}
+
 func TestValidateAgainstSlotKindNotSupported(t *testing.T) {
 	def := makeValidDefinition()
 	def.Kind = UIContributionMenuItem
@@ -627,7 +650,7 @@ func TestBridgeRevokeSessionWaitsForInFlightRequestBeforeReleasingSnapshots(t *t
 	started := make(chan struct{})
 	finish := make(chan struct{})
 	released := make(chan struct{}, 1)
-	h.Bridge().SetScopeSnapshotFactory(func(string, string, int64, string, string) (string, error) {
+	h.Bridge().SetScopeSnapshotFactory(func(string, string, int64, string, string, string, string) (string, error) {
 		return "scope-snapshot", nil
 	})
 	h.Bridge().SetSnapshotReleaser(func(string, string) error {

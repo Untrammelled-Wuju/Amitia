@@ -511,6 +511,11 @@ type BridgeSession struct {
 	revoked              bool
 }
 
+type BridgeExecutionIdentity struct {
+	SpaceID  string
+	DeviceID string
+}
+
 type PermissionSnapshotFactory func(sessionID, extensionID, moduleID string, generation int64, characterID, conversationID string, grantedPerms []string, expiresAt time.Time) (string, error)
 type SnapshotReleaser func(scopeSnapshotID, permissionSnapshotID string) error
 
@@ -523,7 +528,7 @@ type UIBridge struct {
 	host                      *UIHost
 	mu                        sync.RWMutex
 	sessions                  map[string]*BridgeSession
-	scopeSnapshotFactory      func(extensionID, moduleID string, generation int64, characterID, conversationID string) (string, error)
+	scopeSnapshotFactory      func(extensionID, moduleID string, generation int64, characterID, conversationID, spaceID, deviceID string) (string, error)
 	permissionSnapshotFactory PermissionSnapshotFactory
 	snapshotReleaser          SnapshotReleaser
 	actionHandler             func(context.Context, *BridgeSession, *UIActionDefinition, UIActionInvocation) (json.RawMessage, error)
@@ -546,7 +551,7 @@ func (b *UIBridge) SetSnapshotReleaser(fn SnapshotReleaser) {
 	b.snapshotReleaser = fn
 }
 
-func (b *UIBridge) SetScopeSnapshotFactory(fn func(extensionID, moduleID string, generation int64, characterID, conversationID string) (string, error)) {
+func (b *UIBridge) SetScopeSnapshotFactory(fn func(extensionID, moduleID string, generation int64, characterID, conversationID, spaceID, deviceID string) (string, error)) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.scopeSnapshotFactory = fn
@@ -562,7 +567,7 @@ func (b *UIBridge) SetHandlers(
 	b.mu.Unlock()
 }
 
-func (b *UIBridge) CreateSession(def *UIContributionDefinition, origin string, grantedScopes, grantedPerms []string, surface, characterID, conversationID string, lifetime time.Duration) (*BridgeSession, error) {
+func (b *UIBridge) CreateSession(def *UIContributionDefinition, origin string, grantedScopes, grantedPerms []string, surface, characterID, conversationID string, lifetime time.Duration, identities ...BridgeExecutionIdentity) (*BridgeSession, error) {
 	if def == nil {
 		return nil, errors.New("ui_contribution: nil definition")
 	}
@@ -588,6 +593,10 @@ func (b *UIBridge) CreateSession(def *UIContributionDefinition, origin string, g
 		Token:           newBridgeToken(),
 		UsedNonces:      make(map[string]bool),
 	}
+	if len(identities) > 0 {
+		sess.SpaceID = identities[0].SpaceID
+		sess.DeviceID = identities[0].DeviceID
+	}
 
 	b.mu.RLock()
 	scopeFactory := b.scopeSnapshotFactory
@@ -596,7 +605,7 @@ func (b *UIBridge) CreateSession(def *UIContributionDefinition, origin string, g
 	b.mu.RUnlock()
 
 	if scopeFactory != nil {
-		scopeSnapID, err := scopeFactory(string(def.ExtensionID), string(def.ModuleID), def.Integrity.Generation, characterID, conversationID)
+		scopeSnapID, err := scopeFactory(string(def.ExtensionID), string(def.ModuleID), def.Integrity.Generation, characterID, conversationID, sess.SpaceID, sess.DeviceID)
 		if err != nil {
 			return nil, fmt.Errorf("ui_contribution: create scope snapshot: %w", err)
 		}
@@ -632,6 +641,16 @@ func (b *UIBridge) SetSessionExecutionIdentity(sessionID, spaceID, deviceID stri
 	sess.SpaceID = spaceID
 	sess.DeviceID = deviceID
 	return nil
+}
+
+func (b *UIBridge) SessionExecutionIdentity(sessionID string) (string, string) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	session, ok := b.sessions[sessionID]
+	if !ok {
+		return "", ""
+	}
+	return session.SpaceID, session.DeviceID
 }
 
 func (b *UIBridge) ValidateSession(sessionID, contributionID, origin string, contractVersion int, token string, generation int64, nonce string) (*BridgeSession, error) {

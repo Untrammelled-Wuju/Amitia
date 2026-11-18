@@ -6,9 +6,59 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/host_api"
 	"github.com/u-ai/backend/internal/extension/kernel/plugincontract"
 )
+
+func TestPluginBrokerExposesAndRemovesDynamicTool(t *testing.T) {
+	adapters, err := plugincontract.NewBuiltinAdapterRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	container := &Container{
+		CapabilityProviders: capability.NewProviderRegistry(),
+		ToolRegistry:        capability.NewToolRegistry(),
+		PluginAdapters:      adapters,
+		PluginRoutes:        plugincontract.NewContributionRouter(adapters),
+	}
+	if err := registerBuiltinContributionRoutes(container, NewTypedContributionInstaller(container)); err != nil {
+		t.Fatal(err)
+	}
+	broker := NewPluginBroker(container)
+	broker.validateManifest = false
+	module := plugincontract.ModuleRef{PluginID: "com.example/dynamic", ModuleID: "main"}
+	descriptor := plugincontract.ContributionDescriptor{
+		ID: "echo", Kind: "tool", Adapter: "tool", ContractVersion: 1,
+		Spec: map[string]any{
+			"toolId": "com.example/dynamic/echo", "modelName": "dynamic_echo",
+			"inputSchema": map[string]any{"type": "object"}, "runtime": map[string]any{"runtimeType": "javascript", "handlerName": "echo"},
+		},
+	}
+	if err := broker.RegisterContribution(t.Context(), module, descriptor); err != nil {
+		t.Fatal(err)
+	}
+	if tool, ok := container.ToolRegistry.GetByModelName(t.Context(), "dynamic_echo"); !ok || !tool.Enabled {
+		t.Fatalf("dynamic tool did not activate: %+v", tool)
+	}
+	providers := container.CapabilityProviders.ListByCapability("com.example/dynamic/echo")
+	if len(providers) != 1 {
+		t.Fatalf("expected one dynamic provider, got %+v", providers)
+	}
+	instances := container.CapabilityProviders.ListInstancesByProvider(providers[0].ID)
+	if len(instances) != 1 || !instances[0].IsExecutable() {
+		t.Fatalf("dynamic provider unavailable: %+v", instances)
+	}
+	if err := broker.UnregisterContribution(t.Context(), module, descriptor.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := container.ToolRegistry.GetByModelName(t.Context(), "dynamic_echo"); ok {
+		t.Fatal("dynamic tool still exposed after removal")
+	}
+	if len(container.CapabilityProviders.ListByCapability("com.example/dynamic/echo")) != 0 {
+		t.Fatal("dynamic provider still registered after removal")
+	}
+}
 
 func TestPluginBrokerResolvesDynamicServices(t *testing.T) {
 	container := &Container{PluginServices: plugincontract.NewServiceCatalog()}

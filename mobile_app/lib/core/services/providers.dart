@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 import '../backend_transport/backend_service_api.dart';
+import '../errors/original_error.dart';
 import '../backend_transport/errors/backend_transport_error.dart';
 import '../backend_transport/errors/backend_transport_error_code.dart';
 import '../backend_transport/providers/backend_transport_providers.dart';
@@ -35,6 +36,7 @@ import 'device_owned_speech_service.dart';
 import 'shared_core_data_access.dart';
 import 'privacy_service.dart';
 import 'temporal_service.dart' as temporal_config;
+import 'onboarding_completion_store.dart';
 import 'onboarding_service.dart';
 import '../models/character.dart';
 import '../models/conversation.dart';
@@ -619,3 +621,24 @@ final startupStageProvider = FutureProvider<String>((ref) async => 'ready');
 final extensionViewInvalidatorProvider = Provider<ExtensionViewInvalidator>(
   (ref) => ExtensionViewInvalidatorImpl(),
 );
+
+class OnboardingGateResult {
+  const OnboardingGateResult({required this.completed, this.errorText = ''});
+
+  final bool completed;
+  final String errorText;
+}
+
+final onboardingGateProvider = FutureProvider<OnboardingGateResult>((
+  ref,
+) async {
+  try {
+    return OnboardingGateResult(completed: await readOnboardingCompleted());
+  } catch (error, stackTrace) {
+    print('[original-error] $error\n$stackTrace');
+    return OnboardingGateResult(
+      completed: false,
+      errorText: originalErrorText(error),
+    );
+  }
+});

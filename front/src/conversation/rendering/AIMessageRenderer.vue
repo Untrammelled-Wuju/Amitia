@@ -14,8 +14,66 @@
             <div class="amrp-quote-text">{{ replyText }}</div>
           </div>
         </div>
-        <BubbleMessageContent v-if="messageStyle === 'bubble'" :message="message" />
-        <div v-else class="amrp-user-bubble">{{ message.markdown }}</div>
+        <ExtensionSlot
+          v-if="commandName"
+          slot-id="chat.message.command"
+          :context="{ ...(extensionContext || {}), messageId: message.id, conversationId: message.conversationId, command: commandName, text: message.markdown }"
+          :dispatch-key="commandName"
+          fallback="none"
+          layout="stack"
+          surface-role="message"
+          render-fallback-while-scope-pending
+        />
+        <ExtensionSlot
+          v-if="messageStyle === 'bubble'"
+          slot-id="chat.message.user.text"
+          :context="{ ...(extensionContext || {}), messageId: message.id, conversationId: message.conversationId, node: 'text', text: message.markdown }"
+          :dispatch-key="userTextNodeKey"
+          fallback="default"
+          layout="stack"
+          surface-role="message"
+          bare
+        >
+          <BubbleMessageContent :message="message" :extension-context="extensionContext">
+            <template #images="{ images }">
+              <MessageImageSlot
+                :images="images"
+                :message="message"
+                :extension-context="extensionContext"
+              />
+            </template>
+          </BubbleMessageContent>
+        </ExtensionSlot>
+        <ExtensionSlot
+          v-else
+          slot-id="chat.message.user.text"
+          :context="{ ...(extensionContext || {}), messageId: message.id, conversationId: message.conversationId, node: 'text', text: message.markdown }"
+          :dispatch-key="userTextNodeKey"
+          fallback="default"
+          layout="stack"
+          surface-role="message"
+          bare
+        >
+          <div class="amrp-user-bubble">{{ message.markdown }}</div>
+        </ExtensionSlot>
+        <ExtensionSlot
+          slot-id="chat.message.text.interaction"
+          :context="{ ...(extensionContext || {}), messageId: message.id, conversationId: message.conversationId, text: message.markdown }"
+          dispatch-key="text"
+          fallback="none"
+          layout="stack"
+          surface-role="message"
+          render-fallback-while-scope-pending
+        />
+        <template v-if="messageStyle !== 'bubble'">
+          <div v-for="images in userImageGroups" :key="`user-images:${images.map((image) => image.id).join(':')}`" class="amrp-user-images">
+            <MessageImageSlot
+              :images="images"
+              :message="message"
+              :extension-context="extensionContext"
+            />
+          </div>
+        </template>
         <div class="amrp-user-tools">
           <slot name="badges" :message="message" />
           <span class="amrp-user-time">{{ formatTime(message.createdAt) }}</span>
@@ -61,6 +119,7 @@
           v-if="messageStyle === 'bubble'"
           :message="message"
           :turn="assistantTurn"
+          :extension-context="extensionContext"
           :pending="streaming"
           :citation-ids="citationSources.map((source) => source.id)"
           @citation="activeCitationId = $event"
@@ -76,6 +135,13 @@
               <span class="amrp-name">{{ character.name || 'Amitia' }}</span>
             </div>
           </template>
+          <template #images="{ images }">
+            <MessageImageSlot
+              :images="images"
+              :message="message"
+              :extension-context="extensionContext"
+            />
+          </template>
         </BubbleMessageContent>
 
         <AmitiaThinkingBlock
@@ -83,12 +149,14 @@
           content=""
           state="streaming"
           :duration="0"
+          :extension-context="extensionContext"
         />
 
         <AssistantTurnTimeline
           v-else-if="assistantTurn"
           :turn="assistantTurn"
           :citation-ids="citationSources.map((source) => source.id)"
+          :extension-context="extensionContext"
           @citation="activeCitationId = $event"
         />
 
@@ -98,6 +166,7 @@
             :content="message.thinking.content"
             :state="message.thinking.state"
             :duration="message.thinking.duration"
+            :extension-context="extensionContext"
           />
 
           <RendererErrorBoundary label="Markdown Renderer">
@@ -106,14 +175,20 @@
               :source="flowBubbleText(message.markdown)"
               :streaming="message.state === 'streaming' && !props.message.outputComplete"
               :citation-ids="citationSources.map((source) => source.id)"
+              :extension-context="extensionContext"
               @citation="activeCitationId = $event"
             />
           </RendererErrorBoundary>
 
           <template v-for="item in renderedBlocks" :key="item.key">
             <RendererErrorBoundary :label="blockLabel(item)">
-              <AmitiaImageBlock v-if="item.kind === 'images'" :images="item.images" />
-              <RichBlockRenderer v-else :block="item.block" />
+            <MessageImageSlot
+              v-if="item.kind === 'images'"
+              :images="item.images"
+              :message="message"
+              :extension-context="extensionContext"
+            />
+              <RichBlockRenderer v-else :block="item.block" :extension-context="extensionContext" />
             </RendererErrorBoundary>
           </template>
         </template>
@@ -190,11 +265,12 @@ import { aimMessagePlainText, normalizeAIMessage } from "./amrp";
 import { copyText } from "./utils";
 import MarkdownContent from "./markdown/MarkdownContent.vue";
 import AmitiaThinkingBlock from "./blocks/AmitiaThinkingBlock.vue";
-import AmitiaImageBlock from "./blocks/AmitiaImageBlock.vue";
 import RichBlockRenderer from "./blocks/RichBlockRenderer.vue";
 import AmitiaCitationList from "./blocks/AmitiaCitationList.vue";
 import RendererErrorBoundary from "./blocks/RendererErrorBoundary.vue";
 import MinecraftServerBlock from "./blocks/MinecraftServerBlock.vue";
+import MessageImageSlot from "./MessageImageSlot.vue";
+import ExtensionSlot from "@/components/extension/ExtensionSlot.vue";
 import { registerExtensionRenderer } from "./rendererRegistry";
 import { createMessageFeedback, deleteMessageFeedback, loadMessageFeedback, type MessageFeedback } from "@/runtime/message-feedback";
 
@@ -218,6 +294,7 @@ const props = withDefaults(
     showHeader?: boolean;
     compactBottom?: boolean;
     readOnly?: boolean;
+    extensionContext?: Record<string, unknown>;
   }>(),
   {
     charName: "Amitia",
@@ -227,6 +304,7 @@ const props = withDefaults(
     showHeader: true,
     compactBottom: false,
     readOnly: false,
+    extensionContext: () => ({}),
   },
 );
 
@@ -235,6 +313,16 @@ const emit = defineEmits<{
   edit: [message: Record<string, any>];
   "scroll-to-message": [id: string];
 }>();
+
+const userTextNodeKey = computed(() => /(?:^|\s)#(?:session|conversation)\b/i.test(String(props.message.markdown || ""))
+  ? "session"
+  : "text");
+const commandName = computed(() => {
+  const value = String(props.message.markdown || "").trim();
+  if (!value.startsWith("/")) return "";
+  const token = value.slice(1).split(/\s+/, 1)[0] || "";
+  return token.split(":", 1)[0];
+});
 
 const { resolvedMode } = useTheme();
 const { messageStyle, userMessageGlass, userMessageWaterGlass, aiAvatarEnabled, aiNameEnabled, aiAvatarRadius } = useChatAppearancePreference();
@@ -437,6 +525,12 @@ const renderedBlocks = computed<RenderItem[]>(() => {
   return items;
 });
 
+const userImageGroups = computed(() =>
+  renderedBlocks.value.flatMap((item) =>
+    item.kind === "images" ? [item.images] : [],
+  ),
+);
+
 function formatTime(value: number): string {
   const date = new Date(value);
   return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
@@ -627,6 +721,15 @@ async function handleCopy(mode: "plain" | "markdown") {
   width: 100%;
   max-width: 820px;
   margin: 0 auto 34px;
+}
+
+.amrp-user-images {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.amrp-user-images :deep(.amrp-image-gallery) {
+  margin: 8px 0 0;
 }
 
 .amrp-user-stack {

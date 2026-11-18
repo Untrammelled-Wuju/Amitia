@@ -78,6 +78,15 @@ SPDX-License-Identifier: AGPL-3.0-only
         </div>
       </el-form-item>
 
+      <ExtensionSlot
+        slot-id="settings.model.provider"
+        :context="providerDraftContext"
+        :dispatch-key="providerSelection"
+        fallback="none"
+        layout="stack"
+        surface-role="main"
+      />
+
       <el-form-item v-if="!isEmbeddedProvider" label="Base URL" prop="baseUrl">
         <el-input v-model="form.baseUrl" placeholder="http://127.0.0.1:11434" />
       </el-form-item>
@@ -319,6 +328,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
 import type { FormInstance, FormRules } from "element-plus";
+import ExtensionSlot from "@/components/extension/ExtensionSlot.vue";
 
 const props = defineProps<{
   modelValue: boolean;
@@ -389,6 +399,18 @@ const providerSelection = computed(() => {
   }
   return props.form.apiType;
 });
+const providerDraftContext = computed(() => ({
+  settingsNs: providerSelection.value,
+  provider: String(props.form.apiType || ''),
+  providerName: String(props.currentProviderSchema?.name || props.form.apiType || ''),
+  mode: 'draft',
+  modelName: String(props.form.modelName || ''),
+  baseUrl: String(props.form.baseUrl || ''),
+  hasApiKey: Boolean(props.form.apiKey),
+  active: false,
+  disabled: false,
+  status: String(props.form.lastTestStatus || ''),
+}));
 function selectProvider(value: string) {
   const [apiType, protocol] = value.startsWith("openai:")
     ? ["openai", value.slice("openai:".length)]

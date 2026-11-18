@@ -51,7 +51,24 @@ describe("bubble message delivery", () => {
       { kind: "audio", url: "/voice.wav" }, { kind: "image", url: "/image.png" },
       { kind: "video", url: "/video.mp4" }, { kind: "file", url: "/doc.pdf", name: "文件" },
     ] });
-    expect(projectBubbleContent(message).map(item => item.kind === "block" ? item.block.kind : item.kind)).toEqual(["text", "audio", "image", "video", "file"]);
+    expect(projectBubbleContent(message).map(item => item.kind === "block" ? item.block.kind : item.kind)).toEqual(["text", "audio", "images", "video", "file"]);
+  });
+
+  it("groups consecutive image blocks into one replaceable gallery", () => {
+    const message = normalizeAIMessage({
+      id: "m-images",
+      role: "user",
+      status: "sent",
+      attachments: [
+        { kind: "image", url: "/one.png" },
+        { kind: "image", url: "/two.png" },
+        { kind: "video", url: "/video.mp4" },
+      ],
+    });
+    const projected = projectBubbleContent(message);
+    expect(projected.map(item => item.kind)).toEqual(["images", "block"]);
+    expect(projected[0].kind === "images" && projected[0].images.map(image => image.url)).toEqual(["/one.png", "/two.png"]);
+    expect(projected[1].kind === "block" && projected[1].block.kind).toBe("video");
   });
 
   it("handles resource-only media and converts history separators when returning to flow", () => {

@@ -329,6 +329,9 @@ async function fetchActiveCharacter() {
       const first = chars.find((c: any) => c.status !== "disabled");
       const selected = defaultChar || active || first;
       currentCharName.value = (selected || {}).name || "";
+      if (selected) {
+        appStore.selectCharacter(selected);
+      }
       if (selected && selected.isDefault) {
         localStorage.setItem(
           "uai-default-char",

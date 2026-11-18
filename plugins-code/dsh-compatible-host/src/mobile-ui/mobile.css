@@ -1,0 +1,187 @@
+:host {
+  color-scheme: light dark;
+}
+
+.dsh-mobile {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 16px;
+  color: CanvasText;
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.dsh-mobile *,
+.dsh-mobile *::before,
+.dsh-mobile *::after {
+  box-sizing: border-box;
+}
+
+.dsh-mobile__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.dsh-mobile__title {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.25;
+}
+
+.dsh-mobile__meta {
+  margin: 4px 0 0;
+  color: color-mix(in srgb, CanvasText 62%, transparent);
+  font-size: 12px;
+}
+
+.dsh-mobile__stack {
+  display: grid;
+  gap: 10px;
+}
+
+.dsh-mobile__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dsh-mobile__input {
+  min-width: 0;
+  flex: 1;
+  border: 1px solid color-mix(in srgb, CanvasText 18%, transparent);
+  border-radius: 10px;
+  background: Canvas;
+  color: inherit;
+  padding: 10px 12px;
+  font: inherit;
+}
+
+.dsh-mobile__button {
+  min-height: 40px;
+  border: 1px solid color-mix(in srgb, CanvasText 18%, transparent);
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  padding: 8px 12px;
+  font: inherit;
+  font-weight: 600;
+}
+
+.dsh-mobile__button:disabled {
+  opacity: 0.45;
+}
+
+.dsh-mobile__button--primary {
+  border-color: #3977e8;
+  background: #3977e8;
+  color: #fff;
+}
+
+.dsh-mobile__button--danger {
+  color: #c43b3b;
+}
+
+.dsh-mobile__summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.dsh-mobile__metric {
+  border: 1px solid color-mix(in srgb, CanvasText 12%, transparent);
+  border-radius: 12px;
+  padding: 10px;
+  background: color-mix(in srgb, Canvas 94%, CanvasText 6%);
+}
+
+.dsh-mobile__metric-value {
+  display: block;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.dsh-mobile__metric-label {
+  display: block;
+  color: color-mix(in srgb, CanvasText 58%, transparent);
+  font-size: 11px;
+}
+
+.dsh-mobile__card {
+  border: 1px solid color-mix(in srgb, CanvasText 12%, transparent);
+  border-radius: 14px;
+  padding: 13px;
+  background: color-mix(in srgb, Canvas 96%, CanvasText 4%);
+}
+
+.dsh-mobile__card-title {
+  margin: 0;
+  font-size: 15px;
+}
+
+.dsh-mobile__card-id {
+  margin: 3px 0 9px;
+  overflow-wrap: anywhere;
+  color: color-mix(in srgb, CanvasText 56%, transparent);
+  font: 11px/1.4 ui-monospace, SFMono-Regular, monospace;
+}
+
+.dsh-mobile__status {
+  display: inline-flex;
+  border-radius: 999px;
+  padding: 2px 8px;
+  background: color-mix(in srgb, CanvasText 8%, transparent);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.dsh-mobile__status--enabled {
+  background: color-mix(in srgb, #27a166 18%, transparent);
+  color: #1f8a58;
+}
+
+.dsh-mobile__details {
+  display: grid;
+  gap: 3px;
+  margin: 9px 0;
+  color: color-mix(in srgb, CanvasText 68%, transparent);
+  font-size: 12px;
+}
+
+.dsh-mobile__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dsh-mobile__empty {
+  border: 1px dashed color-mix(in srgb, CanvasText 20%, transparent);
+  border-radius: 14px;
+  padding: 24px 16px;
+  text-align: center;
+  color: color-mix(in srgb, CanvasText 58%, transparent);
+}
+
+.dsh-mobile__error {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  border: 1px solid color-mix(in srgb, #c43b3b 38%, transparent);
+  border-radius: 12px;
+  padding: 10px;
+  background: color-mix(in srgb, #c43b3b 10%, Canvas);
+  color: color-mix(in srgb, #c43b3b 78%, CanvasText);
+  font: 11px/1.5 ui-monospace, SFMono-Regular, monospace;
+}
+
+@media (max-width: 380px) {
+  .dsh-mobile {
+    padding: 12px;
+  }
+
+  .dsh-mobile__row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

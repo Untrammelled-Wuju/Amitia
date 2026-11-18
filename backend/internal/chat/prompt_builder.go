@@ -174,6 +174,15 @@ func buildRoleSystemParts(profile *character.RoleRuntimeProfile, runtime *intera
 	appendRuntimeConfig("【性格配置】", profile.PersonalityConfig)
 	appendRuntimeConfig("【对话风格配置】", profile.ChatStyleConfig)
 	appendRuntimeConfig("【场景配置】", profile.SceneRules)
+	if runtime != nil && runtime.Context.PromptExtensions.Status == interaction.LoadStatusReady {
+		for _, section := range runtime.Context.PromptExtensions.Value.Sections {
+			content := strings.TrimSpace(section.Content)
+			if content == "" {
+				continue
+			}
+			parts = append(parts, "【扩展提示词】\n"+content)
+		}
+	}
 	return parts
 }
 

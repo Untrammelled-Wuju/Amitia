@@ -7,21 +7,18 @@ SPDX-License-Identifier: AGPL-3.0-only
     <ExtensionPageHeader
       title="安装管理"
       description="管理已安装的桌宠、运行配置以及桌宠扩展插件"
-      grandparent-title="创意工坊"
-      grandparent-path="/creative-workshop"
-      parent-title="桌宠"
-      parent-path="/creative-workshop/pet"
+      parent-title="创意工坊"
+      parent-path="/creative-workshop"
     >
       <template #actions>
-        <el-button :icon="Back" @click="goBack">返回任务列表</el-button>
         <el-button type="success" :icon="Plus" @click="openInstallDialog">安装桌宠</el-button>
         <el-button
-          v-if="hasActiveInstallation"
+          v-if="activeInstallations.length > 0"
           type="warning"
           plain
           :loading="disablingAll"
           @click="confirmDisableAll"
-          >停用当前桌宠</el-button
+          >停用全部桌宠</el-button
         >
         <el-button :icon="Refresh" :loading="loading" @click="loadList"
           >刷新</el-button
@@ -38,8 +35,8 @@ SPDX-License-Identifier: AGPL-3.0-only
         <div class="summary-item">
           <div class="summary-label">当前启用</div>
           <div class="summary-value">
-            <span :class="activeInstallation ? 'stat-success' : 'stat-muted'">
-              {{ activeInstallation ? activeInstallation.name : "未启用" }}
+            <span :class="activeInstallations.length ? 'stat-success' : 'stat-muted'">
+              {{ activeInstallations.length }}
             </span>
           </div>
         </div>
@@ -58,7 +55,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       </div>
     </el-card>
 
-    <PetPluginManager @changed="refreshAll" />
+    <PetPluginManager ref="petPluginManager" @changed="refreshAll" />
 
     <el-alert v-if="uninstallRefreshError" title="刷新桌宠卸载状态失败" type="error" @close="uninstallRefreshError = ''">
       <pre class="uninstall-refresh-error">{{ uninstallRefreshError }}</pre>
@@ -67,10 +64,10 @@ SPDX-License-Identifier: AGPL-3.0-only
     <el-card shadow="never" class="table-card">
       <el-empty
         v-if="!loading && !installations.length"
-        description="暂无已安装的桌宠，可从已有发布记录中选择安装"
+        description="暂无已安装的桌宠，请安装 .petx 桌宠包"
         :image-size="80"
       >
-        <el-button type="primary" @click="openInstallDialog">选择安装</el-button>
+        <el-button type="primary" @click="openInstallDialog">安装桌宠</el-button>
       </el-empty>
 
       <div v-else class="installation-grid" v-loading="loading">
@@ -209,12 +206,6 @@ SPDX-License-Identifier: AGPL-3.0-only
               :loading="actionTargetId === item.id"
               @click="openUpgradeDialog(item)"
             >升级</el-button>
-            <el-button
-              v-if="canSwitch(item)"
-              size="small"
-              :loading="actionTargetId === item.id"
-              @click="onSwitch(item)"
-            >切换</el-button>
             <el-button
               v-if="canRepair(item)"
               size="small"
@@ -421,48 +412,12 @@ SPDX-License-Identifier: AGPL-3.0-only
       </template>
     </el-dialog>
 
-    <el-dialog
-      v-model="installDialogVisible"
-      title="安装桌宠"
-      width="480px"
-      destroy-on-close
-    >
-      <el-form label-width="100px">
-        <el-form-item label="资源包">
-          <el-select
-            v-model="installForm.releaseId"
-            placeholder="请选择资源包"
-            style="width: 100%"
-            filterable
-            @change="onInstallPackageChange"
-          >
-            <el-option
-              v-for="pkg in availableReleases"
-              :key="pkg.id"
-              :label="`Release v${pkg.version}`"
-              :value="pkg.id"
-            />
-          </el-select>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="installDialogVisible = false">取消</el-button>
-        <el-button
-          type="primary"
-          :loading="installSubmitting"
-          :disabled="!installForm.releaseId"
-          @click="submitInstall"
-          >安装</el-button
-        >
-      </template>
-    </el-dialog>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, computed, watch, onMounted, onUnmounted } from "vue";
-import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Back, Refresh, Picture, Plus } from "@element-plus/icons-vue";
+import { Refresh, Picture, Plus } from "@element-plus/icons-vue";
 import ExtensionPageHeader from "../extensions/components/ExtensionPageHeader.vue";
 import PetPluginManager from "./components/PetPluginManager.vue";
 import { useApi } from "../../composables/useApi";
@@ -484,7 +439,6 @@ interface ReleaseOption {
   sourceGenerationTask: string;
 }
 
-const router = useRouter();
 const { get } = useApi();
 const { assetUrl } = useAssetUrl();
 
@@ -502,7 +456,6 @@ const {
   playAction,
   uninstall,
   upgrade,
-  switchInstallation,
   repair,
   refresh,
 } = useDesktopPetInstallations();
@@ -575,10 +528,8 @@ const defaultActionForm = reactive({
   actionKey: "",
 });
 
-const installDialogVisible = ref(false);
-const installSubmitting = ref(false);
+const petPluginManager = ref<InstanceType<typeof PetPluginManager> | null>(null);
 const availableReleases = ref<ReleaseOption[]>([]);
-const installForm = reactive({ petId: "", releaseId: "" });
 
 const upgradeDialogVisible = ref(false);
 const upgradeForm = reactive({
@@ -740,28 +691,13 @@ function canUpgrade(item: DesktopPetInstallation): boolean {
   return !!item.currentReleaseId || !!item.packageId;
 }
 
-function canSwitch(item: DesktopPetInstallation): boolean {
-  if (isUninstalled(item)) return false;
-  const rs = runtimeStatusOf(item);
-  return (
-    rs === "installed" ||
-    rs === "enabled" ||
-    rs === "offline" ||
-    rs === "pending_runtime"
-  );
-}
-
 function canRepair(item: DesktopPetInstallation): boolean {
   const rs = runtimeStatusOf(item);
   return rs === "corrupted" || rs === "recovery_required";
 }
 
-const activeInstallation = computed(() =>
-  installations.value.find((i) => isActive(i)) || null,
-);
-
-const hasActiveInstallation = computed(
-  () => !!activeInstallation.value,
+const activeInstallations = computed(() =>
+  installations.value.filter(isActive),
 );
 
 const disabledCount = computed(
@@ -848,9 +784,10 @@ async function onDisable(item: DesktopPetInstallation) {
 }
 
 function confirmDisableAll() {
-  if (!activeInstallation.value) return;
+  const selected = activeInstallations.value.slice();
+  if (!selected.length || disablingAll.value) return;
   ElMessageBox.confirm(
-    `将停用当前正在运行的桌宠「${activeInstallation.value.name}」,窗口会关闭,可以随时再启用。是否继续?`,
+    `将停用当前正在运行的 ${selected.length} 个桌宠，窗口会关闭，可以随时再启用。是否继续？`,
     "确认停用桌宠",
     {
       confirmButtonText: "确认停用",
@@ -859,12 +796,23 @@ function confirmDisableAll() {
     },
   )
     .then(async () => {
+      if (disablingAll.value) return;
       disablingAll.value = true;
       try {
-        await disable(activeInstallation.value!.id);
-        await refresh();
-      } catch (err: any) {
-        ElMessage.error(err?.message || "停用失败");
+        const failures: Error[] = [];
+        for (const item of selected) {
+          try {
+            await disable(item.id);
+          } catch (cause) {
+            failures.push(new Error(`停用桌宠「${item.name}」失败`, { cause }));
+          }
+        }
+        try {
+          await refresh();
+        } catch (cause) {
+          failures.push(new Error("刷新桌宠安装列表失败", { cause }));
+        }
+        if (failures.length) ElMessage.error(originalErrorText(new AggregateError(failures, "停用桌宠未全部完成")));
       } finally {
         disablingAll.value = false;
       }
@@ -1063,32 +1011,6 @@ async function submitUpgrade() {
   }
 }
 
-function onSwitch(item: DesktopPetInstallation) {
-  ElMessageBox.confirm(
-    `将切换为桌宠「${item.name}」为当前运行实例,是否继续?`,
-    "确认切换桌宠",
-    {
-      confirmButtonText: "确认切换",
-      cancelButtonText: "取消",
-      type: "info",
-    },
-  )
-    .then(async () => {
-      actionTargetId.value = item.id;
-      try {
-        await switchInstallation(item.id);
-        await refresh();
-      } catch (err: any) {
-        ElMessage.error(err?.message || "切换失败");
-      } finally {
-        actionTargetId.value = null;
-      }
-    })
-    .catch((error) => {
-  console.error("[original-error]", error);
-});
-}
-
 function onRepair(item: DesktopPetInstallation) {
   ElMessageBox.confirm(
     `将尝试修复桌宠「${item.name}」的安装完整性,是否继续?`,
@@ -1174,15 +1096,8 @@ function confirmUninstall(item: DesktopPetInstallation) {
 });
 }
 
-function goBack() {
-  router.push("/creative-workshop/pet");
-}
-
-async function openInstallDialog() {
-  installForm.petId = "";
-  installForm.releaseId = "";
-  await loadAvailablePackages();
-  installDialogVisible.value = true;
+function openInstallDialog() {
+  petPluginManager.value?.openInstallDialog();
 }
 
 async function loadAvailablePackages() {
@@ -1192,30 +1107,6 @@ async function loadAvailablePackages() {
   } catch (error) {
   console.error("[original-error]", error);
 availableReleases.value = [];
-  }
-}
-
-function onInstallPackageChange() {
-  const pkg = availableReleases.value.find((p) => p.id === installForm.releaseId);
-  if (pkg) {
-    installForm.petId = pkg.petId;
-  }
-}
-
-async function submitInstall() {
-  if (!installForm.petId || !installForm.releaseId) {
-    ElMessage.warning("请选择资源包");
-    return;
-  }
-  installSubmitting.value = true;
-  try {
-    await install(installForm.petId, installForm.releaseId);
-    installDialogVisible.value = false;
-    await refresh();
-  } catch (err: any) {
-    ElMessage.error(err?.message || "安装失败");
-  } finally {
-    installSubmitting.value = false;
   }
 }
 

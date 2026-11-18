@@ -1,0 +1,233 @@
+{
+  "schemaVersion": "schema-ui/1",
+  "type": "document",
+  "title": "DSH 插件兼容宿主",
+  "lifecycle": {
+    "onMount": [
+      {
+        "action_id": "command",
+        "target": "tool",
+        "input": {
+          "action": "status"
+        },
+        "statePath": "status"
+      }
+    ]
+  },
+  "actions": [
+    {
+      "actionId": "command",
+      "target": "tool"
+    }
+  ],
+  "children": [
+    {
+      "id": "dsh-compatible-page",
+      "type": "page",
+      "children": [
+        {
+          "id": "dsh-compatible-install",
+          "type": "row",
+          "props": {
+            "layout": "toolbar",
+            "gap": "12px"
+          },
+          "children": [
+            {
+              "id": "dsh-compatible-source",
+              "type": "field",
+              "props": {
+                "placeholder": "npm 包、Git 地址或本地 tarball",
+                "clearable": true
+              },
+              "bindings": [
+                {
+                  "path": "source",
+                  "source": "form",
+                  "default": ""
+                }
+              ]
+            },
+            {
+              "id": "dsh-compatible-install-button",
+              "type": "button",
+              "props": {
+                "text": "安装 DSH 插件",
+                "type": "primary"
+              },
+              "actions": [
+                {
+                  "action_id": "command",
+                  "target": "tool",
+                  "input": {
+                    "action": "install",
+                    "spec": "$form.source"
+                  },
+                  "statePath": "installResult"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "dsh-compatible-summary",
+          "type": "key_value",
+          "props": {
+            "title": "容器状态",
+            "columns": 3
+          },
+          "bindings": [
+            {
+              "path": "items",
+              "source": "state",
+              "sourcePath": "status"
+            }
+          ]
+        },
+        {
+          "id": "dsh-compatible-manage",
+          "type": "row",
+          "props": {
+            "layout": "toolbar",
+            "gap": "12px"
+          },
+          "children": [
+            {
+              "id": "dsh-compatible-plugin-id",
+              "type": "field",
+              "props": {
+                "placeholder": "已安装 DSH 插件 ID",
+                "clearable": true
+              },
+              "bindings": [
+                {
+                  "path": "pluginId",
+                  "source": "form",
+                  "default": ""
+                }
+              ]
+            },
+            {
+              "id": "dsh-compatible-enable",
+              "type": "button",
+              "props": {
+                "text": "启用",
+                "type": "success"
+              },
+              "actions": [
+                {
+                  "action_id": "command",
+                  "target": "tool",
+                  "input": {
+                    "action": "set-enabled",
+                    "pluginId": "$form.pluginId",
+                    "enabled": true
+                  },
+                  "statePath": "manageResult"
+                }
+              ]
+            },
+            {
+              "id": "dsh-compatible-disable",
+              "type": "button",
+              "props": {
+                "text": "停用"
+              },
+              "actions": [
+                {
+                  "action_id": "command",
+                  "target": "tool",
+                  "input": {
+                    "action": "set-enabled",
+                    "pluginId": "$form.pluginId",
+                    "enabled": false
+                  },
+                  "statePath": "manageResult"
+                }
+              ]
+            },
+            {
+              "id": "dsh-compatible-remove",
+              "type": "button",
+              "props": {
+                "text": "移除",
+                "type": "danger"
+              },
+              "actions": [
+                {
+                  "action_id": "command",
+                  "target": "tool",
+                  "input": {
+                    "action": "remove",
+                    "pluginId": "$form.pluginId"
+                  },
+                  "statePath": "manageResult"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "dsh-compatible-actions",
+          "type": "button_group",
+          "children": [
+            {
+              "id": "dsh-compatible-refresh",
+              "type": "button",
+              "props": {
+                "text": "刷新状态",
+                "type": "primary"
+              },
+              "actions": [
+                {
+                  "action_id": "command",
+                  "target": "tool",
+                  "input": {
+                    "action": "status"
+                  },
+                  "statePath": "status"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "dsh-compatible-packages",
+          "type": "table",
+          "props": {
+            "columns": [
+              {
+                "prop": "pluginId",
+                "label": "插件 ID"
+              },
+              {
+                "prop": "name",
+                "label": "名称"
+              },
+              {
+                "prop": "version",
+                "label": "版本"
+              },
+              {
+                "prop": "enabled",
+                "label": "已启用"
+              },
+              {
+                "prop": "mappedContributionCount",
+                "label": "映射贡献"
+              }
+            ]
+          },
+          "bindings": [
+            {
+              "path": "data",
+              "source": "state",
+              "sourcePath": "status.packages",
+              "default": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

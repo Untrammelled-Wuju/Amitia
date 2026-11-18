@@ -1,4 +1,5 @@
 import { flushPromises, mount } from "@vue/test-utils";
+import { createPinia, setActivePinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const route = vi.hoisted(() => ({
@@ -20,8 +21,10 @@ vi.mock("element-plus", () => ({
 vi.mock("@/composables/useApi", () => ({ apiClient: { get } }));
 vi.mock("@/runtime/owned-chat-management", () => ({ ownedChatRuntimeRequest: vi.fn() }));
 vi.mock("@/views/kernel/tasks/api", () => ({ decideSourceTaskApproval: vi.fn() }));
+vi.mock("@/components/extension/ExtensionSlot.vue", () => ({ default: { template: "<div />" } }));
 
 import AgentApprovalGuard from "../components/AgentApprovalGuard.vue";
+import { ownedChatRuntimeRequest } from "@/runtime/owned-chat-management";
 
 const stubs = {
   ElDialog: {
@@ -37,6 +40,7 @@ const stubs = {
 
 describe("attention action guard", () => {
   beforeEach(() => {
+    setActivePinia(createPinia());
     route.path = "/chat";
     route.fullPath = "/chat";
     route.query = {};
@@ -61,7 +65,7 @@ describe("attention action guard", () => {
         },
       ],
     });
-    const wrapper = mount(AgentApprovalGuard, { global: { stubs } });
+    const wrapper = mount(AgentApprovalGuard, { global: { stubs, plugins: [createPinia()] } });
     await flushPromises();
     expect(wrapper.get('[data-test="approval-dialog"]').attributes("data-visible")).toBe("false");
     wrapper.unmount();
@@ -97,7 +101,7 @@ describe("attention action guard", () => {
         },
       ],
     });
-    const wrapper = mount(AgentApprovalGuard, { global: { stubs } });
+    const wrapper = mount(AgentApprovalGuard, { global: { stubs, plugins: [createPinia()] } });
     await flushPromises();
     expect(wrapper.get('[data-test="approval-dialog"]').attributes("data-visible")).toBe("true");
     expect(wrapper.text()).toContain("workspace.write");
@@ -135,7 +139,7 @@ describe("attention action guard", () => {
         },
       ],
     });
-    const wrapper = mount(AgentApprovalGuard, { global: { stubs } });
+    const wrapper = mount(AgentApprovalGuard, { global: { stubs, plugins: [createPinia()] } });
     await flushPromises();
     expect(wrapper.text()).toContain("通知指向事项");
     wrapper.unmount();
@@ -160,13 +164,57 @@ describe("attention action guard", () => {
         },
       ],
     });
-    const wrapper = mount(AgentApprovalGuard, { global: { stubs } });
+    const wrapper = mount(AgentApprovalGuard, { global: { stubs, plugins: [createPinia()] } });
     await flushPromises();
     await wrapper.findAll("button")[0].trigger("click");
     expect(replace).toHaveBeenCalledWith({
       path: "/chat",
       query: { conversationId: "conversation-2", characterId: "character-1" },
     });
+    wrapper.unmount();
+  });
+});
+
+describe("conversation scoped approval", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    route.path = "/chat";
+    route.query = { conversationId: "conversation-2" };
+    route.fullPath = "/chat?conversationId=conversation-2";
+    get.mockReset();
+    vi.mocked(ownedChatRuntimeRequest).mockReset();
+  });
+
+  it("resolves an approval item that has no turn binding", async () => {
+    get.mockResolvedValue({
+      data: [
+        {
+          id: "approval:conversation",
+          kind: "agent_approval",
+          priority: 100,
+          requiresAction: true,
+          conversationId: "conversation-2",
+          title: "插件执行需要批准",
+          summary: "amitia_approval_probe",
+          reason: "DSH 审核探针",
+          createdAt: "2026-11-16T00:50:00Z",
+          approvalId: "approval:conversation",
+          payload: { arguments: "{}", riskLevel: "medium" },
+        },
+      ],
+    });
+    vi.mocked(ownedChatRuntimeRequest).mockResolvedValue({ id: "approval:conversation", turnId: "", approved: true });
+    const wrapper = mount(AgentApprovalGuard, { global: { stubs, plugins: [createPinia()] } });
+    await flushPromises();
+    expect(wrapper.get('[data-test="approval-dialog"]').attributes("data-visible")).toBe("true");
+    const approve = wrapper.findAll("button").find((button) => button.text().includes("本次允许"));
+    expect(approve).toBeTruthy();
+    await approve!.trigger("click");
+    await flushPromises();
+    const call = vi.mocked(ownedChatRuntimeRequest).mock.calls[0];
+    expect(call[0]).toBe("approval");
+    expect(call[1]).toMatchObject({ conversationId: "conversation-2", turnId: "", approvalId: "approval:conversation", approved: true });
+    expect(get.mock.calls.some(([path]) => String(path).includes("attention"))).toBe(true);
     wrapper.unmount();
   });
 });

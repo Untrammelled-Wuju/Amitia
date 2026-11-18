@@ -2,6 +2,7 @@ package business
 
 import (
 	"context"
+	"fmt"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"strings"
 )
@@ -70,7 +71,7 @@ func (e *Engine) withExecutionScope(ctx context.Context, expected coordination.E
 	scope.TurnID, scope.ExecutionID = expected.TurnID, expected.ExecutionID
 	scope.ConversationRoleID = expected.ConversationRoleID
 	if scope != expected {
-		return coordination.ErrScopeExpired
+		return fmt.Errorf("%w: expected=%+v current=%+v", coordination.ErrScopeExpired, expected, scope)
 	}
 	ctx = coordination.WithScope(ctx, scope)
 	if err := e.coordination.RequireCapability(ctx, scope.SpaceID, scope.InitiatorDeviceID, scope.TargetDeviceID, "ai.chat"); err != nil {

@@ -121,7 +121,7 @@ func registerMeshChatRuntimeRouter(mesh *gin.RouterGroup, services *AppServices,
 						break
 					}
 				}
-				if target == nil {
+				if target == nil && operation != "approval" {
 					return errors.New("目标执行不存在或不属于当前会话")
 				}
 				switch operation {
@@ -141,7 +141,12 @@ func registerMeshChatRuntimeRouter(mesh *gin.RouterGroup, services *AppServices,
 				case "approval":
 					found := false
 					for _, approval := range approvals {
-						if approval["id"] == request.ApprovalID && approval["requestId"] == target["requestId"] {
+						if approval["id"] != request.ApprovalID {
+							continue
+						}
+						approvalRequestID, hasRequestID := approval["requestId"]
+						sessionScoped := !hasRequestID || approvalRequestID == nil || approvalRequestID == ""
+						if sessionScoped || (target != nil && approvalRequestID == target["requestId"]) {
 							found = true
 							break
 						}
@@ -272,7 +277,18 @@ func ownedRuntimeApprovals(services *AppServices, view business.QueryResult, tur
 	conversation := strings.TrimSpace(view.ConversationID)
 	runtimeKey := business.RuntimeKey(view.Scope, conversation)
 	for _, approval := range services.KernelContainer.ApprovalBroker.List(view.Scope.SpaceID, conversation) {
-		if approval.RuntimeKey != runtimeKey {
+		if approval.RequestID != "" && approval.RuntimeKey != runtimeKey {
+			continue
+		}
+		if approval.RequestID == "" {
+			raw, _ := json.Marshal(approval)
+			var item map[string]any
+			if err := json.Unmarshal(raw, &item); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
+			item["turnId"] = ""
+			item["scope"] = "conversation"
+			result = append(result, item)
 			continue
 		}
 		for _, turn := range turns {

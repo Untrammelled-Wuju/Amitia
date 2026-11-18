@@ -43,13 +43,18 @@ async function main(): Promise<void> {
       rpc.sendResult(message.id, { instanceId });
       rpc.sendNotification("runtime.ready", { instanceId });
     } catch (e) {
-      rpc.sendError(message.id, -32603, (e as Error).message || "initialize failed");
+      const error = e as Error & { path?: string };
+      const pathDetail = error.path ? ` path=${String(error.path)}` : "";
+      const spec = (message.params || {}) as BootstrapSpec;
+      const contextDetail = ` entry=${String(spec.entry || "")} cwd=${String(process.env.PWD || "")}`;
+      const detail = `${error.stack || error.message || String(e) || "initialize failed"}${pathDetail}${contextDetail}`;
+      rpc.sendError(message.id, -32603, detail);
       setState("failed");
       rpc.sendNotification("log.write", {
         level: "error",
-        message: "initialize failed: " + (e as Error).message,
+        message: "initialize failed: " + detail,
       });
-      log("initialize failed: " + (e as Error).message);
+      log("initialize failed: " + detail);
       process.exit(1);
     }
   });
@@ -84,6 +89,15 @@ async function main(): Promise<void> {
 
         const invocation: InvocationContext = {
           invocationId,
+          toolCallId: String(params.toolCallId ?? ""),
+          runtime: {
+            scope: {
+              scope: params.conversationId ? "conversation" : params.characterId ? "character" : "global",
+              spaceId: typeof params.spaceId === "string" ? params.spaceId : undefined,
+              characterId: typeof params.characterId === "string" ? params.characterId : undefined,
+              conversationId: typeof params.conversationId === "string" ? params.conversationId : undefined,
+            },
+          },
           get isCanceled() {
             return state.canceled;
           },

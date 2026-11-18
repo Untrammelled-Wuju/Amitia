@@ -7,6 +7,7 @@
         :content="item.content || ''"
         :state="thinkingState(item.status)"
         :duration="thinkingDuration(item)"
+        :extension-context="extensionContext || {}"
       />
 
       <div v-else-if="item.type === 'tool_group'" class="turn-tool-stream">
@@ -50,6 +51,24 @@
                   <strong>调用结果</strong>
                   <pre>{{ resultText(entry.result || entry.call) }}</pre>
                 </div>
+                <ExtensionSlot
+                  slot-id="chat.message.tool.images"
+                  :context="{ ...(extensionContext || {}), tool: entry.call, result: entry.result }"
+                  fallback="none"
+                  layout="stack"
+                  surface-role="message"
+                  render-fallback-while-scope-pending
+                />
+                <ExtensionSlot
+                  v-if="String(entry.call.toolName || '').includes('cordis_run')"
+                  slot-id="chat.message.tool.cordis"
+                  :context="{ ...(extensionContext || {}), tool: entry.call, result: entry.result }"
+                  :dispatch-key="String(entry.call.callId || entry.call.id || entry.key)"
+                  fallback="none"
+                  layout="stack"
+                  surface-role="message"
+                  render-fallback-while-scope-pending
+                />
               </div>
             </div>
           </template>
@@ -63,11 +82,22 @@
             :source="flowBubbleText(item.content)"
             :streaming="isStreamingStatus(item.status)"
             :citation-ids="citationIds"
+            :extension-context="extensionContext || {}"
             @citation="emit('citation', $event)"
           />
         </RendererErrorBoundary>
       </div>
     </template>
+    <ExtensionSlot
+      v-if="trajectoryImages.length"
+      slot-id="chat.message.trajectory.images"
+      :context="{ ...(extensionContext || {}), images: trajectoryImages, turnId: turn.id }"
+      fallback="default"
+      layout="stack"
+      surface-role="message"
+      bare
+      render-fallback-while-scope-pending
+    />
   </div>
 </template>
 
@@ -82,13 +112,25 @@ import AmitiaThinkingBlock from "./blocks/AmitiaThinkingBlock.vue";
 import MarkdownContent from "./markdown/MarkdownContent.vue";
 import RendererErrorBoundary from "./blocks/RendererErrorBoundary.vue";
 import { flowBubbleText } from "./bubbleMessageProjection";
+import ExtensionSlot from "@/components/extension/ExtensionSlot.vue";
 
 const props = defineProps<{
   turn: AssistantTurnData;
   citationIds?: string[];
+  extensionContext?: Record<string, unknown>;
 }>();
 
 const citationIds = computed(() => props.citationIds ?? []);
+const trajectoryImages = computed(() => {
+  const images = [];
+  for (const item of props.turn.items || []) {
+    if (Array.isArray((item as any).images)) images.push(...(item as any).images);
+    if (Array.isArray((item as any).attachments)) {
+      images.push(...(item as any).attachments.filter((entry: any) => entry?.kind === "image"));
+    }
+  }
+  return images;
+});
 
 const emit = defineEmits<{
   citation: [id: string];

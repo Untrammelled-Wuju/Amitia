@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"sync"
 	"testing"
@@ -9,6 +10,34 @@ import (
 
 	"github.com/u-ai/backend/internal/extension/kernel/schedule"
 )
+
+func TestScheduleRepositoryPersistsSessionPromptOwnerScope(t *testing.T) {
+	db := openWorkflowTestDB(t)
+	ctx := context.Background()
+	repo := NewScheduleRepository(db)
+	owned, _ := json.Marshal(map[string]any{"spaceId": "space", "roleId": "role"})
+	def := &schedule.ScheduleContributionDefinition{
+		ScheduleID:         "session-prompt-scope",
+		ContributionID:     "session-prompt-scope",
+		ExtensionID:        "extension",
+		ModuleID:           "module",
+		Name:               "scope",
+		Timezone:           "UTC",
+		Version:            "1",
+		Target:             schedule.ScheduleTargetDefinition{Type: schedule.TargetTypeSessionPrompt, TargetID: "reserved", IdempotencyMode: schedule.IdempotencyMode("conditionally_idempotent")},
+		SessionPromptScope: &schedule.SessionPromptScope{SpaceID: "space", CharacterID: "role", ReservedConversationID: "reserved", TargetKind: "new_once", OwnedExecutionScope: owned},
+	}
+	if err := repo.PutDefinition(ctx, def); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := repo.GetDefinition(ctx, def.ScheduleID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.SessionPromptScope == nil || loaded.SessionPromptScope.SpaceID != "space" || loaded.SessionPromptScope.ReservedConversationID != "reserved" {
+		t.Fatalf("session prompt owner scope was not restored: %+v", loaded.SessionPromptScope)
+	}
+}
 
 func TestScheduleInstallRollsBackDefinitionOnStateFailure(t *testing.T) {
 	db := openWorkflowTestDB(t)

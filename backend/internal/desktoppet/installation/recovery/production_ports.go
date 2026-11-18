@@ -225,11 +225,6 @@ func (p *ProductionDBRepo) DBCommitBatch(opID, installationID, targetReleaseID, 
 				return err
 			}
 		}
-		if err := tx.DB().Model(&installation.Installation{}).Where("space_id = ? AND device_id = ? AND id <> ? AND is_active = 1", op.SpaceID, op.DeviceID, installationID).Updates(map[string]interface{}{
-			"is_active": 0, "status": installation.StatusDisabled, "desired_state": installation.DesiredDisabled, "last_disabled_at": now, "updated_at": now,
-		}).Error; err != nil {
-			return err
-		}
 
 		settings, err := ensureRecoveryRuntimeSettings(tx, installationID, now)
 		if err != nil {
@@ -240,7 +235,7 @@ func (p *ProductionDBRepo) DBCommitBatch(opID, installationID, targetReleaseID, 
 			return err
 		}
 
-		existing, err := tx.GetRuntimeDesiredStateTx(tx.DB(), op.SpaceID, op.DeviceID)
+		existing, err := tx.GetRuntimeDesiredStateTx(tx.DB(), op.SpaceID, op.DeviceID, installationID)
 		if err != nil {
 			return err
 		}
@@ -445,7 +440,7 @@ func (p *ProductionRuntimeRepo) SendDesiredCommand(ctx context.Context, opID, sp
 	if snapshot.EnsureAbsent {
 		commandType = runtimev1.CommandTypeEnsureAbsent
 	}
-	_, err = p.facade.Commands().CreateDurableCommand(spaceID, deviceID, string(commandType), fmt.Sprintf("desired:%s:%d", deviceID, snapshot.DesiredRevision), fmt.Sprintf("desired:%s", deviceID), seq, payload)
+	_, err = p.facade.Commands().CreateDurableCommand(spaceID, deviceID, string(commandType), fmt.Sprintf("desired:%s:%s:%d", deviceID, snapshot.InstallationID, snapshot.DesiredRevision), fmt.Sprintf("desired:%s:%s", deviceID, snapshot.InstallationID), seq, payload)
 	if errors.Is(err, runtimev1.ErrCommandDuplication) {
 		return nil
 	}
@@ -531,7 +526,7 @@ func (p *ProductionRuntimeRepo) CancelDesiredCommand(ctx context.Context, opID, 
 	if err := p.db.WithContext(ctx).Where("id = ? AND space_id = ? AND device_id = ?", opID, spaceID, deviceID).First(&op).Error; err != nil {
 		return err
 	}
-	idempotencyKey := fmt.Sprintf("desired:%s:%d", deviceID, op.DesiredRevision)
+	idempotencyKey := fmt.Sprintf("desired:%s:%s:%d", deviceID, op.InstallationID, op.DesiredRevision)
 	var command *runtimev1.RuntimeCommand
 	var err error
 	if op.OperationType == operation.TypeRecenter {
@@ -779,12 +774,12 @@ func (f *ProductionRuntimeFinalizer) finalizeUninstall(ctx context.Context, op *
 				return err
 			}
 		}
-		bindingEntry, bindErr := tx.GetActiveBindingForSpaceDeviceTx(tx.DB(), op.SpaceID, op.DeviceID)
+		bindingEntry, bindErr := tx.GetActiveBindingForSpaceDeviceTx(tx.DB(), op.SpaceID, op.DeviceID, inst.ID)
 		if bindErr != nil && !errors.Is(bindErr, installation.ErrBindingNotFound) {
 			return bindErr
 		}
 		if bindErr == nil && bindingEntry != nil && bindingEntry.InstallationID == inst.ID {
-			if err := tx.DeleteActiveBindingTx(tx.DB(), op.SpaceID, op.DeviceID); err != nil {
+			if err := tx.DeleteActiveBindingTx(tx.DB(), op.SpaceID, op.DeviceID, inst.ID); err != nil {
 				return err
 			}
 		}

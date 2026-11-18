@@ -142,8 +142,17 @@ func ResolveRole(requested string, available []Role) (Role, error) {
 }
 
 func ValidateSnapshot(scope ExecutionScope, snapshot DataSnapshot) error {
-	if snapshot.OwnerID != scope.ResourceOwnerID || snapshot.Role.ID != scope.RoleID || snapshot.Role.Revision != scope.RoleRevision || !json.Valid(snapshot.Role.Profile) {
-		return ErrWrongOwner
+	if snapshot.OwnerID != scope.ResourceOwnerID {
+		return fmt.Errorf("%w: snapshot owner=%q scope owner=%q", ErrWrongOwner, snapshot.OwnerID, scope.ResourceOwnerID)
+	}
+	if snapshot.Role.ID != scope.RoleID {
+		return fmt.Errorf("%w: snapshot role=%q scope role=%q", ErrWrongOwner, snapshot.Role.ID, scope.RoleID)
+	}
+	if snapshot.Role.Revision != scope.RoleRevision {
+		return fmt.Errorf("%w: snapshot role revision=%d scope role revision=%d", ErrWrongOwner, snapshot.Role.Revision, scope.RoleRevision)
+	}
+	if !json.Valid(snapshot.Role.Profile) {
+		return fmt.Errorf("%w: snapshot role profile is invalid JSON", ErrWrongOwner)
 	}
 	if len(snapshot.Resources) > 4096 {
 		return ErrPendingLimit
@@ -154,11 +163,11 @@ func ValidateSnapshot(scope ExecutionScope, snapshot DataSnapshot) error {
 	recallEvidence := map[string]bool{}
 	for _, evidence := range snapshot.RecallEvidence {
 		if evidence.Kind != "memory" || evidence.ID == "" || evidence.Revision < 1 {
-			return ErrWrongOwner
+			return fmt.Errorf("%w: invalid recall evidence kind=%q id=%q revision=%d", ErrWrongOwner, evidence.Kind, evidence.ID, evidence.Revision)
 		}
 		key := evidence.Kind + "/" + evidence.ID
 		if recallEvidence[key] {
-			return ErrWrongOwner
+			return fmt.Errorf("%w: duplicate recall evidence %s", ErrWrongOwner, key)
 		}
 		recallEvidence[key] = true
 	}
@@ -167,9 +176,9 @@ func ValidateSnapshot(scope ExecutionScope, snapshot DataSnapshot) error {
 	}
 	for key, value := range snapshot.RuntimeContext {
 		switch key {
-		case "psyche", "relationship", "life", "needs", "unresolvedThreads", "temporal", "continuity", "beliefs", "memories":
+		case "psyche", "relationship", "life", "needs", "unresolvedThreads", "temporal", "continuity", "beliefs", "memories", "promptExtensions":
 		default:
-			return ErrWrongOwner
+			return fmt.Errorf("%w: invalid runtime context key %q", ErrWrongOwner, key)
 		}
 		if len(value) > 256<<10 || !json.Valid(value) {
 			return ErrPendingLimit
@@ -180,7 +189,7 @@ func ValidateSnapshot(scope ExecutionScope, snapshot DataSnapshot) error {
 	}
 	for kind, cursor := range snapshot.NextCursors {
 		if !validKind(kind) || len(cursor) > 4096 {
-			return ErrWrongOwner
+			return fmt.Errorf("%w: invalid next cursor kind=%q length=%d", ErrWrongOwner, kind, len(cursor))
 		}
 	}
 	seen := make(map[string]bool)

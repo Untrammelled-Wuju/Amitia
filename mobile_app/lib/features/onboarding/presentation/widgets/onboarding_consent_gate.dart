@@ -42,7 +42,7 @@ class OnboardingConsentGate extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ColoredBox(
+    return Material(
       color: context.surfacePrimary,
       child: SafeArea(
         child: Column(

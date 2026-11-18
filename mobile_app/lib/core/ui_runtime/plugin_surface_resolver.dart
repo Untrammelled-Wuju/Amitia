@@ -1,10 +1,4 @@
-enum MobilePluginSurfaceKind {
-  hostRuntime,
-  schema,
-  web,
-  native,
-  none,
-}
+enum MobilePluginSurfaceKind { hostRuntime, schema, web, native, none }
 
 MobilePluginSurfaceKind resolveMobilePluginSurface({
   required String kind,
@@ -18,6 +12,9 @@ MobilePluginSurfaceKind resolveMobilePluginSurface({
     return MobilePluginSurfaceKind.schema;
   }
   if (entryType == 'web_restricted' || entryType == 'web_isolated') {
+    return MobilePluginSurfaceKind.web;
+  }
+  if (entryType == 'mobile_web_runtime') {
     return MobilePluginSurfaceKind.web;
   }
   if (entryType == 'host_native' || entryType == 'builtin_native') {

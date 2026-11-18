@@ -14,6 +14,9 @@ import (
 
 const (
 	SlotChatHeaderAction        extension_slots.SlotID = "chat.header.action"
+	SlotChatHeaderLeading       extension_slots.SlotID = "chat.header.leading"
+	SlotChatHeaderLineage       extension_slots.SlotID = "chat.header.lineage"
+	SlotChatHeaderCorner        extension_slots.SlotID = "chat.header.corner"
 	SlotChatSidebarPanel        extension_slots.SlotID = "chat.sidebar.panel"
 	SlotChatProfileSummaryPanel extension_slots.SlotID = "chat.profile_summary.panel"
 	SlotChatMemoryContextPanel  extension_slots.SlotID = "chat.memory_context.panel"
@@ -24,6 +27,13 @@ const (
 	SlotChatComposerAction      extension_slots.SlotID = "chat.composer.action"
 	SlotChatComposerAttachment  extension_slots.SlotID = "chat.composer.attachment"
 	SlotChatComposerHint        extension_slots.SlotID = "chat.composer.hint"
+	SlotChatComposerDockTop     extension_slots.SlotID = "chat.composer.dock.top"
+	SlotChatComposerDockBottom  extension_slots.SlotID = "chat.composer.dock.bottom"
+	SlotChatComposerLeft        extension_slots.SlotID = "chat.composer.left"
+	SlotChatComposerRight       extension_slots.SlotID = "chat.composer.right"
+	SlotChatComposerOverlay     extension_slots.SlotID = "chat.composer.overlay"
+	SlotChatComposerModel       extension_slots.SlotID = "chat.composer.model"
+	SlotChatComposerPermission  extension_slots.SlotID = "chat.composer.permission"
 	SlotChatEmptyStateCard      extension_slots.SlotID = "chat.empty_state.card"
 	SlotChatStatusItem          extension_slots.SlotID = "chat.status.item"
 )

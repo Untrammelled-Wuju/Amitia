@@ -27,7 +27,7 @@ func buildModuleInstanceSpec(extID domain.ExtensionID, modID domain.ModuleID, ru
 		RestartWindow: 60 * time.Second,
 		Limits: runtime_supervisor.ResourceLimits{
 			MaxMemoryBytes:     runtimeDef.Memory,
-			MaxExecutionTime:   0,
+			MaxExecutionTime:   runtimeDef.Timeout,
 			MaxConcurrentCalls: 10,
 			MaxQueueDepth:      64,
 		},

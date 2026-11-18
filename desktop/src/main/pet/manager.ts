@@ -1236,6 +1236,13 @@ export class DesktopPetManager {
   ): Promise<void> {
     const payload = cmd.payload ?? {};
     if (payload.ensureAbsent) {
+      const targetInstallationId = payload.installationId ?? cmd.installationId ?? "";
+      if (!targetInstallationId) {
+        throw new Error("MISSING_INSTALLATION_ID");
+      }
+      if (this.activeInstallationId !== targetInstallationId) {
+        return;
+      }
       await this.runLifecycleMutation(() => this.disableInternal(false, false));
       return;
     }

@@ -1,7 +1,7 @@
 import type { Component } from "vue";
 
 export type ClientSlotScope = "root" | "session-maybe" | "session";
-export type ClientSlotKind = "single" | "list" | "keyed" | "chain";
+export type ClientSlotKind = "single" | "list" | "keyed" | "chain" | "hoc";
 
 export interface ClientObservable<T> {
   getSnapshot(): T;
@@ -169,9 +169,9 @@ export interface ClientSlotContract<
 
 /** Declaration-merging authority for trusted browser plugins. Built-in keys are
  * compatibility surfaces; plugins can add new typed descendants freely. */
-export type ClientHostPlatform = "windows" | "macos" | "linux" | "web";
-export type ClientHostKind = "web" | "desktop";
-export type ClientHostOS = "windows" | "macos" | "linux" | "unknown";
+export type ClientHostPlatform = "windows" | "macos" | "linux" | "web" | "android" | "ios" | "mobile";
+export type ClientHostKind = "web" | "desktop" | "mobile";
+export type ClientHostOS = "windows" | "macos" | "linux" | "android" | "ios" | "unknown";
 
 export interface ClientRootOwner extends Record<string, unknown> {
   slotId?: string;
@@ -236,9 +236,11 @@ export interface ClientProviderSessionOwner extends ClientSessionOwner {
 }
 
 type ClientNoInject = Record<string, never>;
+type ClientSingle<Owner extends Record<string, unknown>, Scope extends ClientSlotScope = "root"> = ClientSlotContract<Owner, unknown, ClientNoInject, Scope, "single">;
 type ClientList<Owner extends Record<string, unknown>, Scope extends ClientSlotScope = "root"> = ClientSlotContract<Owner, unknown, ClientNoInject, Scope, "list">;
 type ClientChain<Owner extends Record<string, unknown>, Scope extends ClientSlotScope = "root"> = ClientSlotContract<Owner, unknown, ClientNoInject, Scope, "chain">;
 type ClientKeyed<Owner extends Record<string, unknown>, Scope extends ClientSlotScope = "root"> = ClientSlotContract<Owner, unknown, ClientNoInject, Scope, "keyed", Record<string, Owner>>;
+type ClientHoc<Owner extends Record<string, unknown>, Scope extends ClientSlotScope = "root"> = ClientSlotContract<Owner, unknown, ClientNoInject, Scope, "hoc">;
 
 export interface ClientSlotMap {
   root: ClientSlotContract<ClientRootOwner, unknown, ClientNoInject, "root", "single">;
@@ -248,12 +250,48 @@ export interface ClientSlotMap {
   "extension.detail.action": ClientList<ClientExtensionOwner>;
   "extension.settings.page": ClientList<ClientExtensionOwner>;
   "extension.settings.section": ClientList<ClientExtensionOwner>;
+  "extension.plugin.tab": ClientList<ClientRootOwner>;
+  "extension.plugin.item": ClientList<ClientRootOwner>;
+  "extension.plugin.bundle.activation": ClientKeyed<ClientRootOwner>;
+  "extension.plugin.bundle.config": ClientKeyed<ClientRootOwner>;
+  "extension.plugin.row.config": ClientKeyed<ClientExtensionOwner>;
+  "extension.settings.tab": ClientList<ClientRootOwner>;
   "chat.header.action": ClientList<ClientSessionOwner, "session-maybe">;
+  "chat.header.leading": ClientSingle<ClientRootOwner>;
+  "chat.header.lineage": ClientSingle<ClientSessionOwner, "session">;
+  "chat.header.corner": ClientSingle<ClientSessionOwner, "session">;
+  "chat.conversation.root": ClientSingle<ClientSessionOwner, "session-maybe">;
+  "chat.conversation.session": ClientSingle<ClientSessionOwner, "session">;
+  "chat.conversation.header": ClientSingle<ClientSessionOwner, "session-maybe">;
+  "chat.conversation.session.header": ClientSingle<ClientSessionOwner, "session">;
+  "chat.conversation.subagent.footer": ClientList<ClientSessionOwner, "session">;
+  "chat.conversation.views": ClientList<ClientSessionOwner, "session">;
+  "chat.composer.root": ClientChain<ClientSessionOwner, "session">;
+  "chat.composer.bar": ClientSingle<ClientSessionOwner, "session-maybe">;
+  "chat.composer.attachments": ClientSingle<ClientSessionOwner, "session-maybe">;
+  "chat.empty.brand_mark": ClientSingle<ClientRootOwner>;
+  "chat.empty.frame": ClientHoc<ClientRootOwner>;
+  "chat.empty.options": ClientList<ClientSessionOwner, "session">;
+  "chat.empty.workspace": ClientSingle<ClientRootOwner>;
+  "chat.empty.workspace.directory_flow": ClientSingle<ClientRootOwner>;
+  "chat.empty.agent_preset": ClientSingle<ClientSessionOwner, "session-maybe">;
   "chat.sidebar.panel": ClientList<ClientSessionOwner, "session-maybe">;
   "chat.profile_summary.panel": ClientChain<ClientSessionOwner, "session-maybe">;
   "chat.memory_context.panel": ClientChain<ClientSessionOwner, "session-maybe">;
   "chat.message.action": ClientList<ClientMessageOwner, "session">;
   "chat.message.renderer": ClientChain<ClientMessageOwner, "session">;
+  "chat.message.images": ClientSingle<ClientMessageOwner, "session">;
+  "chat.message.user.images": ClientSingle<ClientMessageOwner, "session">;
+  "chat.message.user.text": ClientKeyed<ClientMessageOwner, "session">;
+  "chat.approval.detail": ClientSingle<ClientSessionOwner, "session">;
+  "chat.message.command": ClientKeyed<ClientMessageOwner, "session">;
+  "chat.conversation.flow": ClientSingle<ClientSessionOwner, "session">;
+  "chat.message.markdown.fence": ClientHoc<ClientMessageOwner, "session">;
+  "chat.message.reasoning.body": ClientSingle<ClientMessageOwner, "session">;
+  "chat.message.text.interaction": ClientKeyed<ClientMessageOwner, "session">;
+  "chat.message.trajectory.images": ClientSingle<ClientSessionOwner, "session">;
+  "chat.message.tool.images": ClientSingle<ClientMessageOwner, "session">;
+  "chat.message.tool.cordis": ClientKeyed<ClientMessageOwner, "session">;
   "chat.conversation.node": ClientList<ClientConversationNodeOwner, "session">;
   "chat.message.custom_renderer": ClientChain<ClientMessageOwner, "session">;
   "chat.message.attachment_renderer": ClientChain<ClientMessageOwner, "session">;
@@ -261,6 +299,15 @@ export interface ClientSlotMap {
   "chat.composer.action": ClientList<ClientSessionOwner, "session-maybe">;
   "chat.composer.attachment": ClientList<ClientSessionOwner, "session-maybe">;
   "chat.composer.hint": ClientList<ClientSessionOwner, "session-maybe">;
+  "chat.composer.dock.top": ClientList<ClientSessionOwner, "session">;
+  "chat.composer.dock.bottom": ClientList<ClientSessionOwner, "session">;
+  "chat.composer.left": ClientList<ClientSessionOwner, "session">;
+  "chat.composer.right": ClientList<ClientSessionOwner, "session">;
+  "chat.composer.overlay": ClientList<ClientSessionOwner, "session">;
+  "chat.composer.model": ClientSingle<ClientSessionOwner, "session">;
+  "chat.composer.model.label": ClientSingle<ClientSessionOwner, "session">;
+  "chat.composer.model.options": ClientList<ClientSessionOwner, "session">;
+  "chat.composer.permission": ClientSingle<ClientSessionOwner, "session">;
   "chat.empty_state.card": ClientList<ClientSessionOwner, "session-maybe">;
   "chat.status.item": ClientList<ClientSessionOwner, "session-maybe">;
   "character.detail.tab": ClientList<ClientCharacterOwner>;
@@ -271,6 +318,43 @@ export interface ClientSlotMap {
   "system.status.item": ClientList<ClientRootOwner>;
   "system.settings.section": ClientList<ClientRootOwner>;
   "system.diagnostics.tab": ClientList<ClientRootOwner>;
+  "app.shell.quota_notice": ClientChain<ClientRootOwner>;
+  "app.workspace.toast": ClientKeyed<ClientRootOwner>;
+  "app.shell.bottom": ClientSingle<ClientRootOwner>;
+  "app.rightbar": ClientSingle<ClientRootOwner>;
+  "app.rightbar.session": ClientSingle<ClientSessionOwner, "session">;
+  "desktop.context_menu.content": ClientKeyed<ClientRootOwner>;
+  "desktop.context_menu.icon": ClientKeyed<ClientRootOwner>;
+  "workbench.file.actions": ClientList<ClientSessionOwner, "session">;
+  "workbench.review.file.actions": ClientList<ClientSessionOwner, "session">;
+  "settings.model.provider": ClientKeyed<ClientRootOwner>;
+  "settings.model.footer": ClientList<ClientRootOwner>;
+  "settings.shell": ClientSingle<ClientRootOwner>;
+  "settings.shell.header": ClientSingle<ClientRootOwner>;
+  "settings.shell.action": ClientList<ClientRootOwner>;
+  "settings.shell.close": ClientSingle<ClientRootOwner>;
+  "settings.shell.launcher": ClientSingle<ClientRootOwner>;
+  "settings.shell.launcher.notifications": ClientSingle<ClientRootOwner>;
+  "settings.onboarding": ClientList<ClientRootOwner>;
+  "settings.section.icon": ClientList<ClientRootOwner>;
+  "settings.shell.trigger": ClientSingle<ClientRootOwner>;
+  "settings.model.sign-in": ClientSingle<ClientRootOwner>;
+  "ui.portal.overlay": ClientList<ClientRootOwner>;
+  "ui.portal.modal": ClientList<ClientRootOwner>;
+  "ui.portal.drawer": ClientList<ClientRootOwner>;
+  "ui.portal.toast": ClientList<ClientRootOwner>;
+  "ui.sidebar.right.pane.tab": ClientList<ClientSessionOwner, "session-maybe">;
+  "ui.sidebar.right.pane.tab.title": ClientList<ClientSessionOwner, "session-maybe">;
+  "ui.sidebar.right.pane.document": ClientKeyed<ClientSessionOwner, "session">;
+  "ui.sidebar.right.pane.document.action": ClientKeyed<ClientSessionOwner, "session">;
+  "ui.sidebar.right.pane.document.actions": ClientList<ClientSessionOwner, "session">;
+  "ui.sidebar.right.pane.document.pdf": ClientKeyed<ClientSessionOwner, "session">;
+  "ui.sidebar.right.pane.document.unpreviewable": ClientList<ClientSessionOwner, "session">;
+  "ui.sidebar.right.pane.files.actions": ClientList<ClientSessionOwner, "session">;
+  "ui.sidebar.right.pane.guide": ClientChain<ClientSessionOwner, "session">;
+  "ui.sidebar.right.pane.guide.actions": ClientList<ClientRootOwner>;
+  "ui.sidebar.right.pane.guide.entry": ClientKeyed<ClientSessionOwner, "session">;
+  "ui.sidebar.right.pane.tab.menu.item": ClientList<ClientSessionOwner, "session">;
   "desktop.command": ClientKeyed<ClientDesktopOwner>;
   "desktop.application_menu.item": ClientList<ClientDesktopOwner>;
   "desktop.context_menu.item": ClientList<ClientDesktopOwner>;
@@ -494,6 +578,9 @@ export type ClientSlotStoreProps<S> = {
 export type ClientSlotMatchedProps<K extends ClientKnownSlotId> = ClientSlotKindOf<K> extends "chain"
   ? { readonly matched: ClientSlotMatched<K> }
   : object;
+export type ClientSlotHocProps<K extends ClientKnownSlotId> = ClientSlotKindOf<K> extends "hoc"
+  ? { readonly children: unknown }
+  : object;
 
 export type ClientSlotStandardProps<K extends ClientKnownSlotId> = {
   readonly slotId: K;
@@ -519,6 +606,7 @@ export type ClientSlotComponentProps<
   & ClientSlotInjectFace<ClientSlotInjected<K>>
   & ClientSlotInjectFace<I>
   & ClientSlotMatchedProps<K>
+  & ClientSlotHocProps<K>
   & ClientSlotLocaleProps<N>;
 
 export type ClientSlotComponent<P> = (props: P) => unknown;
@@ -549,7 +637,8 @@ export type ClientSlotKindRegisterOptions<
   ClientSlotKindOf<K> extends "keyed" ? { readonly entryKey: EntryKey; readonly priority?: number }
     : ClientSlotKindOf<K> extends "list" ? { readonly id: string; readonly order?: number; readonly label?: string | (() => string); readonly priority?: number }
       : ClientSlotKindOf<K> extends "chain" ? { readonly select: (owner: ClientSlotProps<K>) => ClientSlotMatched<K> | null; readonly priority?: number }
-        : { readonly priority?: number };
+        : ClientSlotKindOf<K> extends "hoc" ? { readonly id?: string; readonly entryKey?: EntryKey; readonly order?: number; readonly priority?: number }
+          : { readonly priority?: number };
 
 export type ClientSlotRegisterOptions<
   K extends ClientKnownSlotId,

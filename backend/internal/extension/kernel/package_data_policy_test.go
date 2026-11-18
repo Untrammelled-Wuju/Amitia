@@ -73,7 +73,17 @@ func TestPackageUninstallAppliesExtensionDataPolicy(t *testing.T) {
 			}
 			definition.Metadata["data.uninstall"] = policy
 			definition.Metadata["data.export"] = policy == "export"
+			definition.Metadata["data.backup"] = true
+			definition.Metadata["data.pluginData.include"] = []string{"data"}
 			if err := container.DefinitionRepository.PutExtension(ctx, definition); err != nil {
+				t.Fatal(err)
+			}
+			pluginDataRoot := PluginDataRoot(container.ExtRoot, installed.ExtensionID)
+			pluginDataFile := filepath.Join(pluginDataRoot, "data", "session.jsonl")
+			if err := os.MkdirAll(filepath.Dir(pluginDataFile), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(pluginDataFile, []byte("{\"session\":1}\n"), 0o600); err != nil {
 				t.Fatal(err)
 			}
 			if _, err := container.ExtensionStateStore.Set(ctx, installed.ExtensionID, "main", "state", json.RawMessage(`{"value":1}`)); err != nil {
@@ -112,6 +122,13 @@ func TestPackageUninstallAppliesExtensionDataPolicy(t *testing.T) {
 			if policy != "retain" && found {
 				t.Fatal("delete or export policy retained package state")
 			}
+			_, statErr := os.Stat(pluginDataFile)
+			if policy == "retain" && statErr != nil {
+				t.Fatalf("retain policy removed plugin data: %v", statErr)
+			}
+			if policy != "retain" && !os.IsNotExist(statErr) {
+				t.Fatalf("delete or export policy retained plugin data: %v", statErr)
+			}
 			if policy == "export" {
 				matches, err := filepath.Glob(filepath.Join(container.ExtRoot, "extension-data", "*", "exports", "*.json"))
 				if err != nil {
@@ -132,4 +149,26 @@ func mustVersion(t *testing.T, value string) domain.SemanticVersion {
 		t.Fatal(err)
 	}
 	return version
+}
+
+func TestExtensionPluginDataBackupPathsRequireBackupFlag(t *testing.T) {
+	definition := domain.ExtensionDefinition{Metadata: map[string]any{
+		"data.backup":             true,
+		"data.pluginData.include": []any{"dsh-data", "  "},
+	}}
+	paths := ExtensionPluginDataBackupPaths(definition)
+	if len(paths) != 1 || paths[0] != "dsh-data" {
+		t.Fatalf("unexpected plugin data paths: %v", paths)
+	}
+	definition.Metadata["data.backup"] = false
+	if paths := ExtensionPluginDataBackupPaths(definition); paths != nil {
+		t.Fatalf("expected plugin data paths to require data.backup, got %v", paths)
+	}
+	if paths := ExtensionPluginDataBackupPaths(domain.ExtensionDefinition{}); paths != nil {
+		t.Fatalf("expected no plugin data paths without metadata, got %v", paths)
+	}
+	expectedRoot := filepath.Join("root", "plugin-data", "com.amitia__dsh-compatible-host")
+	if root := PluginDataRoot("root", "com.amitia/dsh-compatible-host"); root != expectedRoot {
+		t.Fatalf("unexpected plugin data root: %s", root)
+	}
 }

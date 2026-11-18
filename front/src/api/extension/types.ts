@@ -121,7 +121,7 @@ export interface BackendSlotSnapshotEntry {
   slotId: string;
   contractVersion: number;
   supportedKinds?: string[];
-  kind: "single" | "list" | "keyed" | "chain";
+  kind: "single" | "list" | "keyed" | "chain" | "hoc";
   layout: string;
   fallbackPolicy: string;
   performanceBudget?: {
@@ -139,6 +139,7 @@ export interface BackendSlotSnapshotEntry {
   parentSlotId?: string;
   dynamic?: boolean;
   scope?: "root" | "session-maybe" | "session";
+  allowRootChild?: boolean;
   declarationEpoch?: number;
   contributions: BackendUIContributionDefinition[];
 }

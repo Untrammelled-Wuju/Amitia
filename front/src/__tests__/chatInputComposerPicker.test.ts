@@ -121,6 +121,43 @@ describe("ChatInput command palette", () => {
     wrapper.unmount();
   });
 
+  it("mounts the composer dock and toolbar extension seats", async () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const wrapper = mount(ChatInput, {
+      props: {
+        characterId: "role-a",
+        conversationId: "conversation-a",
+      },
+      global: {
+        plugins: [pinia, ElementPlus],
+        stubs: {
+          ExtensionSlot: {
+            props: ["slotId", "context"],
+            template: '<div :data-slot-id="slotId"><slot /></div>',
+          },
+        },
+      },
+    });
+    await flushPromises();
+    const slotIds = wrapper.findAll("[data-slot-id]").map((item) => item.attributes("data-slot-id"));
+    expect(slotIds).toEqual(expect.arrayContaining([
+      "chat.composer.dock.top",
+      "chat.composer.dock.bottom",
+      "chat.composer.bar",
+      "chat.composer.left",
+      "chat.composer.right",
+      "chat.composer.overlay",
+      "chat.composer.model",
+      "chat.composer.model.label",
+      "chat.composer.permission",
+    ]));
+    await wrapper.get(".model-effort-trigger").trigger("click");
+    await flushPromises();
+    expect(document.querySelector('[data-slot-id="chat.composer.model.options"]')).not.toBeNull();
+    wrapper.unmount();
+  });
+
   it("opens skills from slash and selects with the keyboard", async () => {
     const wrapper = await mountInput();
     await flushPromises();

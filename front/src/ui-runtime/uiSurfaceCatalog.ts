@@ -8,18 +8,41 @@ function hasPrefix(route: string, prefix: string): boolean {
   return route === prefix || route.startsWith(`${prefix}/`);
 }
 
-export function canonicalUISurfaceId(rawRoute: string): string {
+export interface UISurfaceDefinition {
+  id: string;
+  routePrefixes: readonly string[];
+  exactRoutes: readonly string[];
+}
+
+export const UI_SURFACE_DEFINITIONS: readonly UISurfaceDefinition[] = [
+  { id: "surface.character.list", routePrefixes: [], exactRoutes: ["/characters"] },
+  { id: "surface.character.detail", routePrefixes: ["/characters", "/character"], exactRoutes: [] },
+  { id: "surface.memory.manager", routePrefixes: [], exactRoutes: ["/memory-manager"] },
+  {
+    id: "surface.memory.detail",
+    routePrefixes: ["/memory"],
+    exactRoutes: ["/memory-timeline", "/episodic", "/graph", "/profiles", "/world-book", "/knowledge"],
+  },
+  { id: "surface.workshop", routePrefixes: ["/creative-workshop"], exactRoutes: [] },
+  { id: "surface.settings.devices", routePrefixes: ["/settings/devices"], exactRoutes: [] },
+  { id: "surface.kernel", routePrefixes: ["/kernel"], exactRoutes: [] },
+  {
+    id: "surface.settings.section",
+    routePrefixes: ["/settings"],
+    exactRoutes: ["/long-running", "/decision-viz", "/storage"],
+  },
+  { id: "surface.extension", routePrefixes: ["/extensions", "/extension/page"], exactRoutes: [] },
+  { id: "surface.page", routePrefixes: ["/"], exactRoutes: [] },
+];
+
+export function resolveUISurfaceDefinition(rawRoute: string): UISurfaceDefinition {
   const route = normalizeUIRoute(rawRoute);
-  if (route === "/characters") return "surface.character.list";
-  if (hasPrefix(route, "/characters") || hasPrefix(route, "/character")) return "surface.character.detail";
-  if (route === "/memory-manager") return "surface.memory.manager";
-  if (hasPrefix(route, "/memory") || ["/memory-timeline", "/episodic", "/graph", "/profiles", "/world-book", "/knowledge"].includes(route)) {
-    return "surface.memory.detail";
-  }
-  if (hasPrefix(route, "/creative-workshop")) return "surface.workshop";
-  if (hasPrefix(route, "/settings/devices")) return "surface.settings.devices";
-  if (hasPrefix(route, "/kernel")) return "surface.kernel";
-  if (hasPrefix(route, "/settings") || ["/long-running", "/decision-viz", "/storage"].includes(route)) return "surface.settings.section";
-  if (hasPrefix(route, "/extensions") || hasPrefix(route, "/extension/page")) return "surface.extension";
-  return "surface.page";
+  return UI_SURFACE_DEFINITIONS.find((definition) =>
+    definition.exactRoutes.includes(route)
+    || definition.routePrefixes.some((prefix) => hasPrefix(route, prefix)),
+  ) ?? UI_SURFACE_DEFINITIONS[UI_SURFACE_DEFINITIONS.length - 1]!;
+}
+
+export function canonicalUISurfaceId(rawRoute: string): string {
+  return resolveUISurfaceDefinition(rawRoute).id;
 }

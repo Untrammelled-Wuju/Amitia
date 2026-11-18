@@ -178,7 +178,7 @@ func DefaultResourceLimits() ResourceLimits {
 		MaxMemoryMB:        256,
 		MaxConcurrentCalls: 8,
 		MaxQueueDepth:      64,
-		SingleCallTimeout:  "30s",
+		SingleCallTimeout:  "5m",
 		LogRatePerSecond:   100,
 		HostAPIRatePerSec:  50,
 		MaxOpenHandles:     64,

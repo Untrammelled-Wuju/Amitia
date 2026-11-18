@@ -24,7 +24,7 @@ type ExtensionBackupContributor struct {
 }
 
 func (c *ExtensionBackupContributor) ComponentIDs() []string {
-	return []string{extensionComponentID}
+	return []string{extensionComponentID, extensionPluginDataComponentID}
 }
 
 func NewExtensionBackupContributor(kernelDB *sql.DB, runtime *kernel.Runtime) *ExtensionBackupContributor {
@@ -86,10 +86,14 @@ func (c *ExtensionBackupContributor) Plan(ctx context.Context, req dataportabili
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	pluginDataPlan, err := c.pluginDataPlan(ctx, req)
+	if err != nil {
+		return nil, err
+	}
 	return []dataportability.BackupComponentPlan{{
 		ID: extensionComponentID, Kind: dataportability.KindNDJSON, LogicalName: extensionLogicalName,
 		Required: false, SourceOfTruth: true, ItemCount: count, EstimatedSize: count * 64 << 10,
-	}}, nil
+	}, pluginDataPlan}, nil
 }
 
 func (c *ExtensionBackupContributor) Export(ctx context.Context, req dataportability.BackupRequest, out dataportability.BackupWriter) error {
@@ -161,7 +165,10 @@ func (c *ExtensionBackupContributor) Export(ctx context.Context, req dataportabi
 			return err
 		}
 	}
-	return rows.Err()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	return c.pluginDataExport(ctx, req, out)
 }
 
 func extensionInScope(req dataportability.BackupRequest, installation domain.ExtensionInstallation) bool {
@@ -211,7 +218,11 @@ func (c *ExtensionBackupContributor) PreviewImport(ctx context.Context, req data
 			return nil, readErr
 		}
 	}
-	return []dataportability.ImportComponentPreview{preview}, nil
+	pluginDataPreview, err := c.pluginDataPreview(ctx, in)
+	if err != nil {
+		return nil, err
+	}
+	return []dataportability.ImportComponentPreview{preview, pluginDataPreview}, nil
 }
 
 func (c *ExtensionBackupContributor) Import(ctx context.Context, req dataportability.ImportRequest, in dataportability.BackupReader) error {
@@ -220,7 +231,10 @@ func (c *ExtensionBackupContributor) Import(ctx context.Context, req dataportabi
 		CharacterPolicy: req.CharacterPolicy, DefaultCharacterID: req.DefaultCharacterID,
 		ActivateImported: req.ActivateImported, IdentityMap: req.IdentityMap, SecretProvider: req.SecretProvider,
 	}
-	return c.RestoreExtensions(ctx, in, opts)
+	if err := c.RestoreExtensions(ctx, in, opts); err != nil {
+		return err
+	}
+	return c.restorePluginData(ctx, in)
 }
 
 func (c *ExtensionBackupContributor) RestoreExtensions(ctx context.Context, in dataportability.BackupReader, opts dataportability.RestoreOptions) error {

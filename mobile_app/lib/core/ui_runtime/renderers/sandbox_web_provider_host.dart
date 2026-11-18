@@ -10,6 +10,7 @@ import '../../backend_connection/backend_uri_builder.dart';
 import '../../backend_connection/providers/backend_connection_providers.dart';
 import '../../services/providers.dart';
 import '../mobile_style_runtime.dart';
+import '../mobile_web_runtime_layout.dart';
 import '../ui_provider.dart';
 
 class SandboxWebProviderHost extends ConsumerStatefulWidget {
@@ -48,6 +49,7 @@ class _SandboxWebProviderHostState extends ConsumerState<SandboxWebProviderHost>
   OverlayEntry? _inlineOverlay;
   Size _inlineOverlaySize = const Size(360, 480);
   String _lastStyleSignature = '';
+  double _height = 320;
 
   @override
   void didChangeDependencies() {
@@ -87,8 +89,8 @@ class _SandboxWebProviderHostState extends ConsumerState<SandboxWebProviderHost>
               '{detail:{surfaceState:{open:false,dismissToken:Date.now()}}}));',
             )
             .catchError((Object error, StackTrace stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}),
+              print("[original-error] $error\n$stackTrace");
+            }),
       );
     }
   }
@@ -210,6 +212,7 @@ class _SandboxWebProviderHostState extends ConsumerState<SandboxWebProviderHost>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _height = mobileWebRuntimeInitialHeight(widget.context);
     _restart();
   }
 
@@ -360,6 +363,17 @@ class _SandboxWebProviderHostState extends ConsumerState<SandboxWebProviderHost>
                     'error': error.toString(),
                   };
                 }
+              } else if (!widget.inlineComposerAction &&
+                  isCompactMobileWebRuntimeContext(widget.context) &&
+                  (method == 'ui.resize.request' || method == 'api.resize')) {
+                final height = (inputMap['height'] as num?)?.toDouble();
+                if (height != null && height > 0 && height <= 400) {
+                  setState(() => _height = height);
+                }
+                result = <String, dynamic>{
+                  'ok': true,
+                  'output': <String, dynamic>{'height': _height},
+                };
               } else if (widget.inlineComposerAction &&
                   method == 'ui.resize.request') {
                 final width = (inputMap['width'] as num?)?.toDouble() ?? 0;
@@ -392,8 +406,8 @@ class _SandboxWebProviderHostState extends ConsumerState<SandboxWebProviderHost>
                   '{detail:${jsonEncode(response)}}));';
               await controller.runJavaScript(script);
             } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-// Invalid bridge payloads are intentionally ignored. The backend
+              print("[original-error] $error\n$stackTrace");
+              // Invalid bridge payloads are intentionally ignored. The backend
               // bridge remains fail-closed for all privileged operations.
             }
           },
@@ -441,8 +455,8 @@ class _SandboxWebProviderHostState extends ConsumerState<SandboxWebProviderHost>
               .read(extensionServiceProvider)
               .revokeWebUISession(createdSessionId);
         } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
+          print("[original-error] $error\n$stackTrace");
+        }
       }
       if (!mounted || token != _loadToken) return;
       setState(() {
@@ -540,8 +554,8 @@ class _SandboxWebProviderHostState extends ConsumerState<SandboxWebProviderHost>
         }));
       ''');
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
+      print("[original-error] $error\n$stackTrace");
+    }
   }
 
   Future<void> _disposeSession() async {
@@ -553,8 +567,8 @@ class _SandboxWebProviderHostState extends ConsumerState<SandboxWebProviderHost>
     try {
       await ref.read(extensionServiceProvider).revokeWebUISession(sid);
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
+      print("[original-error] $error\n$stackTrace");
+    }
   }
 
   @override
@@ -568,13 +582,15 @@ class _SandboxWebProviderHostState extends ConsumerState<SandboxWebProviderHost>
 
   @override
   Widget build(BuildContext context) {
+    final compactHeight = mobileWebRuntimeInitialHeight(widget.context);
+    final compact = isCompactMobileWebRuntimeContext(widget.context);
     if (_loading) {
       final loading = const Center(
         child: CircularProgressIndicator(strokeWidth: 2),
       );
       return widget.inlineComposerAction
           ? SizedBox(width: 44, height: 44, child: loading)
-          : loading;
+          : SizedBox(height: compactHeight, child: loading);
     }
     if (_error != null || _controller == null) {
       final unavailable =
@@ -586,10 +602,19 @@ class _SandboxWebProviderHostState extends ConsumerState<SandboxWebProviderHost>
           );
       return widget.inlineComposerAction
           ? SizedBox(width: 44, height: 44, child: unavailable)
-          : unavailable;
+          : SizedBox(height: compactHeight, child: unavailable);
     }
     if (!widget.inlineComposerAction) {
-      return WebViewWidget(controller: _controller!);
+      return compact
+          ? SizedBox(
+              height: _height,
+              child: WebViewWidget(controller: _controller!),
+            )
+          : SizedBox(
+              height: _height,
+              width: double.infinity,
+              child: WebViewWidget(controller: _controller!),
+            );
     }
     return SizedBox(
       width: 44,

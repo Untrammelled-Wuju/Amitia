@@ -25,7 +25,8 @@ func (p *meshLocalDataPort) ownedRuntimeContext(ctx context.Context, scope coord
 		loaders = append(loaders, interaction.NewTemporalContextLoader(p.services.Temporal))
 	}
 	if p.services.KernelContainer.ToolFacade != nil {
-		loaders = append(loaders, interaction.NewLifeContextLoader(newKernelExtensionContextProvider(p.services.KernelContainer.ToolFacade)))
+		provider := newKernelExtensionContextProvider(p.services.KernelContainer.ToolFacade)
+		loaders = append(loaders, interaction.NewLifeContextLoader(provider), interaction.NewPromptExtensionContextLoader(provider))
 	}
 	result := map[string]json.RawMessage{}
 	for _, loader := range loaders {

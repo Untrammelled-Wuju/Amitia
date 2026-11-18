@@ -17,6 +17,7 @@ enum UIProviderEntryType {
   builtinNative,
   declarative,
   webModule,
+  mobileWebRuntime,
   externalWebUi,
   schemaRenderer,
   webRestricted,
@@ -107,8 +108,11 @@ class UIProviderEntry {
   final UIProviderEntryType type;
   final String? path;
   final String? schemaPath;
+  final String? stylePath;
   final String? exportName;
   final String? contentHash;
+  final String? styleHash;
+  final String? moduleToken;
   final String? url;
   final List<String> allowedOrigins;
 
@@ -117,8 +121,11 @@ class UIProviderEntry {
     required this.type,
     this.path,
     this.schemaPath,
+    this.stylePath,
     this.exportName,
     this.contentHash,
+    this.styleHash,
+    this.moduleToken,
     this.url,
     this.allowedOrigins = const <String>[],
   });
@@ -129,6 +136,7 @@ class UIProviderEntry {
       'builtin_native' => UIProviderEntryType.builtinNative,
       'declarative' => UIProviderEntryType.declarative,
       'web_module' => UIProviderEntryType.webModule,
+      'mobile_web_runtime' => UIProviderEntryType.mobileWebRuntime,
       'external_web_ui' => UIProviderEntryType.externalWebUi,
       'schema_renderer' => UIProviderEntryType.schemaRenderer,
       'web_restricted' => UIProviderEntryType.webRestricted,
@@ -140,8 +148,11 @@ class UIProviderEntry {
       type: type,
       path: json['path']?.toString(),
       schemaPath: json['schemaPath']?.toString(),
+      stylePath: json['stylePath']?.toString(),
       exportName: json['exportName']?.toString(),
       contentHash: json['contentHash']?.toString(),
+      styleHash: json['styleHash']?.toString(),
+      moduleToken: json['moduleToken']?.toString(),
       url: json['url']?.toString(),
       allowedOrigins: ((json['allowedOrigins'] as List?) ?? const [])
           .map((item) => item.toString().trim())
@@ -580,13 +591,18 @@ class UIContributionSnapshotEntry {
   final String entryType;
   final String runtimeId;
   final String entryPath;
+  final String? entryHash;
   final String? schemaPath;
+  final String? stylePath;
+  final String? styleHash;
+  final String? moduleToken;
   final List<String> permissions;
   final Map<String, dynamic> dataContract;
   final Map<String, dynamic> visibility;
   final int ordering;
   final int priority;
   final String entryKey;
+  final bool entryKeyExplicit;
   final String cellId;
   final dynamic matched;
   final List<Map<String, dynamic>> matchRules;
@@ -604,13 +620,18 @@ class UIContributionSnapshotEntry {
     required this.entryType,
     this.runtimeId = '',
     required this.entryPath,
+    this.entryHash,
     this.schemaPath,
+    this.stylePath,
+    this.styleHash,
+    this.moduleToken,
     required this.permissions,
     required this.dataContract,
     required this.visibility,
     required this.ordering,
     required this.priority,
     this.entryKey = '',
+    this.entryKeyExplicit = false,
     this.cellId = '',
     this.matched,
     this.matchRules = const <Map<String, dynamic>>[],
@@ -650,7 +671,11 @@ class UIContributionSnapshotEntry {
       entryType: (entry['type'] ?? '').toString(),
       runtimeId: (entry['runtime_id'] ?? '').toString().trim(),
       entryPath: (entry['path'] ?? '').toString(),
+      entryHash: entry['content_hash']?.toString(),
       schemaPath: entry['schema_path']?.toString(),
+      stylePath: entry['style_path']?.toString(),
+      styleHash: entry['style_hash']?.toString(),
+      moduleToken: entry['module_token']?.toString(),
       permissions: permissions,
       dataContract:
           (json['data_contract'] as Map?)?.cast<String, dynamic>() ?? const {},
@@ -664,6 +689,8 @@ class UIContributionSnapshotEntry {
       entryKey: (dispatch['entry_key'] ?? sortKey).toString().trim().isNotEmpty
           ? (dispatch['entry_key'] ?? sortKey).toString().trim()
           : contributionId,
+      entryKeyExplicit:
+          dispatch['entry_key']?.toString().trim().isNotEmpty == true,
       cellId: (dispatch['cell_id'] ?? sortKey).toString().trim().isNotEmpty
           ? (dispatch['cell_id'] ?? sortKey).toString().trim()
           : contributionId,

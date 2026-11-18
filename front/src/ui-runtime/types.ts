@@ -52,6 +52,7 @@ export type UIProviderEntryType =
   | "builtin_native"
   | "declarative"
   | "web_module"
+  | "mobile_web_runtime"
   | "schema_renderer"
   | "client_module"
   | "external_web_ui";

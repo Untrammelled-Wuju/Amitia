@@ -1,0 +1,1872 @@
+{
+  "schemaVersion": 1,
+  "catalogVersion": "v1",
+  "targetDshVersion": "0.2.2-rc.2",
+  "targetClientUiPrimitivesVersion": "0.2.2-rc.2",
+  "sourcePackages": [
+    {
+      "spec": "@deepseek-ai/dsh@0.2.2-rc.2",
+      "packageJsonSha256": "sha256-9d6c0e15213b8d2b463de2a820e1ff5722641944bb561715f53e2ce7f0781adc"
+    },
+    {
+      "spec": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2",
+      "packageJsonSha256": "sha256-e5ff1b4e163bb6e6b8baafe73b3a0e8d1026f935c4666e670d1d1de36c57545e"
+    }
+  ],
+  "host": [
+    {
+      "id": "DSH-HOST-SERVICE-001",
+      "capability": "ctx.agentDefaultModel",
+      "status": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "phase": "P11",
+      "reason": "由官方包 @deepseek-ai/dsh-agent-default-model 提供，插件声明 inject 并自带该依赖后经真实 cordis 原生托管",
+      "officialPackages": [
+        "@deepseek-ai/dsh-agent-default-model"
+      ],
+      "consumerCount": 4
+    },
+    {
+      "id": "DSH-HOST-SERVICE-002",
+      "capability": "ctx.agentLoop",
+      "status": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "phase": "P11",
+      "reason": "由官方 bundle @deepseek-ai/dsh-agent-loop 提供，容器不复制 agent 驱动",
+      "officialPackages": [
+        "@deepseek-ai/dsh-agent-loop"
+      ],
+      "consumerCount": 2
+    },
+    {
+      "id": "DSH-HOST-SERVICE-003",
+      "capability": "ctx.agentPresets",
+      "status": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "phase": "P11",
+      "reason": "由官方 @deepseek-ai/dsh-agent-preset 提供注册表；mount/recompose 动态子组合由 cordis 原生托管",
+      "officialPackages": [
+        "@deepseek-ai/dsh-agent-preset-registry"
+      ],
+      "consumerCount": 13
+    },
+    {
+      "id": "DSH-HOST-SERVICE-006",
+      "capability": "ctx.authorization",
+      "status": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "phase": "P11",
+      "reason": "由官方 @deepseek-ai/dsh-authorization 提供凭据流程注册表，记录写入复用已实现的 credentials",
+      "officialPackages": [
+        "@deepseek-ai/dsh-authorization",
+        "@deepseek-ai/dsh-llm-pi-ai"
+      ],
+      "consumerCount": 13
+    },
+    {
+      "id": "DSH-HOST-SERVICE-007",
+      "capability": "ctx.clientModules",
+      "status": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "phase": "P11",
+      "reason": "由官方 @deepseek-ai/dsh-client-modules 提供 Web 插件表，桌面端不消费",
+      "officialPackages": [
+        "@deepseek-ai/dsh-client-modules"
+      ],
+      "consumerCount": 4
+    },
+    {
+      "id": "DSH-HOST-SERVICE-009",
+      "capability": "ctx.compaction",
+      "status": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "phase": "P11",
+      "reason": "由官方 @deepseek-ai/dsh-compaction seam 提供，具体 provider 为官方 compaction-basic",
+      "officialPackages": [
+        "@deepseek-ai/dsh-compaction"
+      ],
+      "consumerCount": 11
+    },
+    {
+      "id": "DSH-HOST-SERVICE-010",
+      "capability": "ctx.connection",
+      "status": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "phase": "P11",
+      "reason": "由官方 client 连接包提供，桌面端仅需服务可见性",
+      "officialPackages": [
+        "@deepseek-ai/dsh-client-connection"
+      ],
+      "consumerCount": 28
+    },
+    {
+      "id": "DSH-HOST-SERVICE-012",
+      "capability": "ctx.credentialsController",
+      "status": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "phase": "P11",
+      "reason": "由官方 @deepseek-ai/dsh-api-settings-controller 提供，底层 credentials 已由容器实现",
+      "officialPackages": [
+        "@deepseek-ai/dsh-api-settings-controller"
+      ],
+      "consumerCount": 3
+    },
+    {
+      "id": "DSH-HOST-SERVICE-013",
+      "capability": "ctx.deepseekAccount",
+      "status": "unavailable",
+      "route": "official-package",
+      "provider": "unavailable",
+      "phase": "P11",
+      "reason": "seam 由官方 @deepseek-ai/dsh-deepseek-account 提供，登录需要 DeepSeek 账号网络通道，容器不代理第三方账号，保持官方失败态",
+      "officialPackages": [
+        "@deepseek-ai/dsh-deepseek-account"
+      ],
+      "consumerCount": 7
+    },
+    {
+      "id": "DSH-HOST-SERVICE-014",
+      "capability": "ctx.deepseekLlmApiExtensions",
+      "status": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "phase": "P11",
+      "reason": "由官方 @deepseek-ai/dsh-deepseek-llm-api-extensions 提供请求字段注册表，纯内存",
+      "officialPackages": [
+        "@deepseek-ai/dsh-deepseek-llm-api-extensions"
+      ],
+      "consumerCount": 5
+    },
+    {
+      "id": "DSH-HOST-SERVICE-015",
+      "capability": "ctx.directoryPicker",
+      "status": "pending",
+      "route": "official-package",
+      "provider": "amitia",
+      "phase": "P11",
+      "reason": "seam 由官方 @deepseek-ai/dsh-host-directory-picker 提供；provider 需选择目录，待映射 Amitia 的目录选择能力",
+      "officialPackages": [
+        "@deepseek-ai/dsh-host-directory-picker"
+      ],
+      "consumerCount": 7
+    },
+    {
+      "id": "DSH-HOST-SERVICE-016",
+      "capability": "ctx.directoryPickerController",
+      "status": "pending",
+      "route": "official-package",
+      "provider": "amitia",
+      "phase": "P11",
+      "reason": "由官方 @deepseek-ai/dsh-api-workspace-controller 提供，依赖 directoryPicker 的题目同一能力",
+      "officialPackages": [
+        "@deepseek-ai/dsh-api-workspace-controller"
+      ],
+      "consumerCount": 3
+    },
+    {
+      "id": "DSH-HOST-SERVICE-017",
+      "capability": "ctx.fileReferences",
+      "status": "pending",
+      "route": "official-package",
+      "provider": "amitia",
+      "phase": "P11",
+      "reason": "seam 由官方 @deepseek-ai/dsh-file-reference 提供；provider 需遍历工作目录，待映射既有 host.workspace.read",
+      "officialPackages": [
+        "@deepseek-ai/dsh-file-reference"
+      ],
+      "consumerCount": 4
+    },
+    {
+      "id": "DSH-HOST-SERVICE-019",
+      "capability": "ctx.goals",
+      "status": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "phase": "P11",
+      "reason": "由官方 @deepseek-ai/dsh-goal 提供，以会话日志为唯一来源",
+      "officialPackages": [
+        "@deepseek-ai/dsh-goal"
+      ],
+      "consumerCount": 8
+    },
+    {
+      "id": "DSH-HOST-SERVICE-020",
+      "capability": "ctx.jobController",
+      "status": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "phase": "P11",
+      "reason": "官方 @deepseek-ai/dsh-api-job-controller 实测在严格注入检查下直接激活（根入口 ./lib/index.js 为唯一 Host 入口，typert 与 jobs 均满足，激活后注册 jobController 并提供 1 个 client 入口）。typert 来自官方 @deepseek-ai/dsh-typert-registry；jobs 来自 Amitia host-services 已实现的作业运行时，官方 jobs-local 与之冲突（DSH_HOST_SERVICE_CONFLICT service \"jobs\" has been registered），二者不共存，容器不安装 jobs-local",
+      "officialPackages": [
+        "@deepseek-ai/dsh-api-job-controller"
+      ],
+      "consumerCount": 3
+    },
+    {
+      "id": "DSH-HOST-SERVICE-023",
+      "capability": "ctx.lsp",
+      "status": "unavailable",
+      "route": "official-package",
+      "provider": "unavailable",
+      "phase": "P11",
+      "reason": "seam 包 @deepseek-ai/dsh-lsp@0.2.2-rc.2 已发布，但不在 @deepseek-ai/dsh@0.2.2-rc.2 依赖闭包内（416 个官方包实测无定义点），需显式安装；provider lsp-stdio 需真实子进程与语言服务器二进制，容器不提供，保持官方 LSP_UNAVAILABLE",
+      "officialPackages": [],
+      "consumerCount": 3
+    },
+    {
+      "id": "DSH-HOST-SERVICE-024",
+      "capability": "ctx.permissionPresets",
+      "status": "unavailable",
+      "route": "official-package",
+      "provider": "unavailable",
+      "phase": "P11",
+      "reason": "由官方 @deepseek-ai/dsh-permission-presets 提供，依赖 ctx.shell 执行器，容器不提供真实进程执行",
+      "officialPackages": [
+        "@deepseek-ai/dsh-permission-presets"
+      ],
+      "consumerCount": 6
+    },
+    {
+      "id": "DSH-HOST-SERVICE-025",
+      "capability": "ctx.planMode",
+      "status": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "phase": "P11",
+      "reason": "由官方 @deepseek-ai/dsh-plan-mode 提供，状态写入会话日志",
+      "officialPackages": [
+        "@deepseek-ai/dsh-plan-mode"
+      ],
+      "consumerCount": 2
+    },
+    {
+      "id": "DSH-HOST-SERVICE-026",
+      "capability": "ctx.ptcRuntime",
+      "status": "unavailable",
+      "route": "official-package",
+      "provider": "unavailable",
+      "phase": "P11",
+      "reason": "seam 由官方 @deepseek-ai/dsh-ptc-runtime 提供；provider 需隔离执行程序，容器 Node 权限不变时保持官方失败态",
+      "officialPackages": [
+        "@deepseek-ai/dsh-ptc-runtime"
+      ],
+      "consumerCount": 5
+    },
+    {
+      "id": "DSH-HOST-SERVICE-027",
+      "capability": "ctx.remoteAccess",
+      "status": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "phase": "P11",
+      "reason": "由官方 @deepseek-ai/dsh-api-remote-access 提供访问策略注册表，纯内存",
+      "officialPackages": [
+        "@deepseek-ai/dsh-api-remote-access"
+      ],
+      "consumerCount": 15
+    },
+    {
+      "id": "DSH-HOST-SERVICE-028",
+      "capability": "ctx.sandbox",
+      "status": "unavailable",
+      "route": "official-package",
+      "provider": "unavailable",
+      "phase": "P11",
+      "reason": "seam 由官方 @deepseek-ai/dsh-sandbox 提供；confining 实现需宿主提供真实隔离，容器不放开即失败关闭",
+      "officialPackages": [
+        "@deepseek-ai/dsh-sandbox"
+      ],
+      "consumerCount": 14
+    },
+    {
+      "id": "DSH-HOST-SERVICE-029",
+      "capability": "ctx.sandboxPolicy",
+      "status": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "phase": "P11",
+      "reason": "由官方 @deepseek-ai/dsh-sandbox-policy 提供策略服务，执行侧才需要 sandbox provider",
+      "officialPackages": [
+        "@deepseek-ai/dsh-sandbox-policy"
+      ],
+      "consumerCount": 25
+    },
+    {
+      "id": "DSH-HOST-SERVICE-031",
+      "capability": "ctx.sessionController",
+      "status": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "phase": "P11",
+      "reason": "由官方 @deepseek-ai/dsh-api-session-controller 提供，依赖会话持久化与标题服务",
+      "officialPackages": [
+        "@deepseek-ai/dsh-api-session-controller"
+      ],
+      "consumerCount": 6
+    },
+    {
+      "id": "DSH-HOST-SERVICE-032",
+      "capability": "ctx.sessionFileReferences",
+      "status": "pending",
+      "route": "official-package",
+      "provider": "amitia",
+      "phase": "P11",
+      "reason": "由官方 @deepseek-ai/dsh-api-session-controller 提供，依赖 fileReferences 的工作目录枚举",
+      "officialPackages": [
+        "@deepseek-ai/dsh-api-session-controller"
+      ],
+      "consumerCount": 3
+    },
+    {
+      "id": "DSH-HOST-SERVICE-033",
+      "capability": "ctx.sessionLogDeepSeek",
+      "status": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "phase": "P11",
+      "reason": "由官方 @deepseek-ai/dsh-session-log-deepseek 提供日志贡献者，纯内存过滤规则",
+      "officialPackages": [
+        "@deepseek-ai/dsh-session-log-deepseek"
+      ],
+      "consumerCount": 2
+    },
+    {
+      "id": "DSH-HOST-SERVICE-038",
+      "capability": "ctx.sessionReferenceResolver",
+      "status": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "phase": "P11",
+      "reason": "由官方 @deepseek-ai/dsh-session-reference 提供，读取会话日志精确内容",
+      "officialPackages": [
+        "@deepseek-ai/dsh-session-reference"
+      ],
+      "consumerCount": 4
+    },
+    {
+      "id": "DSH-HOST-SERVICE-040",
+      "capability": "ctx.sessionSkillCatalog",
+      "status": "pending",
+      "route": "official-package",
+      "provider": "amitia",
+      "phase": "P11",
+      "reason": "由官方 @deepseek-ai/dsh-api-session-controller 从 ctx.skills 派生，技能 provider 待映射 Amitia 技能目录",
+      "officialPackages": [
+        "@deepseek-ai/dsh-api-session-controller"
+      ],
+      "consumerCount": 3
+    },
+    {
+      "id": "DSH-HOST-SERVICE-041",
+      "capability": "ctx.sessionTelemetry",
+      "status": "unavailable",
+      "route": "official-package",
+      "provider": "unavailable",
+      "phase": "P11",
+      "reason": "seam 由官方 @deepseek-ai/dsh-session-telemetry 提供；Amitia 无遥测上报通道，provider 保持官方失败态",
+      "officialPackages": [
+        "@deepseek-ai/dsh-session-telemetry"
+      ],
+      "consumerCount": 3
+    },
+    {
+      "id": "DSH-HOST-SERVICE-042",
+      "capability": "ctx.sessionTitle",
+      "status": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "phase": "P11",
+      "reason": "由官方 @deepseek-ai/dsh-session-title 提供，标题以会话日志折叠为准",
+      "officialPackages": [
+        "@deepseek-ai/dsh-experimental-liveshare",
+        "@deepseek-ai/dsh-session-title"
+      ],
+      "consumerCount": 7
+    },
+    {
+      "id": "DSH-HOST-SERVICE-043",
+      "capability": "ctx.settings",
+      "status": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "phase": "P11",
+      "reason": "由官方 @deepseek-ai/dsh-settings 提供 Config 投影，纯内存",
+      "officialPackages": [
+        "@deepseek-ai/dsh-settings"
+      ],
+      "consumerCount": 28
+    },
+    {
+      "id": "DSH-HOST-SERVICE-044",
+      "capability": "ctx.settingsController",
+      "status": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "phase": "P11",
+      "reason": "由官方 @deepseek-ai/dsh-api-settings-controller 提供，底层 settings 由官方包提供",
+      "officialPackages": [
+        "@deepseek-ai/dsh-api-settings-controller"
+      ],
+      "consumerCount": 3
+    },
+    {
+      "id": "DSH-HOST-SERVICE-045",
+      "capability": "ctx.shell",
+      "status": "unavailable",
+      "route": "official-package",
+      "provider": "unavailable",
+      "phase": "P11",
+      "reason": "seam 由官方 @deepseek-ai/dsh-shell 提供（实测可加载）；provider 需真实进程，容器 Node 权限不变时不放开",
+      "officialPackages": [
+        "@deepseek-ai/dsh-shell"
+      ],
+      "consumerCount": 30
+    },
+    {
+      "id": "DSH-HOST-SERVICE-046",
+      "capability": "ctx.shellEnv",
+      "status": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "phase": "P11",
+      "reason": "由官方 @deepseek-ai/dsh-shell-env 提供（实测 register/list/collect/release 全通）",
+      "officialPackages": [
+        "@deepseek-ai/dsh-shell-env"
+      ],
+      "consumerCount": 6
+    },
+    {
+      "id": "DSH-HOST-SERVICE-047",
+      "capability": "ctx.skills",
+      "status": "pending",
+      "route": "official-package",
+      "provider": "amitia",
+      "phase": "P11",
+      "reason": "seam 由官方 @deepseek-ai/dsh-skill 提供分层注册表；provider 取 Amitia 技能目录时待映射，filesystem provider 可走既有 fs",
+      "officialPackages": [
+        "@deepseek-ai/dsh-skill"
+      ],
+      "consumerCount": 15
+    },
+    {
+      "id": "DSH-HOST-SERVICE-051",
+      "capability": "ctx.subagentModelSelection",
+      "status": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "phase": "P11",
+      "reason": "由官方 @deepseek-ai/dsh-tool-subagent 提供 settings 贡献项，纯内存记录",
+      "officialPackages": [
+        "@deepseek-ai/dsh-tool-subagent"
+      ],
+      "consumerCount": 2
+    },
+    {
+      "id": "DSH-HOST-SERVICE-053",
+      "capability": "ctx.subprocess",
+      "status": "unavailable",
+      "route": "official-package",
+      "provider": "unavailable",
+      "phase": "P11",
+      "reason": "seam 由官方 @deepseek-ai/dsh-subprocess 提供；provider 需真实子进程，容器 Node 权限不变时保持官方失败态",
+      "officialPackages": [
+        "@deepseek-ai/dsh-subprocess"
+      ],
+      "consumerCount": 20
+    },
+    {
+      "id": "DSH-HOST-SERVICE-055",
+      "capability": "ctx.terminalController",
+      "status": "unavailable",
+      "route": "official-package",
+      "provider": "unavailable",
+      "phase": "P11",
+      "reason": "由官方 @deepseek-ai/dsh-api-terminal-controller 提供，依赖 terminals 与真实 PTY",
+      "officialPackages": [
+        "@deepseek-ai/dsh-api-terminal-controller"
+      ],
+      "consumerCount": 4
+    },
+    {
+      "id": "DSH-HOST-SERVICE-056",
+      "capability": "ctx.terminals",
+      "status": "unavailable",
+      "route": "official-package",
+      "provider": "unavailable",
+      "phase": "P11",
+      "reason": "seam 由官方 @deepseek-ai/dsh-terminal 提供；PTY 后端需子进程，容器不放开",
+      "officialPackages": [
+        "@deepseek-ai/dsh-terminal"
+      ],
+      "consumerCount": 7
+    },
+    {
+      "id": "DSH-HOST-SERVICE-057",
+      "capability": "ctx.tokenMeter",
+      "status": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "phase": "P11",
+      "reason": "由官方 @deepseek-ai/dsh-token-meter 提供，用于本地估算与 usage 折叠",
+      "officialPackages": [
+        "@deepseek-ai/dsh-token-meter"
+      ],
+      "consumerCount": 5
+    },
+    {
+      "id": "DSH-HOST-SERVICE-058",
+      "capability": "ctx.toolResultPruner",
+      "status": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "phase": "P11",
+      "reason": "由官方 @deepseek-ai/dsh-compaction-tool-result-pruner 提供确定性裁剪，纯计算",
+      "officialPackages": [
+        "@deepseek-ai/dsh-compaction-tool-result-pruner"
+      ],
+      "consumerCount": 3
+    },
+    {
+      "id": "DSH-HOST-SERVICE-060",
+      "capability": "ctx.typert",
+      "status": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "phase": "P11",
+      "reason": "由官方 @deepseek-ai/dsh-typert-registry 提供 schema 注册表，纯内存",
+      "officialPackages": [
+        "@deepseek-ai/dsh-typert-registry"
+      ],
+      "consumerCount": 15
+    },
+    {
+      "id": "DSH-HOST-SERVICE-061",
+      "capability": "ctx.typertGateway",
+      "status": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "phase": "P11",
+      "reason": "由官方 @deepseek-ai/dsh-api-gateway 提供，活跃客户端通道就绪后可用",
+      "officialPackages": [
+        "@deepseek-ai/dsh-api-gateway"
+      ],
+      "consumerCount": 6
+    },
+    {
+      "id": "DSH-HOST-SERVICE-063",
+      "capability": "ctx.web",
+      "status": "unavailable",
+      "route": "official-package",
+      "provider": "unavailable",
+      "phase": "P11",
+      "reason": "seam 由官方 @deepseek-ai/dsh-web 提供；搜索与抓取 provider 需外部网络与凭据，容器不代理",
+      "officialPackages": [
+        "@deepseek-ai/dsh-web"
+      ],
+      "consumerCount": 21
+    },
+    {
+      "id": "DSH-HOST-SERVICE-064",
+      "capability": "ctx.webApp",
+      "status": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "phase": "P11",
+      "reason": "由官方 @deepseek-ai/dsh-web-app 提供，属 Web 端专用，桌面端不安装不加载",
+      "officialPackages": [
+        "@deepseek-ai/dsh-web-app"
+      ],
+      "consumerCount": 3
+    },
+    {
+      "id": "DSH-HOST-SERVICE-065",
+      "capability": "ctx.webServer",
+      "status": "unavailable",
+      "route": "official-package",
+      "provider": "unavailable",
+      "phase": "P11",
+      "reason": "seam 由官方 @deepseek-ai/dsh-host-webserver 提供；HTTP 服务端端口与路由须由宿主提供，容器不开放监听",
+      "officialPackages": [
+        "@deepseek-ai/dsh-host-webserver"
+      ],
+      "consumerCount": 14
+    },
+    {
+      "id": "DSH-HOST-SERVICE-066",
+      "capability": "ctx.workflowEngine",
+      "status": "unavailable",
+      "route": "official-package",
+      "provider": "unavailable",
+      "phase": "P11",
+      "reason": "seam 由官方 @deepseek-ai/dsh-workflow 提供；provider workflow-ptc 需隔离执行，容器不放开",
+      "officialPackages": [
+        "@deepseek-ai/dsh-workflow"
+      ],
+      "consumerCount": 4
+    },
+    {
+      "id": "DSH-HOST-SERVICE-067",
+      "capability": "ctx.workspaceController",
+      "status": "pending",
+      "route": "official-package",
+      "provider": "amitia",
+      "phase": "P11",
+      "reason": "由官方 @deepseek-ai/dsh-api-workspace-controller 提供，实测仅依赖 storageDomain 与 sessionPersistence 两个 seam",
+      "officialPackages": [
+        "@deepseek-ai/dsh-api-workspace-controller"
+      ],
+      "consumerCount": 3
+    },
+    {
+      "id": "DSH-HOST-SERVICE-068",
+      "capability": "ctx.workspaceFiles",
+      "status": "pending",
+      "route": "official-package",
+      "provider": "amitia",
+      "phase": "P11",
+      "reason": "由官方 @deepseek-ai/dsh-api-workspace-files 提供，枚举与浏览待映射 host.workspace.read 的 file_list/browse/file_search",
+      "officialPackages": [
+        "@deepseek-ai/dsh-api-workspace-files"
+      ],
+      "consumerCount": 8
+    }
+  ],
+  "resolved": [
+    {
+      "id": "DSH-HOST-SERVICE-004",
+      "capability": "ctx.agents",
+      "status": "partial",
+      "route": "amitia-service",
+      "provider": "container",
+      "phase": "P11",
+      "reason": "",
+      "officialPackages": [],
+      "consumerCount": 0
+    },
+    {
+      "id": "DSH-HOST-SERVICE-005",
+      "capability": "ctx.approval",
+      "status": "partial",
+      "route": "amitia-service",
+      "provider": "container",
+      "phase": "P11",
+      "reason": "",
+      "officialPackages": [],
+      "consumerCount": 0
+    },
+    {
+      "id": "DSH-HOST-SERVICE-008",
+      "capability": "ctx.commands",
+      "status": "implemented",
+      "route": "amitia-service",
+      "provider": "container",
+      "phase": "P11",
+      "reason": "",
+      "officialPackages": [],
+      "consumerCount": 0
+    },
+    {
+      "id": "DSH-HOST-SERVICE-011",
+      "capability": "ctx.credentials",
+      "status": "implemented",
+      "route": "amitia-service",
+      "provider": "container",
+      "phase": "P11",
+      "reason": "",
+      "officialPackages": [],
+      "consumerCount": 0
+    },
+    {
+      "id": "DSH-HOST-SERVICE-018",
+      "capability": "ctx.fs",
+      "status": "partial",
+      "route": "amitia-service",
+      "provider": "container",
+      "phase": "P11",
+      "reason": "",
+      "officialPackages": [],
+      "consumerCount": 0
+    },
+    {
+      "id": "DSH-HOST-SERVICE-021",
+      "capability": "ctx.jobs",
+      "status": "implemented",
+      "route": "amitia-service",
+      "provider": "container",
+      "phase": "P11",
+      "reason": "",
+      "officialPackages": [],
+      "consumerCount": 0
+    },
+    {
+      "id": "DSH-HOST-SERVICE-022",
+      "capability": "ctx.llm",
+      "status": "partial",
+      "route": "amitia-service",
+      "provider": "container",
+      "phase": "P11",
+      "reason": "",
+      "officialPackages": [],
+      "consumerCount": 0
+    },
+    {
+      "id": "DSH-HOST-SERVICE-030",
+      "capability": "ctx.schedule",
+      "status": "partial",
+      "route": "amitia-service",
+      "provider": "container",
+      "phase": "P11",
+      "reason": "",
+      "officialPackages": [],
+      "consumerCount": 0
+    },
+    {
+      "id": "DSH-HOST-SERVICE-034",
+      "capability": "ctx.sessionPersistence",
+      "status": "implemented",
+      "route": "official-package",
+      "provider": "amitia-landed",
+      "phase": "P11",
+      "reason": "seam 由官方 @deepseek-ai/dsh-session-persistence 提供，jsonl 后端已接线到插件数据目录 dsh-data/sessions；0.1.104 真实运行中经官方 agents.create 写出 sessions/<cwd>/<sessionId>/session.v4.jsonl.zstd（208 字节，zstd 解压后为 session 头事件）",
+      "officialPackages": [
+        "@deepseek-ai/dsh-session-persistence"
+      ],
+      "consumerCount": 20
+    },
+    {
+      "id": "DSH-HOST-SERVICE-035",
+      "capability": "ctx.sessionProjectionCache",
+      "status": "implemented",
+      "route": "official-package",
+      "provider": "amitia-landed",
+      "phase": "P11",
+      "reason": "官方 @deepseek-ai/dsh-session-projection-cache 已安装并 active，容器按官方 README 注入必填 writeEveryEvents=200 与 writeIntervalMs=5000，打开 session_projcache 存储域；0.1.104 真实运行中会话创建即写出 storage/session_projcache/sessions/<sessionId>.json，含 turnBoundary/modelSelection/inbox 三行投影",
+      "officialPackages": [
+        "@deepseek-ai/dsh-session-projection-cache"
+      ],
+      "consumerCount": 7
+    },
+    {
+      "id": "DSH-HOST-SERVICE-036",
+      "capability": "ctx.sessionProjections",
+      "status": "implemented",
+      "route": "official-package",
+      "provider": "amitia-landed",
+      "phase": "P11",
+      "reason": "seam 由官方 @deepseek-ai/dsh-session-projection 提供（0.1.104 安装并 active），容器注册表改名 amitiaSessionProjections 让出官方服务名；官方 agent-loop 已在该注册表登记 turnBoundary/modelSelection/inbox 三行投影",
+      "officialPackages": [
+        "@deepseek-ai/dsh-session-projection"
+      ],
+      "consumerCount": 32
+    },
+    {
+      "id": "DSH-HOST-SERVICE-037",
+      "capability": "ctx.sessionQuery",
+      "status": "partial",
+      "route": "amitia-service",
+      "provider": "container",
+      "phase": "P11",
+      "reason": "listSessions、readSession、listEvents、readSurface、readTitle、readTitleSnapshot、readTitleSnapshots 已接入 Amitia 会话目录与持久化事件；observeSession、inspectSession、searchSessions、searchEvents、filterSessions、filterEvents、traceSession、traceEvent、readEvent 缺少对应的 Amitia 通用能力",
+      "officialPackages": [],
+      "consumerCount": 0
+    },
+    {
+      "id": "DSH-HOST-SERVICE-039",
+      "capability": "ctx.sessions",
+      "status": "partial",
+      "route": "amitia-service",
+      "provider": "container",
+      "phase": "P11",
+      "reason": "",
+      "officialPackages": [],
+      "consumerCount": 0
+    },
+    {
+      "id": "DSH-HOST-SERVICE-048",
+      "capability": "ctx.spillStore",
+      "status": "implemented",
+      "route": "official-package",
+      "provider": "amitia-landed",
+      "phase": "P11",
+      "reason": "seam 由官方 @deepseek-ai/dsh-spill 提供，本地 provider 已接线到插件数据目录 dsh-data/spill；0.1.104 真实运行中 saveText 写出 spill/session-0588e96b2117/685d18d77a52-probe.txt（1728 字节，0600，内容逐字节比对一致）",
+      "officialPackages": [
+        "@deepseek-ai/dsh-spill"
+      ],
+      "consumerCount": 5
+    },
+    {
+      "id": "DSH-HOST-SERVICE-049",
+      "capability": "ctx.storage",
+      "status": "implemented",
+      "route": "official-package",
+      "provider": "amitia-landed",
+      "phase": "P11",
+      "reason": "seam 由官方 @deepseek-ai/dsh-storage 提供，JSON 后端已实测落盘 dsh-data/storage/workspace.json（0.1.99 真实运行）",
+      "officialPackages": [
+        "@deepseek-ai/dsh-storage"
+      ],
+      "consumerCount": 17
+    },
+    {
+      "id": "DSH-HOST-SERVICE-050",
+      "capability": "ctx.storageDomain",
+      "status": "implemented",
+      "route": "official-package",
+      "provider": "amitia-landed",
+      "phase": "P11",
+      "reason": "由官方 @deepseek-ai/dsh-storage-domain 提供，域数据已实测经 storage provider 落盘（0.1.99 真实运行）",
+      "officialPackages": [
+        "@deepseek-ai/dsh-storage-domain"
+      ],
+      "consumerCount": 7
+    },
+    {
+      "id": "DSH-HOST-SERVICE-052",
+      "capability": "ctx.subagents",
+      "status": "partial",
+      "route": "amitia-service",
+      "provider": "container",
+      "phase": "P11",
+      "reason": "",
+      "officialPackages": [],
+      "consumerCount": 0
+    },
+    {
+      "id": "DSH-HOST-SERVICE-054",
+      "capability": "ctx.systemPrompt",
+      "status": "implemented",
+      "route": "amitia-service",
+      "provider": "container",
+      "phase": "P9",
+      "reason": "",
+      "officialPackages": [],
+      "consumerCount": 0
+    },
+    {
+      "id": "DSH-HOST-SERVICE-059",
+      "capability": "ctx.tools",
+      "status": "implemented",
+      "route": "amitia-service",
+      "provider": "container",
+      "phase": "P9",
+      "reason": "",
+      "officialPackages": [],
+      "consumerCount": 0
+    },
+    {
+      "id": "DSH-HOST-SERVICE-062",
+      "capability": "ctx.userQuestions",
+      "status": "partial",
+      "route": "amitia-service",
+      "provider": "container",
+      "phase": "P11",
+      "reason": "",
+      "officialPackages": [],
+      "consumerCount": 0
+    },
+    {
+      "id": "DSH-HOST-SERVICE-069",
+      "capability": "ctx.workspaceRegistry",
+      "status": "implemented",
+      "route": "official-package",
+      "provider": "amitia-landed",
+      "phase": "P11",
+      "reason": "由官方 @deepseek-ai/dsh-workspace 提供，0.1.99 已激活并完成默认工作区初始化落盘",
+      "officialPackages": [
+        "@deepseek-ai/dsh-workspace"
+      ],
+      "consumerCount": 8
+    }
+  ],
+  "configurations": [
+    {
+      "id": "DSH-HOST-CONFIG-001",
+      "capability": "@deepseek-ai/dsh-acp",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-002",
+      "capability": "@deepseek-ai/dsh-action-cards",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-003",
+      "capability": "@deepseek-ai/dsh-agent-default-model",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-004",
+      "capability": "@deepseek-ai/dsh-agent-instructions",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-005",
+      "capability": "@deepseek-ai/dsh-agent-loop",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-006",
+      "capability": "@deepseek-ai/dsh-agent-preset",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-007",
+      "capability": "@deepseek-ai/dsh-agent-preset-registry",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-008",
+      "capability": "@deepseek-ai/dsh-agent-team",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-009",
+      "capability": "@deepseek-ai/dsh-agent-tool-presentation",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-010",
+      "capability": "@deepseek-ai/dsh-api-gateway",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-011",
+      "capability": "@deepseek-ai/dsh-api-job-controller",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-012",
+      "capability": "@deepseek-ai/dsh-api-session-controller",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-013",
+      "capability": "@deepseek-ai/dsh-api-settings-controller",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-014",
+      "capability": "@deepseek-ai/dsh-api-terminal-controller",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-015",
+      "capability": "@deepseek-ai/dsh-api-workspace-controller",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-016",
+      "capability": "@deepseek-ai/dsh-api-workspace-files",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-017",
+      "capability": "@deepseek-ai/dsh-attachment-local",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-018",
+      "capability": "@deepseek-ai/dsh-bash-local",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-019",
+      "capability": "@deepseek-ai/dsh-bash-sandbox",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-020",
+      "capability": "@deepseek-ai/dsh-client-connection",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-021",
+      "capability": "@deepseek-ai/dsh-client-hmr",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-022",
+      "capability": "@deepseek-ai/dsh-client-product-analytics",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-023",
+      "capability": "@deepseek-ai/dsh-client-shortcuts",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-024",
+      "capability": "@deepseek-ai/dsh-client-ui-account-notifications",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-025",
+      "capability": "@deepseek-ai/dsh-client-ui-plugin-manager",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-026",
+      "capability": "@deepseek-ai/dsh-client-ui-settings-account",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-027",
+      "capability": "@deepseek-ai/dsh-client-ui-settings-models",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-028",
+      "capability": "@deepseek-ai/dsh-client-ui-sidebar-documentpreview",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-029",
+      "capability": "@deepseek-ai/dsh-client-ui-theme",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-030",
+      "capability": "@deepseek-ai/dsh-client-ui-trajectory",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-031",
+      "capability": "@deepseek-ai/dsh-compaction-basic",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-032",
+      "capability": "@deepseek-ai/dsh-compaction-tool-result-pruner",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-033",
+      "capability": "@deepseek-ai/dsh-cordis-host-runner",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-034",
+      "capability": "@deepseek-ai/dsh-credentials-local",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-035",
+      "capability": "@deepseek-ai/dsh-deepseek-account",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-036",
+      "capability": "@deepseek-ai/dsh-experimental-api-speech-to-text",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-037",
+      "capability": "@deepseek-ai/dsh-experimental-browser-use-chrome-devtools-mcp",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-038",
+      "capability": "@deepseek-ai/dsh-experimental-browser-use-playwright-mcp",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-039",
+      "capability": "@deepseek-ai/dsh-experimental-browser-use-stagehand-native",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-040",
+      "capability": "@deepseek-ai/dsh-experimental-claude-code-mods",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-041",
+      "capability": "@deepseek-ai/dsh-experimental-client-ui-cot-translation",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-042",
+      "capability": "@deepseek-ai/dsh-experimental-client-ui-forge",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-043",
+      "capability": "@deepseek-ai/dsh-experimental-computer-use-cua-driver-mcp",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-044",
+      "capability": "@deepseek-ai/dsh-experimental-cua-macos",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-045",
+      "capability": "@deepseek-ai/dsh-experimental-forge",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-046",
+      "capability": "@deepseek-ai/dsh-experimental-forge-github",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-047",
+      "capability": "@deepseek-ai/dsh-experimental-forge-session",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-048",
+      "capability": "@deepseek-ai/dsh-experimental-inspector",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-049",
+      "capability": "@deepseek-ai/dsh-experimental-ptc-runtime-python",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-050",
+      "capability": "@deepseek-ai/dsh-experimental-speech-to-text",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-051",
+      "capability": "@deepseek-ai/dsh-experimental-speech-to-text-sensevoice",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-052",
+      "capability": "@deepseek-ai/dsh-experimental-subagent-oar",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-053",
+      "capability": "@deepseek-ai/dsh-experimental-tool-subagent-oar",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-054",
+      "capability": "@deepseek-ai/dsh-experimental-translator",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-055",
+      "capability": "@deepseek-ai/dsh-experimental-worktree",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-056",
+      "capability": "@deepseek-ai/dsh-file-reference-local",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-057",
+      "capability": "@deepseek-ai/dsh-fs-local",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-058",
+      "capability": "@deepseek-ai/dsh-fs-sandbox",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-059",
+      "capability": "@deepseek-ai/dsh-goal",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-060",
+      "capability": "@deepseek-ai/dsh-headless",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-061",
+      "capability": "@deepseek-ai/dsh-hmr",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-062",
+      "capability": "@deepseek-ai/dsh-hooks-claude-code",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-063",
+      "capability": "@deepseek-ai/dsh-hooks-codex",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-064",
+      "capability": "@deepseek-ai/dsh-host-directory-picker-browse",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-065",
+      "capability": "@deepseek-ai/dsh-host-frontend-static",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-066",
+      "capability": "@deepseek-ai/dsh-host-open-in-app",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-067",
+      "capability": "@deepseek-ai/dsh-host-product-telemetry-otel",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-068",
+      "capability": "@deepseek-ai/dsh-host-webserver",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-069",
+      "capability": "@deepseek-ai/dsh-jobs-local",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-070",
+      "capability": "@deepseek-ai/dsh-llm-deepseek-account",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-071",
+      "capability": "@deepseek-ai/dsh-llm-deepseek-api-key",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-072",
+      "capability": "@deepseek-ai/dsh-llm-pi-ai",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-073",
+      "capability": "@deepseek-ai/dsh-llm-replay",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-074",
+      "capability": "@deepseek-ai/dsh-llm-retry",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-075",
+      "capability": "@deepseek-ai/dsh-lsp-stdio",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-076",
+      "capability": "@deepseek-ai/dsh-mcp-client",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-077",
+      "capability": "@deepseek-ai/dsh-mcp-manager",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-078",
+      "capability": "@deepseek-ai/dsh-message-feedback",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-079",
+      "capability": "@deepseek-ai/dsh-office-kit",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-080",
+      "capability": "@deepseek-ai/dsh-permission-presets",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-081",
+      "capability": "@deepseek-ai/dsh-persona",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-082",
+      "capability": "@deepseek-ai/dsh-plan-mode",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-083",
+      "capability": "@deepseek-ai/dsh-plugin-manager",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-084",
+      "capability": "@deepseek-ai/dsh-plugin-market",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-085",
+      "capability": "@deepseek-ai/dsh-plugin-package-inventory-deepseek",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-086",
+      "capability": "@deepseek-ai/dsh-ptc-runtime-node",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-087",
+      "capability": "@deepseek-ai/dsh-pwsh-local",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-088",
+      "capability": "@deepseek-ai/dsh-pwsh-sandbox",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-089",
+      "capability": "@deepseek-ai/dsh-repeat-tool-reminder",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-090",
+      "capability": "@deepseek-ai/dsh-sandbox-local",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-091",
+      "capability": "@deepseek-ai/dsh-sandbox-policy",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-092",
+      "capability": "@deepseek-ai/dsh-schedule",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-093",
+      "capability": "@deepseek-ai/dsh-sdk-app",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-094",
+      "capability": "@deepseek-ai/dsh-sdk-jsonrpc-server",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-095",
+      "capability": "@deepseek-ai/dsh-session-log-deepseek",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-096",
+      "capability": "@deepseek-ai/dsh-session-log-export",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-097",
+      "capability": "@deepseek-ai/dsh-session-persistence-jsonl",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-098",
+      "capability": "@deepseek-ai/dsh-session-projection-cache",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-099",
+      "capability": "@deepseek-ai/dsh-session-query-sqlite",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-100",
+      "capability": "@deepseek-ai/dsh-session-reference",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-101",
+      "capability": "@deepseek-ai/dsh-session-telemetry-otel",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-102",
+      "capability": "@deepseek-ai/dsh-session-title",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-103",
+      "capability": "@deepseek-ai/dsh-session-title-all-prompts-llm",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-104",
+      "capability": "@deepseek-ai/dsh-session-title-first-prompt-llm",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-105",
+      "capability": "@deepseek-ai/dsh-shell-env",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-106",
+      "capability": "@deepseek-ai/dsh-skill",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-107",
+      "capability": "@deepseek-ai/dsh-skill-filesystem",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-108",
+      "capability": "@deepseek-ai/dsh-skill-office",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-109",
+      "capability": "@deepseek-ai/dsh-spill-local",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-110",
+      "capability": "@deepseek-ai/dsh-spill-policy",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-111",
+      "capability": "@deepseek-ai/dsh-ssh",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-112",
+      "capability": "@deepseek-ai/dsh-storage-domain",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-113",
+      "capability": "@deepseek-ai/dsh-storage-json",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-114",
+      "capability": "@deepseek-ai/dsh-storage-sqlite",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-115",
+      "capability": "@deepseek-ai/dsh-subagent",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-116",
+      "capability": "@deepseek-ai/dsh-subagent-acp",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-117",
+      "capability": "@deepseek-ai/dsh-subagent-claude-code",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-118",
+      "capability": "@deepseek-ai/dsh-subagent-codex",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-119",
+      "capability": "@deepseek-ai/dsh-subagent-dsh-sdk",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-120",
+      "capability": "@deepseek-ai/dsh-subagent-fork-in-process",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-121",
+      "capability": "@deepseek-ai/dsh-subagent-spawn-in-process",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-122",
+      "capability": "@deepseek-ai/dsh-system-prompt",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-123",
+      "capability": "@deepseek-ai/dsh-terminal-bash",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-124",
+      "capability": "@deepseek-ai/dsh-terminal-panel",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-125",
+      "capability": "@deepseek-ai/dsh-time-context",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-126",
+      "capability": "@deepseek-ai/dsh-tmux-context",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-127",
+      "capability": "@deepseek-ai/dsh-token-meter",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-128",
+      "capability": "@deepseek-ai/dsh-tool-agent-team",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-129",
+      "capability": "@deepseek-ai/dsh-tool-ask-user",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-130",
+      "capability": "@deepseek-ai/dsh-tool-bash",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-131",
+      "capability": "@deepseek-ai/dsh-tool-bash-persistent",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-132",
+      "capability": "@deepseek-ai/dsh-tool-executor-ptc",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-133",
+      "capability": "@deepseek-ai/dsh-tool-fs",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-134",
+      "capability": "@deepseek-ai/dsh-tool-fs-search",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-135",
+      "capability": "@deepseek-ai/dsh-tool-goal",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-136",
+      "capability": "@deepseek-ai/dsh-tool-jobs",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-137",
+      "capability": "@deepseek-ai/dsh-tool-lsp",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-138",
+      "capability": "@deepseek-ai/dsh-tool-office",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-139",
+      "capability": "@deepseek-ai/dsh-tool-present",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-140",
+      "capability": "@deepseek-ai/dsh-tool-pwsh",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-141",
+      "capability": "@deepseek-ai/dsh-tool-pwsh-persistent",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-142",
+      "capability": "@deepseek-ai/dsh-tool-ralph",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-143",
+      "capability": "@deepseek-ai/dsh-tool-session-query",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-144",
+      "capability": "@deepseek-ai/dsh-tool-skill",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-145",
+      "capability": "@deepseek-ai/dsh-tool-str-replace-editor",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-146",
+      "capability": "@deepseek-ai/dsh-tool-subagent",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-147",
+      "capability": "@deepseek-ai/dsh-tool-subagent-control",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-148",
+      "capability": "@deepseek-ai/dsh-tool-terminal",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-149",
+      "capability": "@deepseek-ai/dsh-tool-todo",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-150",
+      "capability": "@deepseek-ai/dsh-tool-web",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-151",
+      "capability": "@deepseek-ai/dsh-tool-workflow",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-152",
+      "capability": "@deepseek-ai/dsh-tool-workspace-dependencies",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-153",
+      "capability": "@deepseek-ai/dsh-typert-loader",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-154",
+      "capability": "@deepseek-ai/dsh-user-approval",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-155",
+      "capability": "@deepseek-ai/dsh-web",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-156",
+      "capability": "@deepseek-ai/dsh-web-app",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-157",
+      "capability": "@deepseek-ai/dsh-web-deepseek-api",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-158",
+      "capability": "@deepseek-ai/dsh-web-fetch-http",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-159",
+      "capability": "@deepseek-ai/dsh-web-search-deepseek",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-160",
+      "capability": "@deepseek-ai/dsh-webhook-github",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-161",
+      "capability": "@deepseek-ai/dsh-workflow-ptc",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-162",
+      "capability": "@deepseek-ai/dsh-working-directory",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    },
+    {
+      "id": "DSH-HOST-CONFIG-163",
+      "capability": "@deepseek-ai/dsh-workspace-changes",
+      "phase": "P11",
+      "reason": "P11 尚未完成该配置声明的 Amitia 兼容映射"
+    }
+  ],
+  "lifecycleEvents": [],
+  "client": [],
+  "ui": []
+}

@@ -13,6 +13,7 @@ import '../../../../core/services/device_owned_memory_service.dart';
 import '../../../../core/services/owned_memory_scope.dart';
 import '../../../../core/services/owned_memory_view_options.dart';
 import '../../../../core/services/memory_scope_transfer_service.dart';
+import '../../../../core/ui_runtime/mobile_extension_slot.dart';
 import '../widgets/memory_scope_transfer_dialog.dart';
 import '../widgets/owned_memory_graph.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
@@ -1001,24 +1002,32 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
 
   void _showManagementUnavailable() {
     if (!_loading && !_managing && _source == 'current' && !_canWrite) {
-      showSharedCoreAccessReason(context, ref.read(sharedCoreDataAccessProvider));
+      showSharedCoreAccessReason(
+        context,
+        ref.read(sharedCoreDataAccessProvider),
+      );
       return;
     }
     final reason = _loading || _managing
         ? '正在处理记忆，请稍后重试。'
         : _source != 'current'
-            ? '历史设备记忆仅供查看，请切换到当前设备。'
-            : _role.isEmpty
-                ? '请先创建或选择可用角色。'
-                : _error.isNotEmpty
-                    ? '记忆数据不可用：\n$_error'
-                    : '记忆数据尚未准备完成，请刷新后重试。';
+        ? '历史设备记忆仅供查看，请切换到当前设备。'
+        : _role.isEmpty
+        ? '请先创建或选择可用角色。'
+        : _error.isNotEmpty
+        ? '记忆数据不可用：\n$_error'
+        : '记忆数据尚未准备完成，请刷新后重试。';
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('无法管理记忆'),
         content: SingleChildScrollView(child: SelectableText(reason)),
-        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('知道了'))],
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('知道了'),
+          ),
+        ],
       ),
     );
   }
@@ -1118,6 +1127,24 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
             ),
           if (_loading && rows.isNotEmpty) const LinearProgressIndicator(),
           SizedBox(height: AppSpacing.sm),
+          MobileExtensionSlot(
+            slotId: 'memory.page.section',
+            context: <String, dynamic>{
+              'route': widget.timeline
+                  ? AppRoutes.memoryTimeline
+                  : AppRoutes.memory,
+              'surface': 'memory',
+              'surfaceRole': 'main',
+              'platform': 'mobile',
+              'memoryKind': _kind,
+              'characterId': widget.characterId,
+              'roleId': _role,
+              'memoryView': _memoryView,
+              'source': _source,
+              'loading': _loading,
+              'error': _error,
+            },
+          ),
           Expanded(
             child: _loading && rows.isEmpty
                 ? const Center(child: CircularProgressIndicator())
@@ -1528,36 +1555,46 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
               children: [
                 GestureDetector(
                   behavior: HitTestBehavior.opaque,
-                  onTap: _managementPage == null || _loading || _managing || _source != 'current' || !_canWrite
-                      ? _showManagementUnavailable
-                      : null,
-                  child: TextButton(
-                  onPressed:
+                  onTap:
                       _managementPage == null ||
                           _loading ||
                           _managing ||
                           _source != 'current' ||
                           !_canWrite
-                      ? null
-                      : _createMemory,
-                  child: const Text('新增记忆'),
+                      ? _showManagementUnavailable
+                      : null,
+                  child: TextButton(
+                    onPressed:
+                        _managementPage == null ||
+                            _loading ||
+                            _managing ||
+                            _source != 'current' ||
+                            !_canWrite
+                        ? null
+                        : _createMemory,
+                    child: const Text('新增记忆'),
                   ),
                 ),
                 GestureDetector(
                   behavior: HitTestBehavior.opaque,
-                  onTap: _managementPage == null || _loading || _managing || _source != 'current' || !_canWrite
-                      ? _showManagementUnavailable
-                      : null,
-                  child: TextButton(
-                  onPressed:
+                  onTap:
                       _managementPage == null ||
                           _loading ||
                           _managing ||
                           _source != 'current' ||
                           !_canWrite
-                      ? null
-                      : _generateCandidates,
-                  child: const Text('生成候选'),
+                      ? _showManagementUnavailable
+                      : null,
+                  child: TextButton(
+                    onPressed:
+                        _managementPage == null ||
+                            _loading ||
+                            _managing ||
+                            _source != 'current' ||
+                            !_canWrite
+                        ? null
+                        : _generateCandidates,
+                    child: const Text('生成候选'),
                   ),
                 ),
                 TextButton(
@@ -1571,7 +1608,9 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                 ),
                 GestureDetector(
                   behavior: HitTestBehavior.opaque,
-                  onTap: _loading || _role.isEmpty ? _showRefreshUnavailable : null,
+                  onTap: _loading || _role.isEmpty
+                      ? _showRefreshUnavailable
+                      : null,
                   child: TextButton(
                     onPressed: _loading || _role.isEmpty ? null : () => _load(),
                     child: const Text('刷新'),

@@ -141,7 +141,10 @@ func (h *HTTPHandler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/extensions/ui/providers", h.handleProviders)
 	mux.HandleFunc("/api/extensions/ui/providers/resolve", h.handleProviderResolve)
 	mux.HandleFunc("/api/extensions/ui/provider-module/", h.handleProviderModuleResource)
+	mux.HandleFunc("/api/extensions/ui/contribution-module/", h.handleContributionModuleResource)
 	mux.HandleFunc("/api/extensions/ui/page-module/", h.handlePageModuleResource)
+	mux.HandleFunc("/api/extensions/ui/runtime-module-ticket", h.handleRuntimeModuleTicket)
+	mux.HandleFunc("/api/extensions/ui/app-module-ticket", h.handleAppModuleTicket)
 	mux.HandleFunc("/api/extensions/ui/profile", h.handleProfile)
 	mux.HandleFunc("/api/extensions/ui/sessions", h.handleSessionsCollection)
 	mux.HandleFunc("/api/extensions/ui/sessions/", h.handleSessionItem)
@@ -167,8 +170,11 @@ func (h *HTTPHandler) Register(mux *http.ServeMux) {
 func (h *HTTPHandler) RegisterPublicModuleRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/ui/provider-module/", h.handleProviderModuleResource)
 	mux.HandleFunc("/api/public/extensions/ui/provider-module/", h.handleProviderModuleResource)
+	mux.HandleFunc("/ui/contribution-module/", h.handleContributionModuleResource)
+	mux.HandleFunc("/api/public/extensions/ui/contribution-module/", h.handleContributionModuleResource)
 	mux.HandleFunc("/ui/page-module/", h.handlePageModuleResource)
 	mux.HandleFunc("/api/public/extensions/ui/page-module/", h.handlePageModuleResource)
+	mux.HandleFunc("/api/public/extensions/ui/runtime-module/", h.handleRuntimeModuleResource)
 }
 
 func (h *HTTPHandler) handleResourceLink(w http.ResponseWriter, r *http.Request) {
@@ -271,7 +277,7 @@ func (h *HTTPHandler) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]slotSnapshotEntry, 0, len(slots))
 	for _, s := range slots {
-		contribs := h.uiHost.ListActiveBySlot(string(s.SlotID))
+		contribs := signUIContributionModuleCapabilityList(h.uiHost.ListActiveBySlot(string(s.SlotID)))
 		out = append(out, slotSnapshotEntry{
 			SlotID:            string(s.SlotID),
 			ContractVersion:   s.ContractVersion,
@@ -294,7 +300,7 @@ func (h *HTTPHandler) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 	}
 	payload := map[string]any{
 		"slots":                out,
-		"contributions":        h.uiHost.ListActiveAll(),
+		"contributions":        signUIContributionModuleCapabilityList(h.uiHost.ListActiveAll()),
 		"pendingContributions": h.uiHost.ListPending(),
 		"timestamp":            time.Now().UTC(),
 	}
@@ -393,7 +399,11 @@ func (h *HTTPHandler) handleProviderModuleResource(w http.ResponseWriter, r *htt
 		writeError(w, http.StatusForbidden, "provider_module_forbidden", "trusted web module provider required")
 		return
 	}
-	if !validProviderModuleCapability(providerID, r.Header.Get("X-Amitia-Module-Access")) {
+	moduleAccess := strings.TrimSpace(r.Header.Get("X-Amitia-Module-Access"))
+	if moduleAccess == "" {
+		moduleAccess = strings.TrimSpace(r.URL.Query().Get("accessToken"))
+	}
+	if !validProviderModuleCapability(providerID, moduleAccess) {
 		writeError(w, http.StatusForbidden, "provider_module_capability_invalid", "provider module capability is invalid or expired")
 		return
 	}
@@ -428,7 +438,7 @@ func (h *HTTPHandler) handleProviderModuleResource(w http.ResponseWriter, r *htt
 	// execute a module that drifted after package verification. Relative support
 	// modules remain covered by the extension package content-tree integrity.
 	for _, entry := range provider.Entries {
-		if entry.Type != ui_provider.EntryWebModule {
+		if entry.Type != ui_provider.EntryWebModule && entry.Type != ui_provider.EntryMobileWebRuntime {
 			continue
 		}
 		expected := ""
@@ -440,14 +450,127 @@ func (h *HTTPHandler) handleProviderModuleResource(w http.ResponseWriter, r *htt
 		if strings.TrimSpace(expected) == "" {
 			continue
 		}
-		sum := sha256.Sum256(content)
-		actual := "sha256:" + hex.EncodeToString(sum[:])
-		if strings.ToLower(strings.TrimSpace(expected)) != strings.ToLower(actual) {
+		if !pageModuleHashMatches(expected, content) {
 			writeError(w, http.StatusConflict, "provider_module_integrity_mismatch", "provider module content hash mismatch")
 			return
 		}
 	}
 	w.Header().Set("Content-Type", mime)
+	w.Header().Set("Cache-Control", "public, max-age=3600, immutable")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	w.WriteHeader(http.StatusOK)
+	if _, err := w.Write(content); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+}
+
+func (h *HTTPHandler) handleContributionModuleResource(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	if h.uiHost == nil {
+		writeError(w, http.StatusServiceUnavailable, "ui_host_unavailable", "ui host unavailable")
+		return
+	}
+	const marker = "/ui/contribution-module/"
+	markerIndex := strings.Index(r.URL.EscapedPath(), marker)
+	if markerIndex < 0 {
+		writeError(w, http.StatusNotFound, "contribution_module_not_found", "contribution module route not found")
+		return
+	}
+	rest := r.URL.EscapedPath()[markerIndex+len(marker):]
+	parts := strings.SplitN(rest, "/", 3)
+	if len(parts) != 3 || parts[0] == "" || parts[1] == "" || parts[2] == "" {
+		writeError(w, http.StatusNotFound, "contribution_module_not_found", "extension id, contribution id and resource path required")
+		return
+	}
+	extensionID, err := url.PathUnescape(parts[0])
+	if err != nil || extensionID == "" {
+		writeError(w, http.StatusBadRequest, "invalid_extension_id", "invalid extension id")
+		return
+	}
+	contributionID, err := url.PathUnescape(parts[1])
+	if err != nil || contributionID == "" {
+		writeError(w, http.StatusBadRequest, "invalid_contribution_id", "invalid contribution id")
+		return
+	}
+	moduleAccess := strings.TrimSpace(r.Header.Get("X-Amitia-Module-Access"))
+	if moduleAccess == "" {
+		moduleAccess = strings.TrimSpace(r.URL.Query().Get("accessToken"))
+	}
+	if !validContributionModuleCapability(extensionID, contributionID, moduleAccess) {
+		writeError(w, http.StatusForbidden, "contribution_module_forbidden", "contribution module capability is invalid or expired")
+		return
+	}
+	definition, err := h.uiHost.GetContribution(ui_contribution.ContributionID(contributionID))
+	if err != nil {
+		writeError(w, http.StatusNotFound, "contribution_not_found", err.Error())
+		return
+	}
+	if string(definition.ExtensionID) != extensionID {
+		writeError(w, http.StatusNotFound, "contribution_not_found", "contribution does not belong to extension")
+		return
+	}
+	if definition.Entry.Type != ui_contribution.SandboxClientModule && definition.Entry.Type != ui_contribution.SandboxMobileWebRuntime {
+		writeError(w, http.StatusForbidden, "contribution_module_forbidden", "client or mobile web runtime contribution required")
+		return
+	}
+	entryPath := filepath.Clean(filepath.FromSlash(strings.TrimSpace(definition.Entry.Path)))
+	if entryPath == "." || entryPath == ".." || strings.HasPrefix(entryPath, ".."+string(filepath.Separator)) || filepath.IsAbs(entryPath) {
+		writeError(w, http.StatusForbidden, "contribution_module_forbidden", "contribution entry path is invalid")
+		return
+	}
+	resourcePath, err := url.PathUnescape(parts[2])
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_path", "invalid contribution module path")
+		return
+	}
+	basePath := h.resolveExtensionBasePath(extensionID)
+	if basePath == "" {
+		writeError(w, http.StatusNotFound, "extension_path_not_found", "extension bundle path not found")
+		return
+	}
+	cleanPath, err := sanitizeUIModulePath(basePath, resourcePath)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_path", err.Error())
+		return
+	}
+	fullPath := filepath.Join(basePath, cleanPath)
+	entryRoot := filepath.Dir(filepath.Join(basePath, entryPath))
+	relative, err := filepath.Rel(entryRoot, fullPath)
+	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) || filepath.IsAbs(relative) {
+		writeError(w, http.StatusForbidden, "contribution_module_forbidden", "resource is outside the contribution module directory")
+		return
+	}
+	info, err := os.Stat(fullPath)
+	if err != nil || info.IsDir() {
+		writeError(w, http.StatusNotFound, "contribution_module_resource_not_found", "contribution module resource not found")
+		return
+	}
+	mimeType := uiModuleMIME(cleanPath)
+	if mimeType == "" {
+		writeError(w, http.StatusUnsupportedMediaType, "mime_not_allowed", "mime type not allowed")
+		return
+	}
+	content, err := os.ReadFile(fullPath)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "read_failed", err.Error())
+		return
+	}
+	expected := ""
+	if filepath.Clean(filepath.FromSlash(strings.TrimSpace(definition.Entry.Path))) == cleanPath {
+		expected = definition.Entry.ContentHash
+	} else if strings.TrimSpace(definition.Entry.StylePath) != "" && filepath.Clean(filepath.FromSlash(strings.TrimSpace(definition.Entry.StylePath))) == cleanPath {
+		expected = definition.Entry.StyleHash
+	}
+	if strings.TrimSpace(expected) != "" && !pageModuleHashMatches(expected, content) {
+		writeError(w, http.StatusConflict, "contribution_module_integrity_mismatch", "contribution module content hash mismatch")
+		return
+	}
+	w.Header().Set("Content-Type", mimeType)
 	w.Header().Set("Cache-Control", "public, max-age=3600, immutable")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -551,6 +674,238 @@ func (h *HTTPHandler) handlePageModuleResource(w http.ResponseWriter, r *http.Re
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Referrer-Policy", "no-referrer")
+	w.WriteHeader(http.StatusOK)
+	if _, err := w.Write(content); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+}
+
+func (h *HTTPHandler) handleRuntimeModuleTicket(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	if h.uiHost == nil || h.authorizer == nil {
+		writeError(w, http.StatusServiceUnavailable, "runtime_unavailable", "UI host runtime unavailable")
+		return
+	}
+	actor, ok := auth.FromContext(r.Context())
+	if !ok || actor == nil || actor.SpaceID == "" || actor.DeviceID == "" {
+		writeError(w, http.StatusUnauthorized, "unauthorized", "authenticated device is required")
+		return
+	}
+	var body struct {
+		ExtensionID    string `json:"extensionId"`
+		PageID         string `json:"pageId"`
+		PluginID       string `json:"pluginId"`
+		EntryID        string `json:"entryId"`
+		CharacterID    string `json:"characterId"`
+		ConversationID string `json:"conversationId"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, "payload_invalid", err.Error())
+		return
+	}
+	body.ExtensionID = strings.TrimSpace(body.ExtensionID)
+	body.PageID = strings.TrimSpace(body.PageID)
+	body.PluginID = strings.TrimSpace(body.PluginID)
+	body.EntryID = strings.TrimSpace(body.EntryID)
+	if body.ExtensionID == "" || body.PageID == "" || body.PluginID == "" || body.EntryID == "" {
+		writeError(w, http.StatusBadRequest, "payload_invalid", "extension, page, plugin and entry are required")
+		return
+	}
+	definition, err := h.uiHost.GetContribution(ui_contribution.ContributionID(body.PageID))
+	if err != nil || string(definition.ExtensionID) != body.ExtensionID {
+		writeError(w, http.StatusNotFound, "runtime_module_not_found", "page contribution not found")
+		return
+	}
+	if !uiContributionDeclaresAction(definition, "command") {
+		writeError(w, http.StatusForbidden, "runtime_module_forbidden", "page contribution does not declare command")
+		return
+	}
+	expiresAt := time.Now().Add(5 * time.Minute).Unix()
+	token := runtimeModuleCapability(runtimeModuleCapabilityData{
+		ExtensionID:    body.ExtensionID,
+		PageID:         body.PageID,
+		PluginID:       body.PluginID,
+		EntryID:        body.EntryID,
+		SpaceID:        actor.SpaceID.String(),
+		DeviceID:       strings.TrimSpace(actor.DeviceID.String()),
+		CharacterID:    strings.TrimSpace(body.CharacterID),
+		ConversationID: strings.TrimSpace(body.ConversationID),
+		ExpiresAt:      expiresAt,
+	})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"path": "/api/public/extensions/ui/runtime-module/" +
+			url.PathEscape(body.ExtensionID) + "/" +
+			url.PathEscape(body.PageID) + "/" +
+			url.PathEscape(body.PluginID) + "/" +
+			url.PathEscape(body.EntryID) + "?token=" + url.QueryEscape(token),
+		"expiresAt": time.Unix(expiresAt, 0).UTC().Format(time.RFC3339),
+	})
+}
+
+func uiContributionDeclaresAction(definition *ui_contribution.UIContributionDefinition, actionID string) bool {
+	for _, action := range definition.Actions {
+		if action.ActionID == actionID {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *HTTPHandler) handleRuntimeModuleResource(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	const marker = "/api/public/extensions/ui/runtime-module/"
+	markerIndex := strings.Index(r.URL.EscapedPath(), marker)
+	if markerIndex < 0 {
+		writeError(w, http.StatusNotFound, "runtime_module_not_found", "runtime module route not found")
+		return
+	}
+	parts := strings.SplitN(r.URL.EscapedPath()[markerIndex+len(marker):], "/", 4)
+	if len(parts) != 4 {
+		writeError(w, http.StatusNotFound, "runtime_module_not_found", "extension, page, plugin and entry required")
+		return
+	}
+	values := make([]string, 4)
+	for index, value := range parts {
+		decoded, err := url.PathUnescape(value)
+		if err != nil || strings.TrimSpace(decoded) == "" || len(decoded) > 512 {
+			writeError(w, http.StatusBadRequest, "runtime_module_invalid", "runtime module path parameter is invalid")
+			return
+		}
+		values[index] = decoded
+	}
+	capability, ok := validRuntimeModuleCapability(r.URL.Query().Get("token"))
+	if !ok {
+		writeError(w, http.StatusForbidden, "runtime_module_forbidden", "runtime module capability is invalid or expired")
+		return
+	}
+	if capability.ExtensionID != values[0] || capability.PageID != values[1] || capability.PluginID != values[2] || capability.EntryID != values[3] {
+		writeError(w, http.StatusForbidden, "runtime_module_forbidden", "runtime module capability does not match resource")
+		return
+	}
+	if h.uiHost == nil || h.authorizer == nil {
+		writeError(w, http.StatusServiceUnavailable, "runtime_unavailable", "UI host runtime unavailable")
+		return
+	}
+	definition, err := h.uiHost.GetContribution(ui_contribution.ContributionID(capability.PageID))
+	if err != nil || string(definition.ExtensionID) != capability.ExtensionID || !uiContributionDeclaresAction(definition, "command") {
+		writeError(w, http.StatusNotFound, "runtime_module_not_found", "page runtime module contribution not found")
+		return
+	}
+	sessionAuth, err := h.authorizer.AuthorizeSession(r.Context(), definition, capability.CharacterID, capability.ConversationID)
+	if err != nil {
+		writeError(w, http.StatusForbidden, "runtime_module_forbidden", err.Error())
+		return
+	}
+	bridgeSession, err := h.uiHost.Bridge().CreateSession(
+		definition,
+		"amitia-runtime-module",
+		sessionAuth.GrantedScopes,
+		sessionAuth.GrantedPerms,
+		"runtime-module",
+		capability.CharacterID,
+		capability.ConversationID,
+		time.Minute,
+		ui_contribution.BridgeExecutionIdentity{
+			SpaceID:  capability.SpaceID,
+			DeviceID: capability.DeviceID,
+		},
+	)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "runtime_module_failed", err.Error())
+		return
+	}
+	defer h.uiHost.Bridge().RevokeSession(bridgeSession.SessionID)
+	const chunkSize = 256 * 1024
+	const maxRuntimeModuleBytes = 16 * 1024 * 1024
+	content := make([]byte, 0, chunkSize)
+	offset := 0
+	for {
+		input, err := json.Marshal(map[string]any{
+			"action":   "client-source",
+			"pluginId": capability.PluginID,
+			"entryId":  capability.EntryID,
+			"offset":   offset,
+			"length":   chunkSize,
+		})
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "runtime_module_failed", err.Error())
+			return
+		}
+		payload, err := json.Marshal(map[string]any{
+			"action_id": "command",
+			"input":     json.RawMessage(input),
+		})
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "runtime_module_failed", err.Error())
+			return
+		}
+		response := h.uiHost.Bridge().Handle(r.Context(), ui_contribution.BridgeMessage{
+			Method:          ui_contribution.BridgeUIActionInvoke,
+			SessionID:       bridgeSession.SessionID,
+			ContributionID:  string(definition.ContributionID),
+			Origin:          bridgeSession.Origin,
+			ContractVersion: bridgeSession.ContractVersion,
+			Token:           bridgeSession.Token,
+			Generation:      bridgeSession.Generation,
+			Nonce:           uuid.NewString(),
+			Payload:         payload,
+		})
+		if !response.OK {
+			data, _ := json.Marshal(response.Error)
+			writeError(w, http.StatusBadGateway, "runtime_module_failed", string(data))
+			return
+		}
+		var toolResult struct {
+			Structured json.RawMessage `json:"structured"`
+			Error      json.RawMessage `json:"error"`
+		}
+		if err := json.Unmarshal(response.Result, &toolResult); err != nil {
+			writeError(w, http.StatusBadGateway, "runtime_module_failed", err.Error())
+			return
+		}
+		if len(toolResult.Error) > 0 && string(toolResult.Error) != "null" {
+			writeError(w, http.StatusBadGateway, "runtime_module_failed", string(toolResult.Error))
+			return
+		}
+		var chunk struct {
+			DataBase64 string `json:"dataBase64"`
+			NextOffset int    `json:"nextOffset"`
+			TotalBytes int    `json:"totalBytes"`
+			Done       bool   `json:"done"`
+		}
+		if err := json.Unmarshal(toolResult.Structured, &chunk); err != nil {
+			writeError(w, http.StatusBadGateway, "runtime_module_invalid", err.Error())
+			return
+		}
+		decoded, err := base64.StdEncoding.DecodeString(chunk.DataBase64)
+		if err != nil {
+			writeError(w, http.StatusBadGateway, "runtime_module_invalid", err.Error())
+			return
+		}
+		if chunk.TotalBytes < 0 || chunk.TotalBytes > maxRuntimeModuleBytes || len(content)+len(decoded) > maxRuntimeModuleBytes {
+			writeError(w, http.StatusBadGateway, "runtime_module_too_large", "runtime module exceeds size limit")
+			return
+		}
+		content = append(content, decoded...)
+		if chunk.Done {
+			break
+		}
+		if chunk.NextOffset <= offset || chunk.NextOffset > chunk.TotalBytes {
+			writeError(w, http.StatusBadGateway, "runtime_module_invalid", "runtime module chunk offset is invalid")
+			return
+		}
+		offset = chunk.NextOffset
+	}
+	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(http.StatusOK)
 	if _, err := w.Write(content); err != nil {
 		amitialog.Printf("[original-error] %v", err)
@@ -702,7 +1057,12 @@ func (h *HTTPHandler) handleSessionsCollection(w http.ResponseWriter, r *http.Re
 	}
 	origin := fmt.Sprintf("amitia-extension://%s/%s", def.ExtensionID, def.ModuleID)
 	lifetime := time.Hour
-	sess, err := h.uiHost.Bridge().CreateSession(def, origin, sessionAuth.GrantedScopes, sessionAuth.GrantedPerms, req.Surface, req.CharacterID, req.ConversationID, lifetime)
+	identity := ui_contribution.BridgeExecutionIdentity{}
+	if actor, ok := auth.FromContext(r.Context()); ok && actor != nil {
+		identity.SpaceID = actor.SpaceID.String()
+		identity.DeviceID = strings.TrimSpace(actor.DeviceID.String())
+	}
+	sess, err := h.uiHost.Bridge().CreateSession(def, origin, sessionAuth.GrantedScopes, sessionAuth.GrantedPerms, req.Surface, req.CharacterID, req.ConversationID, lifetime, identity)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "session_create_failed", err.Error())
 		return
@@ -1479,7 +1839,12 @@ func (h *HTTPHandler) invokeHostGuardedAction(r *http.Request, contributionID, a
 	if err != nil {
 		return ui_contribution.BridgeResponse{OK: false, Error: ui_contribution.NewUIError(ui_contribution.UIErrPermissionDenied, err.Error(), nil)}
 	}
-	sess, err := h.uiHost.Bridge().CreateSession(def, "amitia-host", sessionAuth.GrantedScopes, sessionAuth.GrantedPerms, "same-page", characterID, conversationID, time.Minute)
+	identity := ui_contribution.BridgeExecutionIdentity{}
+	if actor, ok := auth.FromContext(r.Context()); ok && actor != nil {
+		identity.SpaceID = actor.SpaceID.String()
+		identity.DeviceID = strings.TrimSpace(actor.DeviceID.String())
+	}
+	sess, err := h.uiHost.Bridge().CreateSession(def, "amitia-host", sessionAuth.GrantedScopes, sessionAuth.GrantedPerms, "same-page", characterID, conversationID, time.Minute, identity)
 	if err != nil {
 		return ui_contribution.BridgeResponse{OK: false, Error: ui_contribution.NewUIError(ui_contribution.UIErrRuntimeUnavailable, err.Error(), nil)}
 	}

@@ -6,7 +6,8 @@ export interface ExtensionHandlers {
 }
 
 export interface HostApi {
-  call(method: string, params?: any): Promise<any>;
+  call(method: string, params?: any, options?: HostCallOptions): Promise<any>;
+  callTargeted(method: string, params: any, targetScopeSnapshotId: string, options?: HostCallOptions): Promise<any>;
 }
 
 export interface LogApi {
@@ -126,6 +127,10 @@ export interface EventsApi {
   on(eventType: string, entry: string): Promise<EventSubscription>;
 }
 
+export interface HostCallOptions {
+  timeoutMs?: number;
+}
+
 export interface SecretsApi {
   get(ref: string): Promise<string>;
 }
@@ -136,13 +141,14 @@ export interface ResourcesApi {
 }
 
 export function createRuntimeContext(rpc: RpcConnection, registry: HandlerRegistry): ExtensionContext {
-  const callHost = (method: string, input: any) => {
+  const callHost = (method: string, input: any, targetScopeSnapshotId = "", options?: HostCallOptions) => {
     return rpc.sendRequest("host.call", {
       method,
       version: 1,
       input,
+      targetScopeSnapshotId,
       invocationId: activeInvocation.getStore()?.invocationId ?? "",
-    });
+    }, options?.timeoutMs);
   };
   const storage: StorageApi = {
     async get(key) {
@@ -230,7 +236,8 @@ export function createRuntimeContext(rpc: RpcConnection, registry: HandlerRegist
       },
     },
     host: {
-      call: (method: string, params?: any) => callHost(method, params ?? {}),
+      call: (method: string, params?: any, options?: HostCallOptions) => callHost(method, params ?? {}, "", options),
+      callTargeted: (method: string, params: any, targetScopeSnapshotId: string, options?: HostCallOptions) => callHost(method, params ?? {}, targetScopeSnapshotId, options),
     },
     contributions: {
       async register(request) {

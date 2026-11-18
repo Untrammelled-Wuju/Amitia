@@ -20,6 +20,7 @@ require (
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
 	github.com/surrealdb/surrealdb.go v1.4.0
+	github.com/teambition/rrule-go v1.8.2
 	github.com/tetratelabs/wazero v1.12.0
 	github.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78
 	go.uber.org/zap v1.28.0

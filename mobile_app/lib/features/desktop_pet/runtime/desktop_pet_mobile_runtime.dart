@@ -1098,6 +1098,17 @@ class DesktopPetMobileRuntimeNotifier
     Map<String, dynamic> inner,
   ) async {
     if (inner['ensureAbsent'] == true) {
+      final targetInstallationId =
+          (inner['installationId'] ?? outer['installationId'])?.toString().trim() ?? '';
+      if (targetInstallationId.isEmpty) {
+        throw const _RuntimeCommandFailure(
+          'MISSING_INSTALLATION_ID',
+          '桌宠停用命令缺少安装标识',
+        );
+      }
+      if (state.installationId != targetInstallationId) {
+        return;
+      }
       await _interruptPlayback('user_disable', transportBestEffort: true);
       await _native('desktop.pet.renderer.unload');
       state = state.copyWith(

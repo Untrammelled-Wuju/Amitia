@@ -14,7 +14,7 @@ describe("两级导航映射", () => {
     expect(resolveAppSection("/characters/role-1/active-task")).toBe("tasks");
     expect(resolveAppSection("/continuity")).toBe("tasks");
     expect(resolveAppSection("/game-center/plugin")).toBe("game");
-    expect(resolveAppSection("/creative-workshop/pet")).toBe("workshop");
+    expect(resolveAppSection("/creative-workshop/pet/installations")).toBe("workshop");
     expect(resolveAppSection("/extensions/packages")).toBe("extensions");
     expect(resolveAppSection("/channel-center")).toBe("channels");
     expect(resolveAppSection("/channels/qq")).toBe("channels");

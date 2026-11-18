@@ -10,6 +10,7 @@ import type {
   SaveConversationAttachmentRequest,
   SaveExtensionPackageRequest,
   LocalVoiceASRFinalEvent,
+  DirectoryListing,
   WorkspaceDirectorySelection,
 } from "../shared/types";
 
@@ -45,11 +46,20 @@ const api = {
   selectAgentSkillDirectory(): Promise<AgentSkillDirectorySelection | null> {
     return ipcRenderer.invoke(IPC_CHANNELS.selectAgentSkillDirectory);
   },
+  selectDirectory(): Promise<string | null> {
+    return ipcRenderer.invoke(IPC_CHANNELS.selectDirectory);
+  },
   selectMCPRoot(): Promise<{ path: string; name: string } | null> {
     return ipcRenderer.invoke(IPC_CHANNELS.selectMCPRoot);
   },
   selectWorkspaceDirectory(): Promise<WorkspaceDirectorySelection | null> {
     return ipcRenderer.invoke(IPC_CHANNELS.selectWorkspaceDirectory);
+  },
+  listWorkspaceDirectory(path?: string): Promise<DirectoryListing> {
+    return ipcRenderer.invoke(IPC_CHANNELS.listWorkspaceDirectory, path);
+  },
+  createWorkspaceDirectory(path: string, name: string): Promise<string> {
+    return ipcRenderer.invoke(IPC_CHANNELS.createWorkspaceDirectory, path, name);
   },
   getPathForFile(file: File): string {
     return webUtils.getPathForFile(file);

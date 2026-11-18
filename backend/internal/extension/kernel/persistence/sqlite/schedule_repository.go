@@ -42,7 +42,11 @@ func (r *ScheduleRepository) PutDefinition(ctx context.Context, def *schedule.Sc
 	if err != nil {
 		return fmt.Errorf("sqlite: marshal schedule trigger: %w", err)
 	}
-	targetJSON, err := json.Marshal(def.Target)
+	target := def.Target
+	if def.SessionPromptScope != nil {
+		target.SessionPromptScope = def.SessionPromptScope
+	}
+	targetJSON, err := json.Marshal(target)
 	if err != nil {
 		return fmt.Errorf("sqlite: marshal schedule target: %w", err)
 	}
@@ -1158,6 +1162,9 @@ func scanScheduleDefinition(s scanner) (*schedule.ScheduleContributionDefinition
 	}
 	if err := json.Unmarshal([]byte(targetJSON), &def.Target); err != nil {
 		return nil, fmt.Errorf("sqlite: unmarshal schedule target: %w", err)
+	}
+	if def.SessionPromptScope == nil {
+		def.SessionPromptScope = def.Target.SessionPromptScope
 	}
 	if err := json.Unmarshal([]byte(misfireJSON), &def.MisfirePolicy); err != nil {
 		return nil, fmt.Errorf("sqlite: unmarshal schedule misfire policy: %w", err)

@@ -153,6 +153,38 @@ try {
         if (${action === "clicktwice"}) control.click();
         return true;
       })()`);
+    } else if (action === "settingslinks") {
+      const selector = ".settings-navigation a";
+      const from = "/settings/system";
+      await evaluate(`location.hash = ${JSON.stringify(from)}`);
+      await until(`Boolean(document.querySelector(${JSON.stringify(selector)}))`);
+      const entries = await evaluate(`Array.from(document.querySelectorAll(${JSON.stringify(selector)}), link => ({
+        href: new URL(link.href).hash, label: link.innerText.trim(),
+      }))`);
+      assert(entries.length > 0 && entries.every(entry => entry.href.startsWith("#/")), entries);
+      assert.equal(new Set(entries.map(entry => entry.href)).size, entries.length);
+      for (const { href, label } of entries) {
+        await evaluate(`location.hash = ${JSON.stringify(from)}`);
+        await until(`(() => {
+          if (location.hash !== ${JSON.stringify("#" + from)}) return false;
+          const link = Array.from(document.querySelectorAll(${JSON.stringify(selector)}))
+            .find(item => new URL(item.href).hash === ${JSON.stringify(href)});
+          if (!link || !link.getClientRects().length) return false;
+          link.click();
+          return true;
+        })()`);
+        const state = await until(`(() => {
+          const href = ${JSON.stringify(href)};
+          const main = document.querySelector("main.app-content");
+          const active = document.querySelector(".settings-navigation a[aria-current=page]");
+          const text = main?.innerText.trim();
+          const base = location.hash.split("?")[0];
+          if ((base !== href && !base.startsWith(href + "/")) || !text) return false;
+          return { path: location.hash, active: active ? new URL(active.href).hash : null, text: text.slice(0, 260) };
+        })()`);
+        assert.equal(state.active, href, JSON.stringify({ label, ...state }));
+        console.log(JSON.stringify({ label, ...state }));
+      }
     } else if (action === "expect") {
       await until(`document.body.innerText.includes(${JSON.stringify(value)})`);
     } else if (action === "absent") {

@@ -127,12 +127,13 @@ type PluginHostConfig struct {
 }
 
 type PluginHostAccess struct {
-	FilesystemMode    string
-	FilesystemRoots   []string
-	FilesystemRootMap map[string]string
-	NetworkMode       string
-	ProcessMode       string
-	MaxProcesses      int
+	FilesystemMode        string
+	FilesystemRoots       []string
+	FilesystemRootMap     map[string]string
+	FilesystemDurableSync bool
+	NetworkMode           string
+	ProcessMode           string
+	MaxProcesses          int
 }
 
 type AllowedContribution struct {
@@ -181,13 +182,23 @@ func NewPluginHost(cfg PluginHostConfig) (*PluginHost, error) {
 	if err != nil {
 		return nil, fmt.Errorf("javascript_main: resolve plugin host path: %w", err)
 	}
-	if filepath.IsAbs(cfg.BootstrapSpec.Entry) {
-		entry, err := canonicalNodeEntrypoint(cfg.BootstrapSpec.Entry)
+	entryPath := cfg.BootstrapSpec.Entry
+	if !filepath.IsAbs(entryPath) {
+		entryPath = filepath.Join(cfg.WorkingDirectory, entryPath)
+	}
+	entry, err := filepath.Abs(entryPath)
+	if err != nil {
+		return nil, fmt.Errorf("javascript_main: resolve plugin entry path: %w", err)
+	}
+	if _, statErr := os.Stat(entry); statErr == nil {
+		entry, err = canonicalNodeEntrypoint(entry)
 		if err != nil {
 			return nil, fmt.Errorf("javascript_main: resolve plugin entry path: %w", err)
 		}
-		cfg.BootstrapSpec.Entry = entry
+	} else if !os.IsNotExist(statErr) {
+		return nil, fmt.Errorf("javascript_main: inspect plugin entry path: %w", statErr)
 	}
+	cfg.BootstrapSpec.Entry = entry
 	host := &PluginHost{
 		instanceID:          cfg.InstanceID,
 		extensionID:         cfg.ExtensionID,
@@ -437,6 +448,9 @@ func (h *PluginHost) startProcess(ctx context.Context) error {
 }
 
 func (h *PluginHost) nodeLaunchArgs() []string {
+	if h.hostAccess.FilesystemDurableSync {
+		return []string{h.pluginHostPath}
+	}
 	args := []string{"--permission"}
 	seenRead := map[string]struct{}{}
 	addRead := func(root string) {
@@ -453,6 +467,8 @@ func (h *PluginHost) nodeLaunchArgs() []string {
 	addRead(filepath.Dir(h.pluginHostPath))
 	if h.spec.Entry != "" {
 		addRead(filepath.Dir(h.spec.Entry))
+		addRead(nodePackageReadRoot(h.spec.Entry))
+		addRead(nodeExtensionReadRoot(h.spec.Entry))
 	}
 	mode := strings.ToLower(strings.TrimSpace(h.hostAccess.FilesystemMode))
 	if mode == "read" || mode == "read_write" {
@@ -464,9 +480,59 @@ func (h *PluginHost) nodeLaunchArgs() []string {
 		}
 	}
 	if strings.EqualFold(strings.TrimSpace(h.hostAccess.ProcessMode), "direct") {
+		addRead(nodeDistributionReadRoot(h.nodePath))
 		args = append(args, "--allow-child-process")
 	}
+	if strings.EqualFold(strings.TrimSpace(h.hostAccess.NetworkMode), "host") {
+		args = append(args, "--allow-net")
+	}
 	return append(args, h.pluginHostPath)
+}
+
+func nodeExtensionReadRoot(entry string) string {
+	dir := filepath.Dir(filepath.Clean(entry))
+	for {
+		if info, err := os.Stat(filepath.Join(dir, "manifest.json")); err == nil && !info.IsDir() {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return ""
+		}
+		dir = parent
+	}
+}
+
+func nodePackageReadRoot(entry string) string {
+	dir := filepath.Dir(filepath.Clean(entry))
+	for {
+		if info, err := os.Stat(filepath.Join(dir, "package.json")); err == nil && !info.IsDir() {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return ""
+		}
+		dir = parent
+	}
+}
+
+func nodeDistributionReadRoot(nodePath string) string {
+	binaryDir := filepath.Dir(nodePath)
+	root := filepath.Dir(binaryDir)
+	if root == binaryDir || root == filepath.VolumeName(root)+string(filepath.Separator) {
+		return binaryDir
+	}
+	candidates := []string{
+		filepath.Join(root, "lib", "node_modules", "npm", "bin", "npm-cli.js"),
+		filepath.Join(root, "node_modules", "npm", "bin", "npm-cli.js"),
+	}
+	for _, candidate := range candidates {
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			return root
+		}
+	}
+	return binaryDir
 }
 
 // startWriter decouples stdout reading from stdin writing. A dedicated
@@ -724,15 +790,16 @@ func (h *PluginHost) handleRequest(req *jsonrpc.Request) {
 }
 
 type hostCallParams struct {
-	Method               string                                `json:"method"`
-	Version              int                                   `json:"version"`
-	Input                json.RawMessage                       `json:"input"`
-	ScopeSnapshotID      string                                `json:"scopeSnapshotId"`
-	PermissionSnapshotID string                                `json:"permissionSnapshotId"`
-	InvocationID         string                                `json:"invocationId"`
-	ParentID             string                                `json:"parentId"`
-	TraceID              string                                `json:"traceId"`
-	ExecutionContext     permission.PermissionExecutionContext `json:"executionContext"`
+	Method                string                                `json:"method"`
+	Version               int                                   `json:"version"`
+	Input                 json.RawMessage                       `json:"input"`
+	ScopeSnapshotID       string                                `json:"scopeSnapshotId"`
+	TargetScopeSnapshotID string                                `json:"targetScopeSnapshotId"`
+	PermissionSnapshotID  string                                `json:"permissionSnapshotId"`
+	InvocationID          string                                `json:"invocationId"`
+	ParentID              string                                `json:"parentId"`
+	TraceID               string                                `json:"traceId"`
+	ExecutionContext      permission.PermissionExecutionContext `json:"executionContext"`
 }
 
 func (h *PluginHost) handleHostCall(req *jsonrpc.Request) {
@@ -813,17 +880,18 @@ func (h *PluginHost) handleHostCall(req *jsonrpc.Request) {
 		executionContext.Source = "plugin"
 	}
 	callReq := host_api.CallRequest{
-		CallID:               req.ID.String(),
-		RuntimeIdentity:      identity,
-		Method:               host_api.Method(p.Method),
-		Version:              p.Version,
-		Input:                p.Input,
-		ScopeSnapshotID:      p.ScopeSnapshotID,
-		PermissionSnapshotID: p.PermissionSnapshotID,
-		TraceID:              p.TraceID,
-		InvocationID:         p.InvocationID,
-		ParentID:             p.ParentID,
-		ExecutionContext:     executionContext,
+		CallID:                req.ID.String(),
+		RuntimeIdentity:       identity,
+		Method:                host_api.Method(p.Method),
+		Version:               p.Version,
+		Input:                 p.Input,
+		ScopeSnapshotID:       p.ScopeSnapshotID,
+		TargetScopeSnapshotID: p.TargetScopeSnapshotID,
+		PermissionSnapshotID:  p.PermissionSnapshotID,
+		TraceID:               p.TraceID,
+		InvocationID:          p.InvocationID,
+		ParentID:              p.ParentID,
+		ExecutionContext:      executionContext,
 	}
 	if hasInvocationContext {
 		callReq.SpaceID = invocationContext.context.SpaceID
@@ -839,7 +907,7 @@ func (h *PluginHost) handleHostCall(req *jsonrpc.Request) {
 
 	if result.Error != nil {
 		fmt.Fprintf(os.Stderr, "[host-api] method=%s invocation=%s error=%s: %s\n", p.Method, p.InvocationID, result.Error.Code, result.Error.Message)
-		resp := jsonrpc.EncodeErrorResponse(req.ID, jsonrpc.InternalError(fmt.Sprintf("host.call: %s: %s", result.Error.Code, result.Error.Message)))
+		resp := jsonrpc.EncodeErrorResponse(req.ID, jsonrpc.InternalError(fmt.Sprintf("host.call %s: %s: %s", p.Method, result.Error.Code, result.Error.Message)))
 		if err := h.writeMessage(resp); err != nil {
 			amitialog.Printf("[original-error] %v", err)
 		}
@@ -968,7 +1036,10 @@ func (h *PluginHost) sendInitialize(ctx context.Context) error {
 		return fmt.Errorf("runtime.initialize: %w", err)
 	}
 	if resp.Error != nil {
-		return fmt.Errorf("runtime.initialize error: %s", resp.Error.Message)
+		if stderr := h.stderrSnapshot(); stderr != "" {
+			return fmt.Errorf("runtime.initialize error: %s: node args=%s: %s", resp.Error.Message, strings.Join(h.nodeLaunchArgs(), " "), stderr)
+		}
+		return fmt.Errorf("runtime.initialize error: %s: node args=%s", resp.Error.Message, strings.Join(h.nodeLaunchArgs(), " "))
 	}
 	return nil
 }
@@ -1093,7 +1164,7 @@ func (h *PluginHost) InvokeWithContext(ctx context.Context, contributionID strin
 	if h.State() != HostStateReady {
 		return nil, errors.New("javascript_main: host not ready")
 	}
-	params := invokeParams{ContributionID: contributionID, Input: input}
+	params := invokeParams{ContributionID: contributionID, Input: input, SpaceID: invocation.SpaceID, CharacterID: invocation.CharacterID, ConversationID: invocation.ConversationID, ToolCallID: invocation.ExternalCallID}
 	timeout := 30 * time.Second
 	if h.spec.ResourceLimits.SingleCallTimeout != "" {
 		if d, err := time.ParseDuration(h.spec.ResourceLimits.SingleCallTimeout); err == nil && d > 0 {
@@ -1121,6 +1192,10 @@ func (h *PluginHost) InvokeWithContext(ctx context.Context, contributionID strin
 type invokeParams struct {
 	ContributionID string      `json:"contributionId"`
 	Input          interface{} `json:"input"`
+	SpaceID        string      `json:"spaceId,omitempty"`
+	CharacterID    string      `json:"characterId,omitempty"`
+	ConversationID string      `json:"conversationId,omitempty"`
+	ToolCallID     string      `json:"toolCallId,omitempty"`
 }
 
 func (h *PluginHost) Stop(ctx context.Context, reason string) error {

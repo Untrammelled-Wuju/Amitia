@@ -1,0 +1,9 @@
+{
+  "name": "@amitia-test/job-plugin",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "./index.js",
+  "dsh": {
+    "manifestVersion": 1
+  }
+}

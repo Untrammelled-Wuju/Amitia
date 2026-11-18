@@ -146,6 +146,13 @@ func TestSlotScopeDefaultsAndInheritance(t *testing.T) {
 	if root.Scope != ScopeRoot {
 		t.Fatalf("root scope = %q, want %q", root.Scope, ScopeRoot)
 	}
+	rightPane, err := r.Get("ui.sidebar.right.pane.tab")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rightPane.Scope != ScopeSessionMaybe || rightPane.ParentSlotID != "root" || rightPane.DispatchKind != DispatchList {
+		t.Fatalf("right pane slot contract = %+v", rightPane)
+	}
 	child := dynamicTestSlot("scope.child", "chat.sidebar.panel", "scope.ext")
 	if err := r.RegisterOwned("scope.ext", child); err != nil {
 		t.Fatal(err)
@@ -229,12 +236,199 @@ func TestDefaultProviderSlotsFormRootedTree(t *testing.T) {
 		t.Fatalf("chat composer action scope = %q, want %q", action.Scope, ScopeSessionMaybe)
 	}
 
+	dockTop, err := r.Get("chat.composer.dock.top")
+	if err != nil {
+		t.Fatalf("get chat composer dock top: %v", err)
+	}
+	if dockTop.ParentSlotID != "provider.conversation.composer" || dockTop.Scope != ScopeSession || dockTop.DispatchKind != DispatchList {
+		t.Fatalf("chat composer dock top contract = parent %q scope %q kind %q, want provider.conversation.composer/session/list", dockTop.ParentSlotID, dockTop.Scope, dockTop.DispatchKind)
+	}
+
+	model, err := r.Get("chat.composer.model")
+	if err != nil {
+		t.Fatalf("get chat composer model: %v", err)
+	}
+	if model.ParentSlotID != "provider.conversation.composer" || model.Scope != ScopeSession || model.DispatchKind != DispatchSingle {
+		t.Fatalf("chat composer model contract = parent %q scope %q kind %q, want provider.conversation.composer/session/single", model.ParentSlotID, model.Scope, model.DispatchKind)
+	}
+
+	modelLabel, err := r.Get("chat.composer.model.label")
+	if err != nil {
+		t.Fatalf("get chat composer model label: %v", err)
+	}
+	if modelLabel.ParentSlotID != "chat.composer.model" || modelLabel.Scope != ScopeSession || modelLabel.DispatchKind != DispatchSingle {
+		t.Fatalf("chat composer model label contract = parent %q scope %q kind %q, want chat.composer.model/session/single", modelLabel.ParentSlotID, modelLabel.Scope, modelLabel.DispatchKind)
+	}
+
+	modelOptions, err := r.Get("chat.composer.model.options")
+	if err != nil {
+		t.Fatalf("get chat composer model options: %v", err)
+	}
+	if modelOptions.ParentSlotID != "chat.composer.model" || modelOptions.Scope != ScopeSession || modelOptions.DispatchKind != DispatchList {
+		t.Fatalf("chat composer model options contract = parent %q scope %q kind %q, want chat.composer.model/session/list", modelOptions.ParentSlotID, modelOptions.Scope, modelOptions.DispatchKind)
+	}
+
+	permission, err := r.Get("chat.composer.permission")
+	if err != nil {
+		t.Fatalf("get chat composer permission: %v", err)
+	}
+	if permission.ParentSlotID != "provider.conversation.composer" || permission.Scope != ScopeSession || permission.DispatchKind != DispatchSingle {
+		t.Fatalf("chat composer permission contract = parent %q scope %q kind %q, want provider.conversation.composer/session/single", permission.ParentSlotID, permission.Scope, permission.DispatchKind)
+	}
+
 	messageRenderer, err := r.Get("provider.conversation.message_renderer")
 	if err != nil {
 		t.Fatalf("get provider message renderer: %v", err)
 	}
 	if messageRenderer.Scope != ScopeSession || messageRenderer.DispatchKind != DispatchChain {
 		t.Fatalf("message renderer contract = scope %q kind %q, want session/chain", messageRenderer.Scope, messageRenderer.DispatchKind)
+	}
+
+	messageImages, err := r.Get("chat.message.images")
+	if err != nil {
+		t.Fatalf("get assistant message images: %v", err)
+	}
+	if messageImages.ParentSlotID != "provider.conversation.messages" || messageImages.Scope != ScopeSession || messageImages.DispatchKind != DispatchSingle {
+		t.Fatalf("assistant message images contract = parent %q scope %q kind %q, want provider.conversation.messages/session/single", messageImages.ParentSlotID, messageImages.Scope, messageImages.DispatchKind)
+	}
+
+	userMessageImages, err := r.Get("chat.message.user.images")
+	if err != nil {
+		t.Fatalf("get user message images: %v", err)
+	}
+	if userMessageImages.ParentSlotID != "provider.conversation.messages" || userMessageImages.Scope != ScopeSession || userMessageImages.DispatchKind != DispatchSingle {
+		t.Fatalf("user message images contract = parent %q scope %q kind %q, want provider.conversation.messages/session/single", userMessageImages.ParentSlotID, userMessageImages.Scope, userMessageImages.DispatchKind)
+	}
+
+	quotaNotice, err := r.Get("app.shell.quota_notice")
+	if err != nil {
+		t.Fatalf("get shell quota notice: %v", err)
+	}
+	if quotaNotice.ParentSlotID != "root" || quotaNotice.Scope != ScopeRoot || quotaNotice.DispatchKind != DispatchChain {
+		t.Fatalf("shell quota notice contract = parent %q scope %q kind %q, want root/root/chain", quotaNotice.ParentSlotID, quotaNotice.Scope, quotaNotice.DispatchKind)
+	}
+
+	shellBottom, err := r.Get("app.shell.bottom")
+	if err != nil {
+		t.Fatalf("get shell bottom: %v", err)
+	}
+	if shellBottom.ParentSlotID != "root" || shellBottom.Scope != ScopeRoot || shellBottom.DispatchKind != DispatchSingle {
+		t.Fatalf("shell bottom contract = parent %q scope %q kind %q, want root/root/single", shellBottom.ParentSlotID, shellBottom.Scope, shellBottom.DispatchKind)
+	}
+
+	for _, slotID := range []SlotID{"desktop.context_menu.content", "desktop.context_menu.icon"} {
+		slot, err := r.Get(slotID)
+		if err != nil {
+			t.Fatalf("get %s: %v", slotID, err)
+		}
+		if slot.ParentSlotID != "root" || slot.Scope != ScopeRoot || slot.DispatchKind != DispatchKeyed {
+			t.Fatalf("%s contract = parent %q scope %q kind %q, want root/root/keyed", slotID, slot.ParentSlotID, slot.Scope, slot.DispatchKind)
+		}
+		if len(slot.Platform) != 4 {
+			t.Fatalf("%s platforms = %#v, want four desktop/web platforms", slotID, slot.Platform)
+		}
+	}
+
+	for _, slotID := range []SlotID{"workbench.file.actions", "workbench.review.file.actions"} {
+		slot, err := r.Get(slotID)
+		if err != nil {
+			t.Fatalf("get %s: %v", slotID, err)
+		}
+		if slot.ParentSlotID != "provider.conversation.shell" || slot.Scope != ScopeSession || slot.DispatchKind != DispatchList {
+			t.Fatalf("%s contract = parent %q scope %q kind %q, want provider.conversation.shell/session/list", slotID, slot.ParentSlotID, slot.Scope, slot.DispatchKind)
+		}
+		if len(slot.Platform) != 4 {
+			t.Fatalf("%s platforms = %#v, want four desktop/web platforms", slotID, slot.Platform)
+		}
+	}
+
+	modelProvider, err := r.Get("settings.model.provider")
+	if err != nil {
+		t.Fatalf("get model provider settings slot: %v", err)
+	}
+	if modelProvider.ParentSlotID != "root" || modelProvider.Scope != ScopeRoot || modelProvider.DispatchKind != DispatchKeyed {
+		t.Fatalf("model provider settings contract = parent %q scope %q kind %q, want root/root/keyed", modelProvider.ParentSlotID, modelProvider.Scope, modelProvider.DispatchKind)
+	}
+
+	modelFooter, err := r.Get("settings.model.footer")
+	if err != nil {
+		t.Fatalf("get model footer settings slot: %v", err)
+	}
+	if modelFooter.ParentSlotID != "root" || modelFooter.Scope != ScopeRoot || modelFooter.DispatchKind != DispatchList {
+		t.Fatalf("model footer settings contract = parent %q scope %q kind %q, want root/root/list", modelFooter.ParentSlotID, modelFooter.Scope, modelFooter.DispatchKind)
+	}
+
+	documentBody, err := r.Get("ui.sidebar.right.pane.document")
+	if err != nil {
+		t.Fatalf("get right pane document body: %v", err)
+	}
+	if documentBody.ParentSlotID != "ui.sidebar.right.pane.tab" || documentBody.Scope != ScopeSession || documentBody.DispatchKind != DispatchKeyed {
+		t.Fatalf("right pane document body contract = parent %q scope %q kind %q, want ui.sidebar.right.pane.tab/session/keyed", documentBody.ParentSlotID, documentBody.Scope, documentBody.DispatchKind)
+	}
+
+	for _, slotID := range []SlotID{
+		"ui.sidebar.right.pane.document.action",
+		"ui.sidebar.right.pane.document.actions",
+		"ui.sidebar.right.pane.document.pdf",
+		"ui.sidebar.right.pane.document.unpreviewable",
+	} {
+		slot, err := r.Get(slotID)
+		if err != nil {
+			t.Fatalf("get %s: %v", slotID, err)
+		}
+		if slot.ParentSlotID != "ui.sidebar.right.pane.document" || slot.Scope != ScopeSession {
+			t.Fatalf("%s contract = parent %q scope %q, want ui.sidebar.right.pane.document/session", slotID, slot.ParentSlotID, slot.Scope)
+		}
+		if len(slot.Platform) != 4 {
+			t.Fatalf("%s platforms = %#v, want four desktop/web platforms", slotID, slot.Platform)
+		}
+	}
+	for _, expected := range []struct {
+		slotID     SlotID
+		parentSlot SlotID
+		scope      SlotScope
+		dispatch   SlotDispatchKind
+	}{
+		{"ui.sidebar.right.pane.files.actions", "ui.sidebar.right.pane.tab", ScopeSession, DispatchList},
+		{"ui.sidebar.right.pane.guide", "ui.sidebar.right.pane.tab", ScopeSession, DispatchChain},
+		{"ui.sidebar.right.pane.guide.actions", "ui.sidebar.right.pane.guide", ScopeRoot, DispatchList},
+		{"ui.sidebar.right.pane.guide.entry", "ui.sidebar.right.pane.guide", ScopeSession, DispatchKeyed},
+		{"ui.sidebar.right.pane.tab.menu.item", "ui.sidebar.right.pane.tab", ScopeSession, DispatchList},
+		{"app.rightbar", "root", ScopeRoot, DispatchSingle},
+		{"app.rightbar.session", "app.rightbar", ScopeSession, DispatchSingle},
+		{"settings.shell", "root", ScopeRoot, DispatchSingle},
+		{"settings.shell.header", "settings.shell", ScopeRoot, DispatchSingle},
+		{"settings.shell.action", "settings.shell", ScopeRoot, DispatchList},
+		{"settings.shell.close", "settings.shell", ScopeRoot, DispatchSingle},
+		{"settings.shell.launcher", "settings.shell", ScopeRoot, DispatchSingle},
+		{"settings.shell.launcher.notifications", "settings.shell.launcher", ScopeRoot, DispatchSingle},
+		{"settings.onboarding", "settings.shell", ScopeRoot, DispatchList},
+		{"settings.section.icon", "settings.shell", ScopeRoot, DispatchList},
+		{"settings.shell.trigger", "settings.shell", ScopeRoot, DispatchSingle},
+		{"settings.model.sign-in", "settings.onboarding", ScopeRoot, DispatchSingle},
+		{"extension.plugin.tab", "root", ScopeRoot, DispatchList},
+		{"extension.plugin.item", "root", ScopeRoot, DispatchList},
+		{"extension.plugin.bundle.activation", "root", ScopeRoot, DispatchKeyed},
+		{"extension.plugin.bundle.config", "root", ScopeRoot, DispatchKeyed},
+		{"extension.settings.tab", "root", ScopeRoot, DispatchList},
+	} {
+		slot, err := r.Get(expected.slotID)
+		if err != nil {
+			t.Fatalf("get %s: %v", expected.slotID, err)
+		}
+		if slot.ParentSlotID != expected.parentSlot || slot.Scope != expected.scope || slot.DispatchKind != expected.dispatch {
+			t.Fatalf("%s contract = parent %q scope %q kind %q, want %q/%q/%q", expected.slotID, slot.ParentSlotID, slot.Scope, slot.DispatchKind, expected.parentSlot, expected.scope, expected.dispatch)
+		}
+		if len(slot.Platform) != 4 {
+			t.Fatalf("%s platforms = %#v, want four desktop/web platforms", expected.slotID, slot.Platform)
+		}
+	}
+	guideActions, err := r.Get("ui.sidebar.right.pane.guide.actions")
+	if err != nil {
+		t.Fatalf("get guide actions: %v", err)
+	}
+	if !guideActions.AllowRootChild || guideActions.Scope != ScopeRoot || guideActions.ParentSlotID != "ui.sidebar.right.pane.guide" {
+		t.Fatalf("guide actions scope escape contract = %+v", guideActions)
 	}
 
 	desktopCommand, err := r.Get("desktop.command")
@@ -286,6 +480,10 @@ func TestDefaultDispatchContracts(t *testing.T) {
 		{"chat.message.custom_renderer", DispatchChain},
 		{"chat.message.attachment_renderer", DispatchChain},
 		{"desktop.window.page", DispatchKeyed},
+		{"ui.portal.overlay", DispatchList},
+		{"ui.portal.modal", DispatchList},
+		{"ui.portal.drawer", DispatchList},
+		{"ui.portal.toast", DispatchList},
 	}
 	for _, tc := range cases {
 		def, err := r.Get(SlotID(tc.slot))
@@ -311,6 +509,19 @@ func TestRegisterValidatesAndDerivesDispatchKind(t *testing.T) {
 	}
 	if registered.DispatchKind != DispatchChain {
 		t.Fatalf("dispatch contract kind = %q", registered.DispatchKind)
+	}
+
+	hoc := dynamicTestSlot("dispatch.hoc", "chat.sidebar.panel", "dispatch.ext")
+	hoc.DispatchKind = DispatchHoc
+	if err := r.RegisterOwned("dispatch.ext", hoc); err != nil {
+		t.Fatalf("register hoc: %v", err)
+	}
+	registeredHoc, err := r.Get("dispatch.hoc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if registeredHoc.DispatchKind != DispatchHoc {
+		t.Fatalf("dispatch hoc contract kind = %q", registeredHoc.DispatchKind)
 	}
 
 	invalid := dynamicTestSlot("dispatch.invalid", "chat.sidebar.panel", "dispatch.ext")

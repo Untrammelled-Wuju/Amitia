@@ -124,6 +124,7 @@ type ContainerBuilder struct {
 	db                           *sql.DB
 	scopeRelationDB              *sql.DB
 	characterReader              CharacterReader
+	characterRevisionReader      CharacterRevisionReader
 	conversationReader           ConversationReader
 	extensionDataSources         ExtensionDataSource
 	memoryQueryService           MemoryQueryService
@@ -165,11 +166,28 @@ type ContainerBuilder struct {
 	backgroundBootstrapFunc func() (backgroundremoval.Registry, error)
 
 	workshopModelGenerator WorkshopModelGenerator
+	modelGateway           ModelGatewayPort
 
 	channelStore                capability.ChannelStore
 	agentAdminController        AgentAdminToolController
 	conversationMessageSender   ConversationMessageSender
 	conversationMessageAppender ConversationMessageAppender
+	conversationCreator         ConversationCreator
+	conversationLister          ConversationLister
+	conversationDeleter         ConversationDeleter
+	conversationWorkspace       ConversationWorkspaceResolver
+	conversationTurnController  ConversationTurnController
+	conversationArchiver        ConversationArchiver
+	conversationPinner          ConversationPinner
+	conversationForker          ConversationForker
+	modelDefaultsProvider       ModelDefaultsProvider
+	directoryLister             DirectoryLister
+	directoryCreator            DirectoryCreator
+	skillCatalog                *agent_skill.AgentSkillCatalog
+	projectLister               ProjectLister
+	projectCreator              ProjectCreator
+	projectUpdater              ProjectUpdater
+	projectDeleter              ProjectDeleter
 	vectorStore                 ExtensionVectorStore
 }
 
@@ -212,6 +230,11 @@ func (b *ContainerBuilder) WithDesktopPetPluginCapabilities(caps integration.Des
 
 func (b *ContainerBuilder) WithCharacterReader(r CharacterReader) *ContainerBuilder {
 	b.characterReader = r
+	return b
+}
+
+func (b *ContainerBuilder) WithCharacterRevisionReader(r CharacterRevisionReader) *ContainerBuilder {
+	b.characterRevisionReader = r
 	return b
 }
 
@@ -278,6 +301,11 @@ func (b *ContainerBuilder) WithKernelRuntime(runtime *Runtime) *ContainerBuilder
 
 func (b *ContainerBuilder) WithWorkshopModelGenerator(model WorkshopModelGenerator) *ContainerBuilder {
 	b.workshopModelGenerator = model
+	return b
+}
+
+func (b *ContainerBuilder) WithModelGateway(port ModelGatewayPort) *ContainerBuilder {
+	b.modelGateway = port
 	return b
 }
 
@@ -371,6 +399,81 @@ func (b *ContainerBuilder) WithConversationMessageSender(sender ConversationMess
 
 func (b *ContainerBuilder) WithConversationMessageAppender(appender ConversationMessageAppender) *ContainerBuilder {
 	b.conversationMessageAppender = appender
+	return b
+}
+
+func (b *ContainerBuilder) WithConversationCreator(creator ConversationCreator) *ContainerBuilder {
+	b.conversationCreator = creator
+	return b
+}
+
+func (b *ContainerBuilder) WithConversationLister(lister ConversationLister) *ContainerBuilder {
+	b.conversationLister = lister
+	return b
+}
+
+func (b *ContainerBuilder) WithConversationDeleter(deleter ConversationDeleter) *ContainerBuilder {
+	b.conversationDeleter = deleter
+	return b
+}
+
+func (b *ContainerBuilder) WithConversationWorkspaceResolver(resolver ConversationWorkspaceResolver) *ContainerBuilder {
+	b.conversationWorkspace = resolver
+	return b
+}
+
+func (b *ContainerBuilder) WithConversationTurnController(controller ConversationTurnController) *ContainerBuilder {
+	b.conversationTurnController = controller
+	return b
+}
+
+func (b *ContainerBuilder) WithConversationArchiver(archiver ConversationArchiver) *ContainerBuilder {
+	b.conversationArchiver = archiver
+	return b
+}
+
+func (b *ContainerBuilder) WithConversationPinner(pinner ConversationPinner) *ContainerBuilder {
+	b.conversationPinner = pinner
+	return b
+}
+
+func (b *ContainerBuilder) WithConversationForker(forker ConversationForker) *ContainerBuilder {
+	b.conversationForker = forker
+	return b
+}
+
+func (b *ContainerBuilder) WithModelDefaultsProvider(provider ModelDefaultsProvider) *ContainerBuilder {
+	b.modelDefaultsProvider = provider
+	return b
+}
+
+func (b *ContainerBuilder) WithDirectoryLister(lister DirectoryLister) *ContainerBuilder {
+	b.directoryLister = lister
+	return b
+}
+
+func (b *ContainerBuilder) WithDirectoryCreator(creator DirectoryCreator) *ContainerBuilder {
+	b.directoryCreator = creator
+	return b
+}
+
+func (b *ContainerBuilder) WithProjectLister(lister ProjectLister) *ContainerBuilder {
+	b.projectLister = lister
+	return b
+}
+
+func (b *ContainerBuilder) WithProjectCreator(creator ProjectCreator) *ContainerBuilder {
+	b.projectCreator = creator
+	return b
+}
+
+func (b *ContainerBuilder) WithProjectUpdater(updater ProjectUpdater) *ContainerBuilder {
+	b.projectUpdater = updater
+	return b
+}
+
+func (b *ContainerBuilder) WithProjectDeleter(deleter ProjectDeleter) *ContainerBuilder {
+	b.projectDeleter = deleter
 	return b
 }
 
@@ -508,6 +611,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	contribRegistry := contribution.NewContributionRegistry()
 
 	agentSkillCatalog := agent_skill.NewAgentSkillCatalog()
+	b.skillCatalog = agentSkillCatalog
 
 	workflowRegistry := workflow.NewWorkflowRegistry()
 	workflowDefRepo := sqlite.NewWorkflowDefinitionRepository(db)
@@ -1082,6 +1186,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	if convReader == nil {
 		convReader = NewDefaultConversationReader()
 	}
+	convSearcher, _ := convReader.(ConversationSearcher)
 	memQuerySvc := b.memoryQueryService
 	if memQuerySvc == nil {
 		memQuerySvc = NewDefaultMemoryQueryService()
@@ -1404,20 +1509,33 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	runtimeObservabilityBridge := NewRuntimeObservabilityBridge(nil)
 	runtimeMaintenanceBridge := NewRuntimeMaintenanceBridge()
 	workspaceBridge := NewWorkspaceBridge(b.workspaceService)
+	workspaceBridge.SetConversationWorkspaceResolver(b.conversationWorkspace)
 	chatImportBridge := NewChatImportBridge()
 	storageBridge := NewStorageBridge()
 	chatLogsBridge := NewChatLogsBridge()
+	modelGatewayBridge := NewModelGatewayBridge(b.modelGateway)
+	var uiHost *ui_contribution.UIHost
 	if err := setupDefaultHostAPIRoutes(hostAPIGateway, HostAPIRouteDeps{
-		StateStore:                  extensionStateStore,
-		CharacterReader:             charReader,
-		CharacterLister:             characterListerFromReader(charReader),
-		ConversationReader:          convReader,
-		MemoryQueryService:          memQuerySvc,
-		UIHostNotifier:              uiHostNotifier,
-		ClipboardHost:               bridgeClipboardHost,
-		RuntimeSupervisor:           supervisor,
-		EventService:                eventSvc,
-		ScheduleService:             scheduleSvc,
+		StateStore:              extensionStateStore,
+		CharacterReader:         charReader,
+		CharacterRevisionReader: b.characterRevisionReader,
+		CharacterLister:         characterListerFromReader(charReader),
+		ConversationReader:      convReader,
+		MemoryQueryService:      memQuerySvc,
+		UIHostNotifier:          uiHostNotifier,
+		ClipboardHost:           bridgeClipboardHost,
+		RuntimeSupervisor:       supervisor,
+		EventService:            eventSvc,
+		ScheduleService:         scheduleSvc,
+		ScopeSnapshotWriter:     scopeStore,
+		ScopeSnapshotDeleter:    scopeStore,
+		Coordination:            coordination.NewService(store.DB()),
+		UIExecutionIdentity: func(sessionID string) (string, string) {
+			if uiHost == nil || uiHost.Bridge() == nil {
+				return "", ""
+			}
+			return uiHost.Bridge().SessionExecutionIdentity(sessionID)
+		},
 		ToolFacade:                  toolFacade,
 		PluginPackages:              hostPluginPackages,
 		ExecutionKernel:             executionKernel,
@@ -1427,8 +1545,26 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		ScopeSnapshotStore:          host_api.NewSnapshotStoreAdapter(scopeStore),
 		SecretStore:                 nil,
 		ProviderInvoker:             kernelProviderInvoker,
+		ModelGateway:                modelGatewayBridge,
+		ApprovalBroker:              approvalBroker,
+		ConversationCreator:         b.conversationCreator,
+		ConversationLister:          b.conversationLister,
+		ConversationSearcher:        convSearcher,
+		ConversationDeleter:         b.conversationDeleter,
 		ConversationMessageSender:   b.conversationMessageSender,
 		ConversationMessageAppender: b.conversationMessageAppender,
+		ConversationTurnController:  b.conversationTurnController,
+		ConversationArchiver:        b.conversationArchiver,
+		ConversationPinner:          b.conversationPinner,
+		ConversationForker:          b.conversationForker,
+		ModelDefaults:               b.modelDefaultsProvider,
+		DirectoryLister:             b.directoryLister,
+		DirectoryCreator:            b.directoryCreator,
+		SkillCatalog:                b.skillCatalog,
+		ProjectLister:               b.projectLister,
+		ProjectCreator:              b.projectCreator,
+		ProjectUpdater:              b.projectUpdater,
+		ProjectDeleter:              b.projectDeleter,
 		ExtensionDataSources:        b.extensionDataSources,
 		ResourceLinks:               resourceLinks,
 		VectorStore:                 b.vectorStore,
@@ -1450,6 +1586,11 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	}
 	if scheduleSvc != nil {
 		scheduleSvc.GetExecutor().RegisterTargetAdapter(schedule.NewToolTargetAdapter(NewKernelToolExecutorAdapter(executionKernel)))
+		if b.conversationMessageAppender != nil {
+			scheduleSvc.GetExecutor().RegisterTargetAdapter(schedule.NewSessionPromptTargetAdapter(
+				NewScheduleSessionPromptInvokeFunc(b.conversationMessageAppender, b.conversationCreator),
+			))
+		}
 	}
 	jsFactory.SetHostAPI(hostAPIGateway)
 
@@ -1681,7 +1822,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 
 	runtimeState := NewRuntimeState()
 
-	uiHost := ui_contribution.NewUIHost()
+	uiHost = ui_contribution.NewUIHost()
 	uiProviderRegistry := ui_provider.NewRegistryWithBuiltins()
 	uiProviderProfileStore := ui_provider.NewSQLiteProfileStore(db)
 	if err := uiProviderProfileStore.Init(ctx); err != nil {
@@ -1690,7 +1831,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	if err := uiProviderRegistry.AttachStore(ctx, uiProviderProfileStore); err != nil {
 		return nil, fmt.Errorf("kernel: load UI provider profile: %w", err)
 	}
-	uiHost.Bridge().SetScopeSnapshotFactory(func(extensionID, moduleID string, generation int64, characterID, conversationID string) (string, error) {
+	uiHost.Bridge().SetScopeSnapshotFactory(func(extensionID, moduleID string, generation int64, characterID, conversationID, spaceID, deviceID string) (string, error) {
 		invocationID := fmt.Sprintf("ui-sess-%d", time.Now().UnixNano())
 		scopes := []scope.ScopeRef{
 			scope.NewExtensionScope(extensionID),
@@ -1704,7 +1845,35 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		if conversationID != "" {
 			scopes = append(scopes, scope.NewConversationScope(conversationID))
 		}
-		snapshot := scope.CreateSnapshotWithOwner(invocationID, scopes, resolveSnapshotOwner(db, conversationID, characterID), characterID, conversationID, extensionID, moduleID, generation)
+		ownerSpaceID := strings.TrimSpace(spaceID)
+		if ownerSpaceID == "" {
+			ownerSpaceID = resolveSnapshotOwner(db, conversationID, characterID)
+		}
+		snapshot := scope.CreateSnapshotWithOwner(invocationID, scopes, ownerSpaceID, characterID, conversationID, extensionID, moduleID, generation)
+		if ownerSpaceID != "" && strings.TrimSpace(deviceID) != "" && characterID != "" && conversationID != "" {
+			coordinationService := coordination.NewService(db)
+			_, owned, finish, err := coordinationService.Begin(context.Background(), ownerSpaceID, strings.TrimSpace(deviceID), strings.TrimSpace(deviceID), ownerSpaceID, characterID, invocationID)
+			if err != nil {
+				return "", fmt.Errorf("ui_contribution: resolve owner execution scope: %w", err)
+			}
+			if b.characterRevisionReader != nil {
+				owned.RoleRevision, err = b.characterRevisionReader(context.Background(), characterID)
+				if err != nil {
+					finish()
+					return "", fmt.Errorf("ui_contribution: resolve owner role revision: %w", err)
+				}
+			}
+			if err := coordination.ResolveMemoryScope(&owned, ""); err != nil {
+				finish()
+				return "", fmt.Errorf("ui_contribution: resolve owner memory scope: %w", err)
+			}
+			encoded, err := json.Marshal(owned)
+			finish()
+			if err != nil {
+				return "", fmt.Errorf("ui_contribution: encode owner execution scope: %w", err)
+			}
+			snapshot.OwnedExecutionScope = encoded
+		}
 		if err := scopeStore.SaveSnapshot(context.Background(), snapshot); err != nil {
 			return "", err
 		}

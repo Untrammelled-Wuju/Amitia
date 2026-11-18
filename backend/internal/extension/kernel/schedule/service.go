@@ -272,7 +272,7 @@ func (s *ScheduleService) installDefinition(ctx context.Context, def *ScheduleCo
 	}
 	if def.DSTSpringPolicy == "" {
 		def.DSTSpringPolicy = DefaultDSTSpringPolicy()
-		if def.Trigger.Type == TriggerTypeCalendar {
+		if def.Trigger.Type == TriggerTypeCalendar || def.Trigger.Type == TriggerTypeRRule {
 			def.DSTSpringPolicy = DSTSpringNextValidTime
 		}
 	}

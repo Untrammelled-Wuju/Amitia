@@ -8,6 +8,7 @@ UIContributionSnapshotEntry _entry(
   int priority = 0,
   String kind = 'panel',
   String entryKey = '',
+  bool entryKeyExplicit = false,
   String cellId = '',
   String? runtimePackageId,
   List<Map<String, dynamic>> matchRules = const <Map<String, dynamic>>[],
@@ -27,6 +28,7 @@ UIContributionSnapshotEntry _entry(
     ordering: ordering,
     priority: priority,
     entryKey: entryKey,
+    entryKeyExplicit: entryKeyExplicit,
     cellId: cellId,
     runtimePackageId: runtimePackageId,
     matchRules: matchRules,
@@ -52,6 +54,169 @@ UISlotSnapshotEntry _slot({
 }
 
 void main() {
+  group('MobileDynamicRuntime declarations', () {
+    final snapshot = UIProviderSnapshot(
+      providers: <UIProviderDefinition>[],
+      slots: <UISlotSnapshotEntry>[
+        UISlotSnapshotEntry(
+          slotId: 'root',
+          contractVersion: 1,
+          supportedKinds: <String>['panel'],
+          kind: 'single',
+          layout: 'stack',
+          fallbackPolicy: 'default',
+          declarationEpoch: 0,
+          scope: 'root',
+          dynamicSlot: false,
+          contributions: <UIContributionSnapshotEntry>[
+            UIContributionSnapshotEntry(
+              contributionId: 'source-a',
+              extensionId: 'ext.a',
+              moduleId: 'ui.a',
+              kind: 'panel',
+              slotId: 'root',
+              contractVersion: 1,
+              entryType: 'schema_renderer',
+              entryPath: 'schema-a.json',
+              permissions: <String>[],
+              dataContract: <String, dynamic>{},
+              visibility: <String, dynamic>{},
+              ordering: 0,
+              priority: 0,
+            ),
+          ],
+        ),
+        UISlotSnapshotEntry(
+          slotId: 'source.b',
+          contractVersion: 1,
+          supportedKinds: <String>['panel'],
+          kind: 'list',
+          layout: 'stack',
+          fallbackPolicy: 'empty',
+          declarationEpoch: 0,
+          scope: 'root',
+          dynamicSlot: false,
+          contributions: <UIContributionSnapshotEntry>[
+            UIContributionSnapshotEntry(
+              contributionId: 'source-b',
+              extensionId: 'ext.b',
+              moduleId: 'ui.b',
+              kind: 'panel',
+              slotId: 'source.b',
+              contractVersion: 1,
+              entryType: 'web_restricted',
+              entryPath: 'module-b.mjs',
+              permissions: <String>[],
+              dataContract: <String, dynamic>{},
+              visibility: <String, dynamic>{},
+              ordering: 4,
+              priority: 2,
+            ),
+          ],
+        ),
+      ],
+      profile: UIProfile.fromJson(<String, dynamic>{}),
+      profileLayers: <UIProfile>[],
+      context: UIProviderResolveContext(
+        platform: 'android',
+        localRuntime: true,
+      ),
+      resolved: <String, UIProviderDefinition>{},
+      version: 8,
+    );
+
+    const state = <String, dynamic>{
+      'revision': 3,
+      'packages': <dynamic>[
+        <String, dynamic>{
+          'id': 'pkg.a',
+          'running': true,
+          'activeVersion': '1',
+          'versions': <dynamic>[
+            <String, dynamic>{
+              'version': '1',
+              'contributions': <dynamic>[
+                <String, dynamic>{
+                  'slotId': 'root',
+                  'key': 'parent',
+                  'sourceExtensionId': 'ext.a',
+                  'sourceContributionId': 'source-a',
+                  'children': <dynamic>[
+                    <String, dynamic>{
+                      'slotId': 'child.shared',
+                      'kind': 'list',
+                      'supportedKinds': <String>['panel'],
+                      'scope': 'root',
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        <String, dynamic>{
+          'id': 'pkg.b',
+          'running': true,
+          'activeVersion': '1',
+          'versions': <dynamic>[
+            <String, dynamic>{
+              'version': '1',
+              'contributions': <dynamic>[
+                <String, dynamic>{
+                  'slotId': 'child.shared',
+                  'key': 'cross-plugin',
+                  'sourceExtensionId': 'ext.b',
+                  'sourceContributionId': 'source-b',
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    test('declares children with the owning runtime package', () {
+      final child = MobileDynamicRuntime.slotDefinition(
+        sessionState: state,
+        slotId: 'child.shared',
+      );
+      expect(child, isNotNull);
+      expect(child!.parentSlotId, 'root');
+      expect(child.ownerExtension, 'client-runtime:pkg.a');
+      expect(child.scope, 'root');
+    });
+
+    test('resolves child contributions declared by another package', () {
+      final contributions = MobileDynamicRuntime.slotContributions(
+        snapshot: snapshot,
+        sessionState: state,
+        slotId: 'child.shared',
+      );
+      expect(contributions, hasLength(1));
+      expect(contributions.single.runtimePackageId, 'pkg.b');
+      expect(contributions.single.extensionId, 'ext.b');
+      expect(contributions.single.entryPath, 'module-b.mjs');
+    });
+
+    test('removing the parent package removes its child declaration', () {
+      final removed = <String, dynamic>{
+        ...state,
+        'packages': (state['packages'] as List)
+            .whereType<Map>()
+            .where((item) => item['id'] != 'pkg.a')
+            .map((item) => item.cast<String, dynamic>())
+            .toList(growable: false),
+      };
+      expect(
+        MobileDynamicRuntime.slotDefinition(
+          sessionState: removed,
+          slotId: 'child.shared',
+        ),
+        isNull,
+      );
+    });
+  });
+
   group('UI snapshot dispatch metadata', () {
     test('parses kind, supportedKinds and contribution dispatch metadata', () {
       final slot = UISlotSnapshotEntry.fromJson({
@@ -86,6 +251,7 @@ void main() {
       expect(slot.contributions.single.entryKey, 'alpha');
       expect(slot.contributions.single.cellId, 'cell-a');
       expect(slot.contributions.single.matched, {'route': 'matched'});
+      expect(slot.contributions.single.entryKeyExplicit, isTrue);
     });
   });
 
@@ -195,6 +361,46 @@ void main() {
       );
       expect(result.single.contributionId, 'panel');
     });
-  });
 
+    test('hoc keeps wildcard layers and selects explicit entry keys', () {
+      final entries = [
+        _entry(
+          'night-shell',
+          ordering: 2,
+          entryKey: 'night',
+          entryKeyExplicit: true,
+        ),
+        _entry(
+          'day-shell',
+          ordering: 1,
+          entryKey: 'day',
+          entryKeyExplicit: true,
+        ),
+        _entry('global-shell', ordering: 3),
+        _entry('later-shell', ordering: 4),
+      ];
+
+      final day = MobileDynamicRuntime.resolveSlot(
+        slot: _slot(kind: 'hoc'),
+        server: entries,
+        dynamic: const [],
+        dispatchKey: 'day',
+      );
+      expect(day.map((item) => item.contributionId), [
+        'day-shell',
+        'global-shell',
+        'later-shell',
+      ]);
+
+      final noKey = MobileDynamicRuntime.resolveSlot(
+        slot: _slot(kind: 'hoc'),
+        server: entries,
+        dynamic: const [],
+      );
+      expect(noKey.map((item) => item.contributionId), [
+        'global-shell',
+        'later-shell',
+      ]);
+    });
+  });
 }

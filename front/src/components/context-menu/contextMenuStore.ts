@@ -6,6 +6,7 @@ export interface ContextMenuAction {
   icon?: Component;
   shortcut?: string;
   accessKey?: string;
+  iconKey?: string;
   disabled?: boolean;
   danger?: boolean;
   separatorBefore?: boolean;

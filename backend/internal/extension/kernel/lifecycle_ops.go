@@ -46,6 +46,7 @@ type enableTransaction struct {
 	providerInstancesActivated bool
 	providerInstanceIDs        []capability.ProviderInstanceID
 	uiRegistered               bool
+	scopeSeeded                bool
 }
 
 func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
@@ -147,6 +148,19 @@ func (r *Runtime) enable(ctx context.Context, extensionID string, force bool) er
 			log.Printf("[enable-tx] failed to persist lifecycle operation %s: %v", operationID, err)
 		}
 		r.persistLifecycleStep(ctx, operationID, "acquire_lock", LifecycleStepSucceeded, nil)
+	}
+
+	if r.container.ScopeManager != nil {
+		tx.scopeSeeded = true
+		if err := r.seedExtensionScopeBindings(ctx, extensionID, modules); err != nil {
+			tx.rollback(ctx)
+			r.logEnableStep(operationID, extensionID, "seed_scope_bindings", "failed", err)
+			r.persistLifecycleStep(ctx, operationID, "seed_scope_bindings", LifecycleStepFailed, err)
+			r.updateLifecycleOperationStatus(ctx, operationID, LifecycleOperationCompensating, "seed_scope_bindings", err)
+			return fmt.Errorf("kernel: seed scope bindings: %w", err)
+		}
+		r.logEnableStep(operationID, extensionID, "seed_scope_bindings", "succeeded", nil)
+		r.persistLifecycleStep(ctx, operationID, "seed_scope_bindings", LifecycleStepSucceeded, nil)
 	}
 
 	var startedInstanceIDs []string
@@ -266,18 +280,6 @@ func (r *Runtime) enable(ctx context.Context, extensionID string, force bool) er
 	r.persistLifecycleStep(ctx, operationID, "commit_enablement", LifecycleStepSucceeded, nil)
 	r.logEnableStep(operationID, extensionID, "promote_generation", "succeeded", nil)
 	r.persistLifecycleStep(ctx, operationID, "promote_generation", LifecycleStepSucceeded, nil)
-
-	if r.container.ScopeManager != nil {
-		if err := r.seedExtensionScopeBindings(ctx, extensionID, modules); err != nil {
-			tx.rollback(ctx)
-			r.logEnableStep(operationID, extensionID, "seed_scope_bindings", "failed", err)
-			r.persistLifecycleStep(ctx, operationID, "seed_scope_bindings", LifecycleStepFailed, err)
-			r.updateLifecycleOperationStatus(ctx, operationID, LifecycleOperationCompensating, "seed_scope_bindings", err)
-			return fmt.Errorf("kernel: seed scope bindings: %w", err)
-		}
-		r.logEnableStep(operationID, extensionID, "seed_scope_bindings", "succeeded", nil)
-		r.persistLifecycleStep(ctx, operationID, "seed_scope_bindings", LifecycleStepSucceeded, nil)
-	}
 
 	if r.container.ContributionInstaller != nil {
 		if err := r.container.ContributionInstaller.ActivateContributions(ctx, extID); err != nil {
@@ -496,6 +498,11 @@ func (tx *enableTransaction) rollback(ctx context.Context) {
 			if err := tx.runtime.container.RuntimeSupervisor.Stop(ctx, sid, runtime_supervisor.StopReasonRollback); err != nil {
 				rollbackErrs = append(rollbackErrs, fmt.Errorf("stop runtime instance %s: %w", sid, err))
 			}
+		}
+	}
+	if tx.scopeSeeded && tx.runtime.container.ScopeManager != nil {
+		if err := tx.runtime.removeExtensionScopeBindings(ctx, tx.extensionID); err != nil {
+			rollbackErrs = append(rollbackErrs, fmt.Errorf("remove scope bindings: %w", err))
 		}
 	}
 
@@ -1037,6 +1044,9 @@ func (r *Runtime) Uninstall(ctx context.Context, extensionID string) error {
 		}
 		if err := r.container.ExtensionStateStore.DeleteByExtension(ctx, extensionID); err != nil {
 			return fmt.Errorf("kernel: delete extension data: %w", err)
+		}
+		if err := r.deleteExtensionPluginData(extensionID); err != nil {
+			return err
 		}
 	}
 	if err := r.container.ModuleRepository.DeleteModules(ctx, extID); err != nil {

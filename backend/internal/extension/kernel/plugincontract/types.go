@@ -102,8 +102,9 @@ type HostAccess struct {
 }
 
 type FilesystemAccess struct {
-	Mode  string   `json:"mode"`
-	Roots []string `json:"roots,omitempty"`
+	Mode        string   `json:"mode"`
+	Roots       []string `json:"roots,omitempty"`
+	DurableSync bool     `json:"durableSync,omitempty"`
 }
 
 type NetworkAccess struct {
@@ -282,11 +283,16 @@ type AdapterProviderDeclaration struct {
 }
 
 type DataContract struct {
-	SchemaVersion int      `json:"schemaVersion"`
-	Scopes        []string `json:"scopes,omitempty"`
-	Backup        bool     `json:"backup,omitempty"`
-	Export        bool     `json:"export,omitempty"`
-	Uninstall     string   `json:"uninstall,omitempty"`
+	SchemaVersion int                 `json:"schemaVersion"`
+	Scopes        []string            `json:"scopes,omitempty"`
+	Backup        bool                `json:"backup,omitempty"`
+	Export        bool                `json:"export,omitempty"`
+	Uninstall     string              `json:"uninstall,omitempty"`
+	PluginData    *PluginDataContract `json:"pluginData,omitempty"`
+}
+
+type PluginDataContract struct {
+	Include []string `json:"include,omitempty"`
 }
 
 type Integrity struct {

@@ -280,7 +280,7 @@ func TestHelloReconciliationUsesAuthoritativeDesiredStateAndRequeuesInflight(t *
 	}
 
 	payload := SyncDesiredStatePayload{DesiredRevision: 9, DesiredHash: "hash-9", InstallationID: "inst-1", PetID: "pet-1", ReleaseID: "release-1"}
-	cmd, err := svc.CreateDurableCommand("u", "d", string(CommandTypeSyncDesiredState), "desired:d:9", "desired:d", 1, payload)
+	cmd, err := svc.CreateDurableCommand("u", "d", string(CommandTypeSyncDesiredState), "desired:d:inst-1:9", "desired:d:inst-1", 1, payload)
 	if err != nil {
 		t.Fatalf("create durable: %v", err)
 	}
@@ -325,7 +325,7 @@ func TestHelloReconciliationRequeuesInflightEvenWhenClientClaimsDesiredApplied(t
 	}
 
 	payload := SyncDesiredStatePayload{DesiredRevision: 9, DesiredHash: "hash-9", InstallationID: "inst-1", PetID: "pet-1", ReleaseID: "release-1"}
-	cmd, err := svc.CreateDurableCommand("u", "d", string(CommandTypeSyncDesiredState), "desired:d:9", "desired:d", 1, payload)
+	cmd, err := svc.CreateDurableCommand("u", "d", string(CommandTypeSyncDesiredState), "desired:d:inst-1:9", "desired:d:inst-1", 1, payload)
 	if err != nil {
 		t.Fatalf("create durable: %v", err)
 	}
@@ -423,7 +423,7 @@ func TestHelloReconciliationRetargetsQueuedDesiredCommandToCurrentRuntime(t *tes
 	}
 
 	payload := SyncDesiredStatePayload{DesiredRevision: 30, DesiredHash: "hash-30", InstallationID: "inst-1", PetID: "pet-1", ReleaseID: "release-1"}
-	cmd, err := svc.CreateDurableCommand("u", "d", string(CommandTypeSyncDesiredState), "desired:d:30", "desired:d", 30, payload)
+	cmd, err := svc.CreateDurableCommand("u", "d", string(CommandTypeSyncDesiredState), "desired:d:inst-1:30", "desired:d:inst-1", 30, payload)
 	if err != nil {
 		t.Fatalf("create durable: %v", err)
 	}
@@ -451,6 +451,37 @@ func TestHelloReconciliationRetargetsQueuedDesiredCommandToCurrentRuntime(t *tes
 	}
 	if len(cmds) != 1 || cmds[0].ID != cmd.ID {
 		t.Fatalf("retargeted command not dispatchable on new runtime: %#v", cmds)
+	}
+}
+
+func TestHelloReconciliationRestoresEveryDesiredInstallation(t *testing.T) {
+	db := newCommandServiceTestDB(t)
+	svc := NewCommandService(db)
+	if err := db.Exec(`CREATE TABLE desktop_pet_runtime_desired_states (
+		space_id TEXT, device_id TEXT, runtime_id TEXT, installation_id TEXT, pet_id TEXT, release_id TEXT,
+		desired_enabled INTEGER, desired_visible INTEGER, desired_action_key TEXT,
+		settings_snapshot_json TEXT, settings_revision INTEGER, desired_revision INTEGER, desired_hash TEXT
+	)`).Error; err != nil {
+		t.Fatal(err)
+	}
+	for index, id := range []string{"pet-a", "pet-b"} {
+		if err := db.Exec(`INSERT INTO desktop_pet_runtime_desired_states
+			(space_id, device_id, runtime_id, installation_id, pet_id, release_id, desired_enabled, desired_visible, desired_action_key, settings_snapshot_json, settings_revision, desired_revision, desired_hash)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			"space", "device", "runtime", id, id, "release", 1, 1, "idle", `{}`, 1, index+1, id).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	revision, err := svc.ReconcileDesiredStateOnHello("space", "device", "runtime", 0, 1)
+	if err != nil || revision != 2 {
+		t.Fatalf("revision = %d, error = %v", revision, err)
+	}
+	var commands []RuntimeCommand
+	if err := db.Where("space_id = ? AND device_id = ?", "space", "device").Find(&commands).Error; err != nil {
+		t.Fatal(err)
+	}
+	if len(commands) != 2 || commands[0].CoalesceKey == commands[1].CoalesceKey {
+		t.Fatalf("independent desired commands = %+v", commands)
 	}
 }
 

@@ -22,6 +22,9 @@ import '../core/ui_runtime/ui_provider.dart';
 import '../core/ui_runtime/ui_runtime_controller.dart';
 import '../core/ui_runtime/mobile_ui_host_event_client.dart';
 import '../core/ui_runtime/mobile_ui_host_command_host.dart';
+import '../core/ui_runtime/mobile_ui_portal_host.dart';
+import '../core/ui_runtime/mobile_ui_right_pane_host.dart';
+import '../core/ui_runtime/mobile_ui_workspace_sidebar_host.dart';
 import '../core/ui_runtime/mobile_style_runtime.dart';
 import '../core/ui_runtime/ui_theme.dart';
 import '../core/settings/appearance_preferences.dart';
@@ -637,6 +640,45 @@ class AmitiaApp extends ConsumerWidget {
                         children: [
                           if (child case final Widget currentChild)
                             currentChild,
+                          MobileUIPortalHost(
+                            context: <String, dynamic>{
+                              'route': location,
+                              'platform': 'mobile',
+                              'host': 'mobile',
+                            },
+                            actions:
+                                <String, FutureOr<dynamic> Function(dynamic)>{
+                                  'navigate': (input) {
+                                    final value = input is Map
+                                        ? input['target'] ?? input['route']
+                                        : input;
+                                    final target =
+                                        value?.toString().trim() ?? '';
+                                    if (target.isEmpty) {
+                                      throw StateError(
+                                        'portal navigate target is required',
+                                      );
+                                    }
+                                    router.go(target);
+                                    return <String, dynamic>{
+                                      'ok': true,
+                                      'target': target,
+                                    };
+                                  },
+                                },
+                          ),
+                          const MobileUIWorkspaceSidebarHost(
+                            context: <String, dynamic>{
+                              'platform': 'mobile',
+                              'host': 'mobile',
+                            },
+                          ),
+                          const MobileUIRightPaneHost(
+                            context: <String, dynamic>{
+                              'platform': 'mobile',
+                              'host': 'mobile',
+                            },
+                          ),
                           const McpInteractionGuard(),
                           if (debugLogOverlayEnabled) const DebugLogOverlay(),
                         ],

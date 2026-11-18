@@ -6,13 +6,24 @@
         class="amrp-markdown-segment"
         v-html="renderMarkdownSegment(segment.content, citationIds)"
       ></div>
-      <AmitiaCodeBlock
+      <ExtensionSlot
         v-else-if="segment.type === 'code'"
-        :code="segment.content"
-        :language="segment.language"
-        :filename="segment.filename"
-        :streaming="segment.streaming"
-      />
+        slot-id="chat.message.markdown.fence"
+        :context="{ ...(extensionContext || {}), language: segment.language, code: segment.content, filename: segment.filename, streaming: segment.streaming }"
+        :dispatch-key="segment.language || 'text'"
+        fallback="default"
+        layout="stack"
+        surface-role="message"
+        bare
+        render-fallback-while-scope-pending
+      >
+        <AmitiaCodeBlock
+          :code="segment.content"
+          :language="segment.language"
+          :filename="segment.filename"
+          :streaming="segment.streaming"
+        />
+      </ExtensionSlot>
       <AmitiaDiffBlock
         v-else-if="segment.type === 'diff'"
         :diff="segment.content"
@@ -67,16 +78,19 @@ import AmitiaTerminalBlock from "../code/AmitiaTerminalBlock.vue";
 import AmitiaLatex from "../math/AmitiaLatex.vue";
 import AmitiaMermaid from "../mermaid/AmitiaMermaid.vue";
 import AmitiaHtmlPreview from "../preview/AmitiaHtmlPreview.vue";
+import ExtensionSlot from "@/components/extension/ExtensionSlot.vue";
 
 const props = withDefaults(
   defineProps<{
     source: string;
     streaming?: boolean;
     citationIds?: string[];
+    extensionContext?: Record<string, unknown>;
   }>(),
   {
     streaming: false,
     citationIds: () => [],
+    extensionContext: () => ({}),
   },
 );
 

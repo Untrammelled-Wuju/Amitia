@@ -2,7 +2,9 @@ package schedule
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -251,6 +253,8 @@ type ScheduleHandlerContext struct {
 	InvocationID         string
 	ScopeSnapshotID      string
 	PermissionSnapshotID string
+	PromptScope          *SessionPromptScope
+	Title                string
 }
 
 func NewRuntimeHandlerTargetAdapter(fn RuntimeHandlerInvokeFunc) *RuntimeHandlerTargetAdapter {
@@ -298,6 +302,83 @@ func (a *RuntimeHandlerTargetAdapter) Execute(ctx context.Context, def *Schedule
 		Success:      result.ErrorCode == "",
 		OperationID:  opID,
 		InvocationID: invID,
+		ResultJSON:   result.ResultJSON,
+		ErrorCode:    result.ErrorCode,
+		ErrorMessage: result.ErrorMessage,
+	}, nil
+}
+
+type SessionPromptInvokeFunc func(ctx context.Context, sessionID string, prompt string, scheduleContext ScheduleHandlerContext) (*RuntimeHandlerResult, error)
+
+type SessionPromptTargetAdapter struct {
+	invokeFn SessionPromptInvokeFunc
+}
+
+func NewSessionPromptTargetAdapter(fn SessionPromptInvokeFunc) *SessionPromptTargetAdapter {
+	return &SessionPromptTargetAdapter{invokeFn: fn}
+}
+
+func (a *SessionPromptTargetAdapter) Type() TargetType { return TargetTypeSessionPrompt }
+
+func (a *SessionPromptTargetAdapter) Execute(ctx context.Context, def *ScheduleContributionDefinition, trigger *ScheduleTriggerRecord) (*TargetExecutionResult, error) {
+	if a.invokeFn == nil {
+		return &TargetExecutionResult{
+			Success:      false,
+			ErrorCode:    ErrCodeTargetNotFound,
+			ErrorMessage: "session prompt invoke function not configured",
+		}, nil
+	}
+	var input struct {
+		Prompt string `json:"prompt"`
+		Title  string `json:"dshTitle"`
+	}
+	if err := json.Unmarshal(def.Target.InputTemplate, &input); err != nil {
+		return &TargetExecutionResult{
+			Success:      false,
+			ErrorCode:    ErrCodeTargetExecutionFailed,
+			ErrorMessage: fmt.Sprintf("decode session prompt target: %v", err),
+		}, nil
+	}
+	prompt := strings.TrimSpace(input.Prompt)
+	if prompt == "" {
+		return &TargetExecutionResult{
+			Success:      false,
+			ErrorCode:    ErrCodeTargetExecutionFailed,
+			ErrorMessage: "session prompt target requires prompt",
+		}, nil
+	}
+	operationID := ""
+	invocationID := ""
+	if trigger.OperationID != nil {
+		operationID = *trigger.OperationID
+	}
+	if trigger.InvocationID != nil {
+		invocationID = *trigger.InvocationID
+	}
+	result, err := a.invokeFn(ctx, def.Target.TargetID, prompt, ScheduleHandlerContext{
+		ScheduleID:           def.ScheduleID,
+		TriggerID:            trigger.TriggerID,
+		ScheduledAt:          trigger.ScheduledAt,
+		EffectiveAt:          trigger.EffectiveAt,
+		Attempt:              trigger.Attempt,
+		OperationID:          operationID,
+		InvocationID:         invocationID,
+		ScopeSnapshotID:      trigger.ScopeSnapshotID,
+		PermissionSnapshotID: trigger.PermissionSnapshotID,
+		PromptScope:          def.SessionPromptScope,
+		Title:                strings.TrimSpace(input.Title),
+	})
+	if err != nil {
+		return &TargetExecutionResult{
+			Success:      false,
+			ErrorCode:    ErrCodeTargetExecutionFailed,
+			ErrorMessage: err.Error(),
+		}, nil
+	}
+	return &TargetExecutionResult{
+		Success:      result.ErrorCode == "",
+		OperationID:  operationID,
+		InvocationID: invocationID,
 		ResultJSON:   result.ResultJSON,
 		ErrorCode:    result.ErrorCode,
 		ErrorMessage: result.ErrorMessage,

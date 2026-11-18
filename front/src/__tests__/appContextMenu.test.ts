@@ -14,6 +14,11 @@ import {
   openContextMenu,
 } from "@/components/context-menu/contextMenuStore";
 
+const transparentSlotStub = {
+  props: ["slotId", "dispatchKey", "context"],
+  template: "<div><slot /></div>",
+};
+
 function pressKey(key: string) {
   const target = document.activeElement instanceof HTMLElement ? document.activeElement : document.body;
   const event = new KeyboardEvent("keydown", {
@@ -33,7 +38,10 @@ describe("桌面端通用右键菜单", () => {
 
   it("在非消息区域拦截原生菜单并仅提供主题切换", async () => {
     const wrapper = mount(AppContextMenu, {
-      global: { plugins: [ElementPlus] },
+      global: {
+        plugins: [ElementPlus],
+        stubs: { ExtensionSlot: transparentSlotStub },
+      },
     });
     const target = document.createElement("div");
     target.textContent = "通用页面内容";
@@ -65,7 +73,10 @@ describe("桌面端通用右键菜单", () => {
 
   it("聚焦首个可用项并支持单键直接执行", async () => {
     const wrapper = mount(AppContextMenu, {
-      global: { plugins: [ElementPlus] },
+      global: {
+        plugins: [ElementPlus],
+        stubs: { ExtensionSlot: transparentSlotStub },
+      },
     });
     const disabledAction = vi.fn();
     const openAction = vi.fn();
@@ -108,7 +119,10 @@ describe("桌面端通用右键菜单", () => {
 
   it("支持方向键、首尾键和回车执行", async () => {
     const wrapper = mount(AppContextMenu, {
-      global: { plugins: [ElementPlus] },
+      global: {
+        plugins: [ElementPlus],
+        stubs: { ExtensionSlot: transparentSlotStub },
+      },
     });
     const firstAction = vi.fn();
     const lastAction = vi.fn();
@@ -140,7 +154,10 @@ describe("桌面端通用右键菜单", () => {
 
   it("支持子菜单展开、方向导航、返回与分层退出", async () => {
     const wrapper = mount(AppContextMenu, {
-      global: { plugins: [ElementPlus] },
+      global: {
+        plugins: [ElementPlus],
+        stubs: { ExtensionSlot: transparentSlotStub },
+      },
     });
     openContextMenu({
       x: 80,
@@ -185,6 +202,74 @@ describe("桌面端通用右键菜单", () => {
     pressKey("Escape");
     expect(contextMenuState.visible).toBe(false);
 
+    wrapper.unmount();
+  });
+
+  it("按 action owner key 提供内容和图标替换槽", async () => {
+    const wrapper = mount(AppContextMenu, {
+      global: {
+        plugins: [ElementPlus],
+        stubs: {
+          ExtensionSlot: {
+            props: ["slotId", "dispatchKey", "context"],
+            template:
+              '<div class="context-slot" :data-slot-id="slotId" :data-dispatch-key="dispatchKey" :data-slot-context="JSON.stringify(context)"><slot /></div>',
+          },
+        },
+      },
+    });
+    openContextMenu({
+      x: 80,
+      y: 60,
+      title: "菜单",
+      items: [
+        {
+          id: "root-action",
+          iconKey: "root-icon",
+          label: "根操作",
+          children: [
+            {
+              id: "child-action",
+              iconKey: "child-icon",
+              label: "子操作",
+            },
+          ],
+        },
+      ],
+    });
+    await nextTick();
+    await nextTick();
+    pressKey("ArrowRight");
+    await nextTick();
+    await nextTick();
+
+    const slots = Array.from(
+      document.body.querySelectorAll<HTMLElement>("[data-slot-id]"),
+    );
+    expect(
+      slots
+        .filter((slot) => slot.dataset.slotId === "desktop.context_menu.content")
+        .map((slot) => slot.dataset.dispatchKey),
+    ).toEqual(["root-action", "child-action"]);
+    expect(
+      slots
+        .filter((slot) => slot.dataset.slotId === "desktop.context_menu.icon")
+        .map((slot) => slot.dataset.dispatchKey),
+    ).toEqual(["root-icon", "child-icon"]);
+    const childContext = JSON.parse(
+      slots.find(
+        (slot) =>
+          slot.dataset.slotId === "desktop.context_menu.content" &&
+          slot.dataset.dispatchKey === "child-action",
+      )?.dataset.slotContext || "{}",
+    );
+    expect(childContext).toMatchObject({
+      actionId: "child-action",
+      ownerKey: "child-action",
+      iconKey: "child-icon",
+      level: "submenu",
+      menuTitle: "菜单",
+    });
     wrapper.unmount();
   });
 });

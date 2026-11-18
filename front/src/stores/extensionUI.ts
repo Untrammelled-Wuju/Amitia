@@ -67,7 +67,7 @@ export interface SlotSnapshot {
   slotId: string;
   contractVersion: number;
   supportedKinds?: string[];
-  kind: "single" | "list" | "keyed" | "chain";
+  kind: "single" | "list" | "keyed" | "chain" | "hoc";
   layout: "inline" | "stack" | "row" | "grid" | "tabs" | "panel" | "drawer" | "modal" | "hidden";
   fallbackPolicy: "none" | "skeleton" | "empty" | "default";
   description?: string;
@@ -78,6 +78,7 @@ export interface SlotSnapshot {
   parentSlotId?: string;
   dynamic?: boolean;
   scope?: "root" | "session-maybe" | "session";
+  allowRootChild?: boolean;
   declarationEpoch?: number;
   performanceBudget?: {
     firstPaint: number;

@@ -5,8 +5,23 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
   <header class="chat-header" data-amitia-ui="app.header">
     <div class="header-leading">
+      <ExtensionSlot
+        slot-id="chat.header.leading"
+        :context="headerSlotContext"
+        fallback="none"
+        layout="inline"
+        surface-role="header"
+      />
       <div class="header-info">
-        <span class="header-conv-name">{{ convTitle || "新对话" }}</span>
+        <ExtensionSlot
+          slot-id="chat.header.lineage"
+          :context="headerSlotContext"
+          fallback="default"
+          layout="inline"
+          surface-role="header"
+        >
+          <span class="header-conv-name">{{ convTitle || "新对话" }}</span>
+        </ExtensionSlot>
       </div>
       <span
         v-if="charAvatar || charName"
@@ -90,6 +105,13 @@ SPDX-License-Identifier: AGPL-3.0-only
           </el-dropdown-menu>
         </template>
       </el-dropdown>
+      <ExtensionSlot
+        slot-id="chat.header.corner"
+        :context="headerSlotContext"
+        fallback="none"
+        layout="inline"
+        surface-role="header"
+      />
     </div>
   </header>
 </template>
@@ -113,6 +135,7 @@ import {
   Plus,
 } from "@element-plus/icons-vue";
 import type { OwnedGroupMember } from "@/runtime/device-owned-chat";
+import ExtensionSlot from "./extension/ExtensionSlot.vue";
 
 const props = withDefaults(defineProps<{
   charName: string;
@@ -131,6 +154,19 @@ const props = withDefaults(defineProps<{
   groupMembers: () => [],
 });
 const characterInitial = computed(() => String(props.charName || "角").trim().slice(0, 1).toUpperCase());
+const headerSlotContext = computed(() => ({
+  characterId: "",
+  conversationId: props.convId,
+  sessionId: props.convId,
+  lineageSessionId: props.convId,
+  displayTitle: props.convTitle || "新对话",
+  title: props.convTitle || "新对话",
+  characterName: props.charName,
+  characterAvatar: props.charAvatar,
+  messagesCount: props.messagesCount,
+  isGroup: props.isGroup === true,
+  callActive: props.callActive,
+}));
 
 const emit = defineEmits<{
   clear: [];

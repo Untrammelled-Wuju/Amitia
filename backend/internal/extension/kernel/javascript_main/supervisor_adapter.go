@@ -126,6 +126,7 @@ func (f *SupervisorFactory) resolveHostAccess(spec runtime_supervisor.InstanceSp
 	if spec.HostAccess.Filesystem.Mode != "" {
 		hostAccess.FilesystemMode = strings.ToLower(strings.TrimSpace(spec.HostAccess.Filesystem.Mode))
 	}
+	hostAccess.FilesystemDurableSync = spec.HostAccess.Filesystem.DurableSync
 	if spec.HostAccess.Network.Mode != "" {
 		hostAccess.NetworkMode = strings.ToLower(strings.TrimSpace(spec.HostAccess.Network.Mode))
 	}

@@ -26,11 +26,12 @@ const (
 )
 
 const (
-	EntryBuiltinNative  EntryType = "builtin_native"
-	EntryDeclarative    EntryType = "declarative"
-	EntryWebModule      EntryType = "web_module"
-	EntrySchemaRenderer EntryType = "schema_renderer"
-	EntryExternalWebUI  EntryType = "external_web_ui"
+	EntryBuiltinNative    EntryType = "builtin_native"
+	EntryDeclarative      EntryType = "declarative"
+	EntryWebModule        EntryType = "web_module"
+	EntryMobileWebRuntime EntryType = "mobile_web_runtime"
+	EntrySchemaRenderer   EntryType = "schema_renderer"
+	EntryExternalWebUI    EntryType = "external_web_ui"
 )
 
 const (
@@ -96,7 +97,7 @@ func (c Capability) Valid() bool { _, ok := knownCapabilities[c]; return ok }
 func (m Mode) Valid() bool       { return m == ModeReplace || m == ModeCompose || m == ModeAugment }
 func (e EntryType) Valid() bool {
 	switch e {
-	case EntryBuiltinNative, EntryDeclarative, EntryWebModule, EntrySchemaRenderer, EntryExternalWebUI:
+	case EntryBuiltinNative, EntryDeclarative, EntryWebModule, EntryMobileWebRuntime, EntrySchemaRenderer, EntryExternalWebUI:
 		return true
 	default:
 		return false
@@ -254,6 +255,20 @@ func (d ProviderDefinition) Validate() error {
 			}
 			if strings.TrimSpace(entry.StylePath) != "" && strings.TrimSpace(entry.StyleHash) == "" {
 				return fmt.Errorf("ui_provider: web_module styleHash required when stylePath is set for %s", platform)
+			}
+		case EntryMobileWebRuntime:
+			platformKey := strings.ToLower(strings.TrimSpace(platform))
+			if !strings.HasPrefix(platformKey, "android") && !strings.HasPrefix(platformKey, "ios") && platformKey != "mobile" && !strings.HasPrefix(platformKey, "flutter_") {
+				return fmt.Errorf("ui_provider: mobile_web_runtime requires an Android/iOS/mobile platform entry, got %s", platform)
+			}
+			if strings.TrimSpace(entry.Path) == "" {
+				return fmt.Errorf("ui_provider: mobile_web_runtime path required for %s", platform)
+			}
+			if strings.TrimSpace(entry.ContentHash) == "" {
+				return fmt.Errorf("ui_provider: mobile_web_runtime contentHash required for %s", platform)
+			}
+			if strings.TrimSpace(entry.StylePath) != "" && strings.TrimSpace(entry.StyleHash) == "" {
+				return fmt.Errorf("ui_provider: mobile_web_runtime styleHash required when stylePath is set for %s", platform)
 			}
 		case EntrySchemaRenderer:
 			if strings.TrimSpace(entry.ContributionID) == "" {

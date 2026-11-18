@@ -13,6 +13,7 @@ import '../../../../core/errors/original_error.dart';
 import '../../../../core/runtime/backend/mobile_backend_providers.dart';
 import '../../../../core/runtime/backend/mobile_deployment_mode.dart';
 import '../../../../core/services/core_configuration_guard.dart';
+import '../../../../core/services/onboarding_completion_store.dart';
 import '../../../../core/services/onboarding_service.dart';
 import '../../../../core/services/providers.dart';
 import '../steps/onboarding_center_step.dart';
@@ -98,12 +99,19 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       print('[original-error] $error\n$stackTrace');
     }
     final config = ref.read(mobileDeploymentConfigProvider);
+    var gateError = '';
+    try {
+      gateError = (await ref.read(onboardingGateProvider.future)).errorText;
+    } catch (error, stackTrace) {
+      print('[original-error] $error\n$stackTrace');
+    }
     if (!mounted) return;
     setState(() {
       _consentAccepted = accepted;
       _consentLoaded = true;
       _deployMode = config.mode == MobileDeploymentMode.cloud ? 1 : 0;
       _remoteCoreCtrl.text = config.remoteCoreUri ?? '';
+      if (gateError.isNotEmpty) _stepError = gateError;
     });
   }
 
@@ -665,9 +673,9 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
   }
 
   Future<void> _completeOnboarding() async {
-    await ref
-        .read(onboardingServiceProvider)
-        .complete(deployMode: _deployMode == 0 ? 'mobile-local' : 'cloud-web');
+    await markOnboardingCompleted();
+    ref.invalidate(onboardingGateProvider);
+    await ref.read(onboardingGateProvider.future);
     if (!mounted) return;
     context.go(AppRoutes.chat);
   }

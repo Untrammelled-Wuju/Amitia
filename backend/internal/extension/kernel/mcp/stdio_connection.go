@@ -75,6 +75,13 @@ func (c *CanonicalStdioConnection) ServerID() string {
 func (c *CanonicalStdioConnection) State() MCPStdioServerState {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
+	return c.stateLocked()
+}
+
+func (c *CanonicalStdioConnection) stateLocked() MCPStdioServerState {
+	if c.state == MCPStdioStateReady && c.connection != nil && c.connection.State() != client.StateReady {
+		return MCPStdioStateFailed
+	}
 	return c.state
 }
 
@@ -211,7 +218,7 @@ func (c *CanonicalStdioConnection) Close(ctx context.Context) error {
 func (c *CanonicalStdioConnection) ClientConnection() (*client.Connection, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return c.connection, c.state == MCPStdioStateReady && c.connection != nil
+	return c.connection, c.stateLocked() == MCPStdioStateReady && c.connection != nil
 }
 
 // Call sends a JSON-RPC request to the MCP server.
@@ -244,11 +251,7 @@ func (c *CanonicalStdioConnection) ListTools(ctx context.Context) ([]discovery.T
 
 // Health returns the current health status.
 func (c *CanonicalStdioConnection) Health() capability.HealthStatus {
-	c.mu.RLock()
-	state := c.state
-	c.mu.RUnlock()
-
-	switch state {
+	switch c.State() {
 	case MCPStdioStateReady:
 		return capability.HealthReady
 	case MCPStdioStateFailed:

@@ -28,12 +28,12 @@ type RepositoryV2 interface {
 	CreateRuntimeSettingsTx(tx *gorm.DB, settings *RuntimeSettings) error
 	UpdateRuntimeSettingsCAS(tx *gorm.DB, installationID, spaceID, deviceID string, expectedRevision int, updates map[string]interface{}) (*RuntimeSettings, error)
 
-	GetActiveBindingForSpaceDeviceTx(tx *gorm.DB, spaceID, deviceID string) (*binding.DeviceActiveInstallationBinding, error)
+	GetActiveBindingForSpaceDeviceTx(tx *gorm.DB, spaceID, deviceID, installationID string) (*binding.DeviceActiveInstallationBinding, error)
 	UpsertActiveBindingTx(tx *gorm.DB, binding *binding.DeviceActiveInstallationBinding) error
-	DeleteActiveBindingTx(tx *gorm.DB, spaceID, deviceID string) error
+	DeleteActiveBindingTx(tx *gorm.DB, spaceID, deviceID, installationID string) error
 	InsertBindingHistoryTx(tx *gorm.DB, entry *binding.BindingHistoryEntry) error
 
-	GetRuntimeDesiredStateTx(tx *gorm.DB, spaceID, deviceID string) (*desired.RuntimeDesiredState, error)
+	GetRuntimeDesiredStateTx(tx *gorm.DB, spaceID, deviceID, installationID string) (*desired.RuntimeDesiredState, error)
 	UpsertRuntimeDesiredStateCAS(tx *gorm.DB, spaceID, deviceID string, state *desired.RuntimeDesiredState, expectedRevision int64) (*desired.RuntimeDesiredState, error)
 	AllocateDeviceDesiredRevisionCAS(tx *gorm.DB, spaceID, deviceID string) (int64, error)
 	GetDeviceDesiredRevisionCounterTx(tx *gorm.DB, spaceID, deviceID string) (*desired.DeviceDesiredRevisionCounter, error)

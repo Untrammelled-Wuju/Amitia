@@ -1,0 +1,2978 @@
+{
+  "schemaVersion": 1,
+  "plugin": {
+    "id": "com.amitia/dsh-compatible-host",
+    "name": {
+      "default": "DeepSeek Harness 插件兼容宿主"
+    },
+    "description": {
+      "default": "在一个普通 Amitia 插件中安装 DSH 插件，并将 DSH 能力映射为 Amitia 通用插件贡献。"
+    },
+    "version": "0.2.42",
+    "license": "AGPL-3.0-only",
+    "homepage": "https://amitia.untrammelled.top",
+    "categories": [
+      "developer",
+      "compatibility"
+    ],
+    "keywords": [
+      "dsh",
+      "deepseek-harness",
+      "plugin"
+    ],
+    "publisher": {
+      "id": "com.amitia",
+      "displayName": "Amitia",
+      "trustLevel": "official"
+    },
+    "metadata": {
+      "system.defaultInstall": false,
+      "system.defaultEnabled": false
+    }
+  },
+  "compatibility": {
+    "minHostVersion": "0.1.0",
+    "platforms": [
+      "windows",
+      "linux",
+      "macos",
+      "android"
+    ]
+  },
+  "modules": [
+    {
+      "id": "dsh-compatible-runtime",
+      "name": {
+        "default": "DSH 兼容宿主运行时"
+      },
+      "description": {
+        "default": "管理 DSH 子插件状态并执行到 Amitia 动态贡献的映射。"
+      },
+      "runtime": {
+        "adapter": "javascript",
+        "entry": "dist/index.js",
+        "timeout": "600s",
+        "memoryBytes": 536870912,
+        "maxProcesses": 8,
+        "capabilities": {
+          "network": true,
+          "filesystem": true
+        },
+        "hostAccess": {
+          "filesystem": {
+            "mode": "read_write",
+            "roots": [
+              "package",
+              "plugin_data"
+            ],
+            "durableSync": true
+          },
+          "network": {
+            "mode": "host"
+          },
+          "process": {
+            "mode": "direct",
+            "maxProcesses": 8
+          }
+        }
+      },
+      "dynamic": {
+        "allowedAdapters": [
+          "tool",
+          "event",
+          "hook",
+          "schedule",
+          "ui",
+          "ui_provider",
+          "ui_slot",
+          "provider",
+          "background",
+          "mcp_server"
+        ],
+        "maxContributions": 512,
+        "maxTools": 256,
+        "maxRoutes": 64,
+        "maxServices": 64,
+        "allowUnregister": true
+      },
+      "contributions": [
+        {
+          "id": "dsh-compatible-command",
+          "kind": "tool",
+          "adapter": "tool",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 兼容宿主命令"
+          },
+          "description": {
+            "default": "查询、注册、启停和移除容器内的 DSH 子插件记录。"
+          },
+          "spec": {
+            "toolId": "com.amitia/dsh-compatible-host/command",
+            "modelName": "dsh_compatible_host",
+            "handlerName": "command",
+            "inputSchema": {
+              "type": "object",
+              "required": [
+                "action"
+              ],
+              "properties": {
+                "action": {
+                  "type": "string",
+                  "enum": [
+                    "status",
+                    "list",
+                    "register",
+                    "install",
+                    "set-enabled",
+                    "remove",
+                    "reset",
+                    "diagnose",
+                    "invoke",
+                    "client-source",
+                    "jobs-list",
+                    "jobs-kill",
+                    "conversation-list",
+                    "conversation-scope",
+                    "conversation-read",
+                    "conversation-message-send",
+                    "conversation-search",
+                    "conversation-create",
+                    "conversation-delete",
+                    "conversation-archive",
+                    "conversation-fork",
+                    "conversation-pin",
+                    "skill-list",
+                    "model-defaults",
+                    "directory-list",
+                    "directory-create",
+                    "restore-tree",
+                    "project-catalog",
+                    "project-workspaces",
+                    "project-create",
+                    "project-update",
+                    "project-delete",
+                    "workspace-files-stat",
+                    "workspace-files-read",
+                    "workspace-files-read-bytes",
+                    "workspace-files-list",
+                    "workspace-files-search",
+                    "tool-result-watch",
+                    "schedule-create",
+                    "schedule-catalog",
+                    "schedule-list",
+                    "schedule-view",
+                    "schedule-cancel",
+                    "schedule-run",
+                    "schedule-delete-inactive",
+                    "schedule-update",
+                    "schedule-history"
+                  ]
+                },
+                "plugin": {
+                  "type": "object"
+                },
+                "spec": {
+                  "type": "string"
+                },
+                "pluginId": {
+                  "type": "string"
+                },
+                "model": {
+                  "type": "string"
+                },
+                "prompt": {
+                  "type": "string"
+                },
+                "cwd": {
+                  "type": "string"
+                },
+                "dispose": {
+                  "type": "boolean"
+                },
+                "toolProbe": {
+                  "type": "boolean"
+                },
+                "approvalProbe": {
+                  "type": "boolean"
+                },
+                "approvalTimeoutMs": {
+                  "type": "number"
+                },
+                "toolName": {
+                  "type": "string"
+                },
+                "entryId": {
+                  "type": "string"
+                },
+                "toolInput": {
+                  "type": "object"
+                },
+                "callId": {
+                  "type": "string"
+                },
+                "jobId": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "projectId": {
+                  "type": "string"
+                },
+                "conversationId": {
+                  "type": "string"
+                },
+                "boundarySequence": {
+                  "type": "integer"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "content": {
+                  "type": "string"
+                },
+                "sessionId": {
+                  "type": "string"
+                },
+                "seq": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "path": {
+                  "type": "string"
+                },
+                "scopeSnapshotId": {
+                  "type": "string"
+                },
+                "channel": {
+                  "type": "string"
+                },
+                "peerId": {
+                  "type": "string"
+                },
+                "requestId": {
+                  "type": "string"
+                },
+                "request": {
+                  "type": "object"
+                },
+                "patch": {
+                  "type": "object"
+                },
+                "expectedUpdatedAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "before": {
+                  "type": "string"
+                },
+                "scheduleId": {
+                  "type": "string"
+                },
+                "active": {
+                  "type": "boolean"
+                },
+                "limit": {
+                  "type": "number"
+                },
+                "offset": {
+                  "type": "number"
+                },
+                "length": {
+                  "type": "number"
+                },
+                "enabled": {
+                  "type": "boolean"
+                },
+                "archived": {
+                  "type": "boolean"
+                },
+                "stopActivity": {
+                  "type": "boolean"
+                },
+                "cursor": {
+                  "type": "string"
+                },
+                "spaceId": {
+                  "type": "string"
+                },
+                "characterId": {
+                  "type": "string"
+                },
+                "directoryPath": {
+                  "type": "string"
+                },
+                "pinned": {
+                  "type": "boolean"
+                },
+                "hidden": {
+                  "type": "boolean"
+                },
+                "approvalConversationId": {
+                  "type": "string"
+                },
+                "commandLine": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "outputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "riskLevel": "high",
+            "sideEffect": "write",
+            "timeoutMs": 600000,
+            "runtime": {
+              "runtimeType": "javascript",
+              "handlerName": "command"
+            }
+          },
+          "requiredPermissions": [
+            "storage.state.read",
+            "storage.state.write",
+            "service.network.request",
+            "service.process.spawn",
+            "service.files.extension_data",
+            "conversation.read",
+            "conversation.manage",
+            "project.read",
+            "project.manage",
+            "workspace.read",
+            "schedule.create",
+            "schedule.manage"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "dsh-compatible-ui",
+      "name": {
+        "default": "DSH 插件兼容宿主页面"
+      },
+      "description": {
+        "default": "查看和管理容器中的 DSH 子插件。"
+      },
+      "dynamic": {
+        "allowedAdapters": [
+          "ui",
+          "ui_slot",
+          "ui_provider"
+        ],
+        "maxContributions": 128,
+        "maxTools": 0,
+        "maxRoutes": 16,
+        "maxServices": 0,
+        "allowUnregister": true
+      },
+      "contributions": [
+        {
+          "id": "dsh-compatible-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 插件兼容宿主"
+          },
+          "description": {
+            "default": "管理安装在普通 Amitia 插件内部的 DSH 子插件。"
+          },
+          "spec": {
+            "contribution_id": "dsh-compatible-page",
+            "extension_id": "com.amitia/dsh-compatible-host",
+            "module_id": "dsh-compatible-ui",
+            "kind": "web_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "DSH 插件兼容宿主"
+              },
+              "description": {
+                "default": "管理安装在该普通 Amitia 插件中的 DSH 子插件。"
+              },
+              "icon": "extension"
+            },
+            "entry": {
+              "type": "client_module",
+              "path": "modules/dsh-compatible-ui/desktop/index.mjs",
+              "content_hash": "pending"
+            },
+            "sandbox": {
+              "type": "client_module"
+            },
+            "ordering": {
+              "priority": 500
+            },
+            "visibility": {
+              "platforms": [
+                "windows",
+                "linux",
+                "macos"
+              ]
+            },
+            "dispatch": {
+              "entry_key": "dsh-compatible-host",
+              "cell_id": "dsh-compatible-host"
+            },
+            "actions": [
+              {
+                "action_id": "command",
+                "title": {
+                  "default": "执行 DSH 兼容宿主操作"
+                },
+                "target": {
+                  "type": "tool",
+                  "tool_id": "com.amitia/dsh-compatible-host/command"
+                },
+                "risk_level": "high"
+              }
+            ],
+            "integrity": {
+              "definition_hash": "dsh-compatible-page-v1"
+            }
+          },
+          "requiredPermissions": [
+            "tool.invoke"
+          ]
+        },
+        {
+          "id": "dsh-compatible-page-provider",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 插件兼容宿主页面 Provider"
+          },
+          "description": {
+            "default": "按桌面、Android 和 iOS 分别声明 DSH 容器管理页面入口。"
+          },
+          "spec": {
+            "providerId": "dsh-compatible-page-provider",
+            "capability": "page.provider",
+            "mode": "replace",
+            "priority": 500,
+            "placement": "any",
+            "trustLevel": "official",
+            "entries": {
+              "electron_linux": {
+                "contributionId": "dsh-compatible-page",
+                "type": "web_module",
+                "path": "modules/dsh-compatible-ui/desktop/index.mjs",
+                "contentHash": "pending"
+              },
+              "electron_macos": {
+                "contributionId": "dsh-compatible-page",
+                "type": "web_module",
+                "path": "modules/dsh-compatible-ui/desktop/index.mjs",
+                "contentHash": "pending"
+              },
+              "electron_windows": {
+                "contributionId": "dsh-compatible-page",
+                "type": "web_module",
+                "path": "modules/dsh-compatible-ui/desktop/index.mjs",
+                "contentHash": "pending"
+              },
+              "web": {
+                "contributionId": "dsh-compatible-page",
+                "type": "web_module",
+                "path": "modules/dsh-compatible-ui/desktop/index.mjs",
+                "contentHash": "pending"
+              },
+              "android": {
+                "contributionId": "dsh-compatible-mobile-page",
+                "type": "mobile_web_runtime",
+                "path": "modules/dsh-compatible-ui/mobile/index.mjs",
+                "stylePath": "modules/dsh-compatible-ui/mobile/index.css",
+                "contentHash": "pending",
+                "styleHash": "pending"
+              },
+              "ios": {
+                "contributionId": "dsh-compatible-mobile-page",
+                "type": "mobile_web_runtime",
+                "path": "modules/dsh-compatible-ui/mobile/index.mjs",
+                "stylePath": "modules/dsh-compatible-ui/mobile/index.css",
+                "contentHash": "pending",
+                "styleHash": "pending"
+              },
+              "mobile": {
+                "contributionId": "dsh-compatible-mobile-page",
+                "type": "mobile_web_runtime",
+                "path": "modules/dsh-compatible-ui/mobile/index.mjs",
+                "stylePath": "modules/dsh-compatible-ui/mobile/index.css",
+                "contentHash": "pending",
+                "styleHash": "pending"
+              }
+            },
+            "metadata": {
+              "title": "DSH 插件兼容宿主"
+            }
+          },
+          "requiredPermissions": [
+            "tool.invoke"
+          ]
+        },
+        {
+          "id": "dsh-compatible-mobile-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 插件兼容宿主手机页面"
+          },
+          "description": {
+            "default": "在 Android 和 iOS 上管理安装于普通 Amitia 插件中的 DSH 子插件。"
+          },
+          "spec": {
+            "contribution_id": "dsh-compatible-mobile-page",
+            "extension_id": "com.amitia/dsh-compatible-host",
+            "module_id": "dsh-compatible-ui",
+            "kind": "web_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "DSH 插件兼容宿主"
+              },
+              "description": {
+                "default": "管理安装在该普通 Amitia 插件中的 DSH 子插件。"
+              },
+              "icon": "extension"
+            },
+            "entry": {
+              "type": "mobile_web_runtime",
+              "path": "modules/dsh-compatible-ui/mobile/index.mjs",
+              "style_path": "modules/dsh-compatible-ui/mobile/index.css",
+              "content_hash": "pending",
+              "style_hash": "pending"
+            },
+            "sandbox": {
+              "type": "mobile_web_runtime"
+            },
+            "ordering": {
+              "priority": 500
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "dispatch": {
+              "entry_key": "dsh-compatible-mobile-page",
+              "cell_id": "dsh-compatible-mobile-page"
+            },
+            "actions": [
+              {
+                "action_id": "command",
+                "title": {
+                  "default": "执行 DSH 兼容宿主操作"
+                },
+                "target": {
+                  "type": "tool",
+                  "tool_id": "com.amitia/dsh-compatible-host/command"
+                },
+                "risk_level": "high"
+              }
+            ],
+            "integrity": {
+              "definition_hash": "dsh-compatible-mobile-page-v1"
+            }
+          },
+          "requiredPermissions": [
+            "tool.invoke"
+          ]
+        },
+        {
+          "id": "dsh-mobile-shell-quota-notice",
+          "kind": "status_item",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 应用额度通知"
+          },
+          "spec": {
+            "contribution_id": "dsh-mobile-shell-quota-notice",
+            "extension_id": "com.amitia/dsh-compatible-host",
+            "module_id": "dsh-compatible-ui",
+            "kind": "status_item",
+            "slot": {
+              "slot_id": "app.shell.quota_notice",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "DSH 应用额度通知"
+              }
+            },
+            "entry": {
+              "type": "mobile_web_runtime",
+              "path": "modules/dsh-compatible-mobile-client/index.mjs",
+              "style_path": "modules/dsh-compatible-mobile-client/index.css",
+              "content_hash": "pending",
+              "style_hash": "pending"
+            },
+            "sandbox": {
+              "type": "mobile_web_runtime"
+            },
+            "ordering": {
+              "priority": 410
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "dispatch": {
+              "entry_key": "dsh-mobile-shell-quota-notice",
+              "cell_id": "dsh-mobile-shell-quota-notice"
+            },
+            "integrity": {
+              "definition_hash": "dsh-mobile-shell-quota-notice-v1"
+            }
+          }
+        },
+        {
+          "id": "dsh-mobile-shell-bottom",
+          "kind": "panel",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 应用底部内容"
+          },
+          "spec": {
+            "contribution_id": "dsh-mobile-shell-bottom",
+            "extension_id": "com.amitia/dsh-compatible-host",
+            "module_id": "dsh-compatible-ui",
+            "kind": "panel",
+            "slot": {
+              "slot_id": "app.shell.bottom",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "DSH 应用底部内容"
+              }
+            },
+            "entry": {
+              "type": "mobile_web_runtime",
+              "path": "modules/dsh-compatible-mobile-client/index.mjs",
+              "style_path": "modules/dsh-compatible-mobile-client/index.css",
+              "content_hash": "pending",
+              "style_hash": "pending"
+            },
+            "sandbox": {
+              "type": "mobile_web_runtime"
+            },
+            "ordering": {
+              "priority": 410
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "dispatch": {
+              "entry_key": "dsh-mobile-shell-bottom",
+              "cell_id": "dsh-mobile-shell-bottom"
+            },
+            "integrity": {
+              "definition_hash": "dsh-mobile-shell-bottom-v1"
+            }
+          }
+        },
+        {
+          "id": "dsh-mobile-portal-overlay",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 手机浮层"
+          },
+          "spec": {
+            "contribution_id": "dsh-mobile-portal-overlay",
+            "extension_id": "com.amitia/dsh-compatible-host",
+            "module_id": "dsh-compatible-ui",
+            "kind": "web_page",
+            "slot": {
+              "slot_id": "ui.portal.overlay",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "DSH 手机浮层"
+              }
+            },
+            "entry": {
+              "type": "mobile_web_runtime",
+              "path": "modules/dsh-compatible-mobile-client/index.mjs",
+              "style_path": "modules/dsh-compatible-mobile-client/index.css",
+              "content_hash": "pending",
+              "style_hash": "pending"
+            },
+            "sandbox": {
+              "type": "mobile_web_runtime"
+            },
+            "ordering": {
+              "priority": 420
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "dispatch": {
+              "entry_key": "dsh-mobile-portal-overlay",
+              "cell_id": "dsh-mobile-portal-overlay"
+            },
+            "integrity": {
+              "definition_hash": "dsh-mobile-portal-overlay-v1"
+            }
+          }
+        },
+        {
+          "id": "dsh-mobile-portal-modal",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 手机模态框"
+          },
+          "spec": {
+            "contribution_id": "dsh-mobile-portal-modal",
+            "extension_id": "com.amitia/dsh-compatible-host",
+            "module_id": "dsh-compatible-ui",
+            "kind": "web_page",
+            "slot": {
+              "slot_id": "ui.portal.modal",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "DSH 手机模态框"
+              }
+            },
+            "entry": {
+              "type": "mobile_web_runtime",
+              "path": "modules/dsh-compatible-mobile-client/index.mjs",
+              "style_path": "modules/dsh-compatible-mobile-client/index.css",
+              "content_hash": "pending",
+              "style_hash": "pending"
+            },
+            "sandbox": {
+              "type": "mobile_web_runtime"
+            },
+            "ordering": {
+              "priority": 420
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "dispatch": {
+              "entry_key": "dsh-mobile-portal-modal",
+              "cell_id": "dsh-mobile-portal-modal"
+            },
+            "integrity": {
+              "definition_hash": "dsh-mobile-portal-modal-v1"
+            }
+          }
+        },
+        {
+          "id": "dsh-mobile-portal-drawer",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 手机抽屉"
+          },
+          "spec": {
+            "contribution_id": "dsh-mobile-portal-drawer",
+            "extension_id": "com.amitia/dsh-compatible-host",
+            "module_id": "dsh-compatible-ui",
+            "kind": "web_page",
+            "slot": {
+              "slot_id": "ui.portal.drawer",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "DSH 手机抽屉"
+              }
+            },
+            "entry": {
+              "type": "mobile_web_runtime",
+              "path": "modules/dsh-compatible-mobile-client/index.mjs",
+              "style_path": "modules/dsh-compatible-mobile-client/index.css",
+              "content_hash": "pending",
+              "style_hash": "pending"
+            },
+            "sandbox": {
+              "type": "mobile_web_runtime"
+            },
+            "ordering": {
+              "priority": 420
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "dispatch": {
+              "entry_key": "dsh-mobile-portal-drawer",
+              "cell_id": "dsh-mobile-portal-drawer"
+            },
+            "integrity": {
+              "definition_hash": "dsh-mobile-portal-drawer-v1"
+            }
+          }
+        },
+        {
+          "id": "dsh-mobile-portal-toast",
+          "kind": "status_item",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 手机提示"
+          },
+          "spec": {
+            "contribution_id": "dsh-mobile-portal-toast",
+            "extension_id": "com.amitia/dsh-compatible-host",
+            "module_id": "dsh-compatible-ui",
+            "kind": "status_item",
+            "slot": {
+              "slot_id": "ui.portal.toast",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "DSH 手机提示"
+              }
+            },
+            "entry": {
+              "type": "mobile_web_runtime",
+              "path": "modules/dsh-compatible-mobile-client/index.mjs",
+              "style_path": "modules/dsh-compatible-mobile-client/index.css",
+              "content_hash": "pending",
+              "style_hash": "pending"
+            },
+            "sandbox": {
+              "type": "mobile_web_runtime"
+            },
+            "ordering": {
+              "priority": 420
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "dispatch": {
+              "entry_key": "dsh-mobile-portal-toast",
+              "cell_id": "dsh-mobile-portal-toast"
+            },
+            "integrity": {
+              "definition_hash": "dsh-mobile-portal-toast-v1"
+            }
+          }
+        },
+        {
+          "id": "dsh-mobile-chat-header-action",
+          "kind": "action",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 聊天顶部操作"
+          },
+          "spec": {
+            "contribution_id": "dsh-mobile-chat-header-action",
+            "extension_id": "com.amitia/dsh-compatible-host",
+            "module_id": "dsh-compatible-ui",
+            "kind": "action",
+            "slot": {
+              "slot_id": "chat.header.action",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "DSH 聊天顶部操作"
+              }
+            },
+            "entry": {
+              "type": "mobile_web_runtime",
+              "path": "modules/dsh-compatible-mobile-client/index.mjs",
+              "style_path": "modules/dsh-compatible-mobile-client/index.css",
+              "content_hash": "pending",
+              "style_hash": "pending"
+            },
+            "sandbox": {
+              "type": "mobile_web_runtime"
+            },
+            "ordering": {
+              "priority": 420
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "dispatch": {
+              "entry_key": "dsh-mobile-chat-header-action",
+              "cell_id": "dsh-mobile-chat-header-action"
+            },
+            "integrity": {
+              "definition_hash": "dsh-mobile-chat-header-action-v1"
+            }
+          }
+        },
+        {
+          "id": "dsh-mobile-chat-header-leading",
+          "kind": "action",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 聊天顶部前导区"
+          },
+          "spec": {
+            "contribution_id": "dsh-mobile-chat-header-leading",
+            "extension_id": "com.amitia/dsh-compatible-host",
+            "module_id": "dsh-compatible-ui",
+            "kind": "action",
+            "slot": {
+              "slot_id": "chat.header.leading",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "DSH 聊天顶部前导区"
+              }
+            },
+            "entry": {
+              "type": "mobile_web_runtime",
+              "path": "modules/dsh-compatible-mobile-client/index.mjs",
+              "style_path": "modules/dsh-compatible-mobile-client/index.css",
+              "content_hash": "pending",
+              "style_hash": "pending"
+            },
+            "sandbox": {
+              "type": "mobile_web_runtime"
+            },
+            "ordering": {
+              "priority": 420
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "dispatch": {
+              "entry_key": "dsh-mobile-chat-header-leading",
+              "cell_id": "dsh-mobile-chat-header-leading"
+            },
+            "integrity": {
+              "definition_hash": "dsh-mobile-chat-header-leading-v1"
+            }
+          }
+        },
+        {
+          "id": "dsh-mobile-chat-header-lineage",
+          "kind": "panel",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 会话标题"
+          },
+          "spec": {
+            "contribution_id": "dsh-mobile-chat-header-lineage",
+            "extension_id": "com.amitia/dsh-compatible-host",
+            "module_id": "dsh-compatible-ui",
+            "kind": "panel",
+            "slot": {
+              "slot_id": "chat.header.lineage",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "DSH 会话标题"
+              }
+            },
+            "entry": {
+              "type": "mobile_web_runtime",
+              "path": "modules/dsh-compatible-mobile-client/index.mjs",
+              "style_path": "modules/dsh-compatible-mobile-client/index.css",
+              "content_hash": "pending",
+              "style_hash": "pending"
+            },
+            "sandbox": {
+              "type": "mobile_web_runtime"
+            },
+            "ordering": {
+              "priority": 420
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "dispatch": {
+              "entry_key": "dsh-mobile-chat-header-lineage",
+              "cell_id": "dsh-mobile-chat-header-lineage"
+            },
+            "integrity": {
+              "definition_hash": "dsh-mobile-chat-header-lineage-v1"
+            }
+          }
+        },
+        {
+          "id": "dsh-mobile-chat-header-corner",
+          "kind": "action",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 聊天顶部角落"
+          },
+          "spec": {
+            "contribution_id": "dsh-mobile-chat-header-corner",
+            "extension_id": "com.amitia/dsh-compatible-host",
+            "module_id": "dsh-compatible-ui",
+            "kind": "action",
+            "slot": {
+              "slot_id": "chat.header.corner",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "DSH 聊天顶部角落"
+              }
+            },
+            "entry": {
+              "type": "mobile_web_runtime",
+              "path": "modules/dsh-compatible-mobile-client/index.mjs",
+              "style_path": "modules/dsh-compatible-mobile-client/index.css",
+              "content_hash": "pending",
+              "style_hash": "pending"
+            },
+            "sandbox": {
+              "type": "mobile_web_runtime"
+            },
+            "ordering": {
+              "priority": 420
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "dispatch": {
+              "entry_key": "dsh-mobile-chat-header-corner",
+              "cell_id": "dsh-mobile-chat-header-corner"
+            },
+            "integrity": {
+              "definition_hash": "dsh-mobile-chat-header-corner-v1"
+            }
+          }
+        },
+        {
+          "id": "dsh-mobile-chat-sidebar",
+          "kind": "panel",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 聊天侧栏"
+          },
+          "spec": {
+            "contribution_id": "dsh-mobile-chat-sidebar",
+            "extension_id": "com.amitia/dsh-compatible-host",
+            "module_id": "dsh-compatible-ui",
+            "kind": "panel",
+            "slot": {
+              "slot_id": "chat.sidebar.panel",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "DSH 聊天侧栏"
+              }
+            },
+            "entry": {
+              "type": "mobile_web_runtime",
+              "path": "modules/dsh-compatible-mobile-client/index.mjs",
+              "style_path": "modules/dsh-compatible-mobile-client/index.css",
+              "content_hash": "pending",
+              "style_hash": "pending"
+            },
+            "sandbox": {
+              "type": "mobile_web_runtime"
+            },
+            "ordering": {
+              "priority": 420
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "dispatch": {
+              "entry_key": "dsh-mobile-chat-sidebar",
+              "cell_id": "dsh-mobile-chat-sidebar"
+            },
+            "integrity": {
+              "definition_hash": "dsh-mobile-chat-sidebar-v1"
+            }
+          }
+        },
+        {
+          "id": "dsh-mobile-workspace-sidebar",
+          "kind": "panel",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 工作区侧栏"
+          },
+          "spec": {
+            "contribution_id": "dsh-mobile-workspace-sidebar",
+            "extension_id": "com.amitia/dsh-compatible-host",
+            "module_id": "dsh-compatible-ui",
+            "kind": "panel",
+            "slot": {
+              "slot_id": "provider.app.workspace.sidebar",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "DSH 工作区侧栏"
+              }
+            },
+            "entry": {
+              "type": "mobile_web_runtime",
+              "path": "modules/dsh-compatible-mobile-client/index.mjs",
+              "style_path": "modules/dsh-compatible-mobile-client/index.css",
+              "content_hash": "pending",
+              "style_hash": "pending"
+            },
+            "sandbox": {
+              "type": "mobile_web_runtime"
+            },
+            "ordering": {
+              "priority": 420
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "dispatch": {
+              "entry_key": "dsh-mobile-workspace-sidebar",
+              "cell_id": "dsh-mobile-workspace-sidebar"
+            },
+            "integrity": {
+              "definition_hash": "dsh-mobile-workspace-sidebar-v1"
+            }
+          }
+        },
+        {
+          "id": "dsh-mobile-conversation-messages",
+          "kind": "panel",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 会话消息区"
+          },
+          "spec": {
+            "contribution_id": "dsh-mobile-conversation-messages",
+            "extension_id": "com.amitia/dsh-compatible-host",
+            "module_id": "dsh-compatible-ui",
+            "kind": "panel",
+            "slot": {
+              "slot_id": "provider.conversation.messages",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "DSH 会话消息区"
+              }
+            },
+            "entry": {
+              "type": "mobile_web_runtime",
+              "path": "modules/dsh-compatible-mobile-client/index.mjs",
+              "style_path": "modules/dsh-compatible-mobile-client/index.css",
+              "content_hash": "pending",
+              "style_hash": "pending"
+            },
+            "sandbox": {
+              "type": "mobile_web_runtime"
+            },
+            "ordering": {
+              "priority": 420
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "dispatch": {
+              "entry_key": "dsh-mobile-conversation-messages",
+              "cell_id": "dsh-mobile-conversation-messages"
+            },
+            "integrity": {
+              "definition_hash": "dsh-mobile-conversation-messages-v1"
+            }
+          }
+        },
+        {
+          "id": "dsh-mobile-chat-message-action",
+          "kind": "message_action",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 消息操作"
+          },
+          "spec": {
+            "contribution_id": "dsh-mobile-chat-message-action",
+            "extension_id": "com.amitia/dsh-compatible-host",
+            "module_id": "dsh-compatible-ui",
+            "kind": "message_action",
+            "slot": {
+              "slot_id": "chat.message.action",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "DSH 消息操作"
+              }
+            },
+            "entry": {
+              "type": "mobile_web_runtime",
+              "path": "modules/dsh-compatible-mobile-client/index.mjs",
+              "style_path": "modules/dsh-compatible-mobile-client/index.css",
+              "content_hash": "pending",
+              "style_hash": "pending"
+            },
+            "sandbox": {
+              "type": "mobile_web_runtime"
+            },
+            "ordering": {
+              "priority": 420
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "dispatch": {
+              "entry_key": "dsh-mobile-chat-message-action",
+              "cell_id": "dsh-mobile-chat-message-action"
+            },
+            "integrity": {
+              "definition_hash": "dsh-mobile-chat-message-action-v1"
+            }
+          }
+        },
+        {
+          "id": "dsh-mobile-chat-message-renderer",
+          "kind": "message_renderer",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 消息渲染器"
+          },
+          "spec": {
+            "contribution_id": "dsh-mobile-chat-message-renderer",
+            "extension_id": "com.amitia/dsh-compatible-host",
+            "module_id": "dsh-compatible-ui",
+            "kind": "message_renderer",
+            "slot": {
+              "slot_id": "chat.message.renderer",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "DSH 消息渲染器"
+              }
+            },
+            "entry": {
+              "type": "mobile_web_runtime",
+              "path": "modules/dsh-compatible-mobile-client/index.mjs",
+              "style_path": "modules/dsh-compatible-mobile-client/index.css",
+              "content_hash": "pending",
+              "style_hash": "pending"
+            },
+            "sandbox": {
+              "type": "mobile_web_runtime"
+            },
+            "ordering": {
+              "priority": 420
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "dispatch": {
+              "entry_key": "dsh-mobile-chat-message-renderer",
+              "cell_id": "dsh-mobile-chat-message-renderer"
+            },
+            "integrity": {
+              "definition_hash": "dsh-mobile-chat-message-renderer-v1"
+            }
+          }
+        },
+        {
+          "id": "dsh-mobile-chat-message-images",
+          "kind": "message_renderer",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 助手消息图片"
+          },
+          "spec": {
+            "contribution_id": "dsh-mobile-chat-message-images",
+            "extension_id": "com.amitia/dsh-compatible-host",
+            "module_id": "dsh-compatible-ui",
+            "kind": "message_renderer",
+            "slot": {
+              "slot_id": "chat.message.images",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "DSH 助手消息图片"
+              }
+            },
+            "entry": {
+              "type": "mobile_web_runtime",
+              "path": "modules/dsh-compatible-mobile-client/index.mjs",
+              "style_path": "modules/dsh-compatible-mobile-client/index.css",
+              "content_hash": "pending",
+              "style_hash": "pending"
+            },
+            "sandbox": {
+              "type": "mobile_web_runtime"
+            },
+            "ordering": {
+              "priority": 420
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "dispatch": {
+              "entry_key": "dsh-mobile-chat-message-images",
+              "cell_id": "dsh-mobile-chat-message-images"
+            },
+            "integrity": {
+              "definition_hash": "dsh-mobile-chat-message-images-v1"
+            }
+          }
+        },
+        {
+          "id": "dsh-mobile-chat-user-images",
+          "kind": "message_renderer",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 用户消息图片"
+          },
+          "spec": {
+            "contribution_id": "dsh-mobile-chat-user-images",
+            "extension_id": "com.amitia/dsh-compatible-host",
+            "module_id": "dsh-compatible-ui",
+            "kind": "message_renderer",
+            "slot": {
+              "slot_id": "chat.message.user.images",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "DSH 用户消息图片"
+              }
+            },
+            "entry": {
+              "type": "mobile_web_runtime",
+              "path": "modules/dsh-compatible-mobile-client/index.mjs",
+              "style_path": "modules/dsh-compatible-mobile-client/index.css",
+              "content_hash": "pending",
+              "style_hash": "pending"
+            },
+            "sandbox": {
+              "type": "mobile_web_runtime"
+            },
+            "ordering": {
+              "priority": 420
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "dispatch": {
+              "entry_key": "dsh-mobile-chat-user-images",
+              "cell_id": "dsh-mobile-chat-user-images"
+            },
+            "integrity": {
+              "definition_hash": "dsh-mobile-chat-user-images-v1"
+            }
+          }
+        },
+        {
+          "id": "dsh-mobile-chat-custom-renderer",
+          "kind": "message_renderer",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 自定义消息渲染器"
+          },
+          "spec": {
+            "contribution_id": "dsh-mobile-chat-custom-renderer",
+            "extension_id": "com.amitia/dsh-compatible-host",
+            "module_id": "dsh-compatible-ui",
+            "kind": "message_renderer",
+            "slot": {
+              "slot_id": "chat.message.custom_renderer",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "DSH 自定义消息渲染器"
+              }
+            },
+            "entry": {
+              "type": "mobile_web_runtime",
+              "path": "modules/dsh-compatible-mobile-client/index.mjs",
+              "style_path": "modules/dsh-compatible-mobile-client/index.css",
+              "content_hash": "pending",
+              "style_hash": "pending"
+            },
+            "sandbox": {
+              "type": "mobile_web_runtime"
+            },
+            "ordering": {
+              "priority": 420
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "dispatch": {
+              "entry_key": "dsh-mobile-chat-custom-renderer",
+              "cell_id": "dsh-mobile-chat-custom-renderer"
+            },
+            "integrity": {
+              "definition_hash": "dsh-mobile-chat-custom-renderer-v1"
+            }
+          }
+        },
+        {
+          "id": "dsh-mobile-chat-attachment-renderer",
+          "kind": "message_renderer",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 消息附件渲染器"
+          },
+          "spec": {
+            "contribution_id": "dsh-mobile-chat-attachment-renderer",
+            "extension_id": "com.amitia/dsh-compatible-host",
+            "module_id": "dsh-compatible-ui",
+            "kind": "message_renderer",
+            "slot": {
+              "slot_id": "chat.message.attachment_renderer",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "DSH 消息附件渲染器"
+              }
+            },
+            "entry": {
+              "type": "mobile_web_runtime",
+              "path": "modules/dsh-compatible-mobile-client/index.mjs",
+              "style_path": "modules/dsh-compatible-mobile-client/index.css",
+              "content_hash": "pending",
+              "style_hash": "pending"
+            },
+            "sandbox": {
+              "type": "mobile_web_runtime"
+            },
+            "ordering": {
+              "priority": 420
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "dispatch": {
+              "entry_key": "dsh-mobile-chat-attachment-renderer",
+              "cell_id": "dsh-mobile-chat-attachment-renderer"
+            },
+            "integrity": {
+              "definition_hash": "dsh-mobile-chat-attachment-renderer-v1"
+            }
+          }
+        },
+        {
+          "id": "dsh-mobile-chat-message-badge",
+          "kind": "badge",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 消息徽标"
+          },
+          "spec": {
+            "contribution_id": "dsh-mobile-chat-message-badge",
+            "extension_id": "com.amitia/dsh-compatible-host",
+            "module_id": "dsh-compatible-ui",
+            "kind": "badge",
+            "slot": {
+              "slot_id": "chat.message.badge",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "DSH 消息徽标"
+              }
+            },
+            "entry": {
+              "type": "mobile_web_runtime",
+              "path": "modules/dsh-compatible-mobile-client/index.mjs",
+              "style_path": "modules/dsh-compatible-mobile-client/index.css",
+              "content_hash": "pending",
+              "style_hash": "pending"
+            },
+            "sandbox": {
+              "type": "mobile_web_runtime"
+            },
+            "ordering": {
+              "priority": 420
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "dispatch": {
+              "entry_key": "dsh-mobile-chat-message-badge",
+              "cell_id": "dsh-mobile-chat-message-badge"
+            },
+            "integrity": {
+              "definition_hash": "dsh-mobile-chat-message-badge-v1"
+            }
+          }
+        },
+        {
+          "id": "dsh-mobile-chat-composer-action",
+          "kind": "composer_action",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 输入区操作"
+          },
+          "spec": {
+            "contribution_id": "dsh-mobile-chat-composer-action",
+            "extension_id": "com.amitia/dsh-compatible-host",
+            "module_id": "dsh-compatible-ui",
+            "kind": "composer_action",
+            "slot": {
+              "slot_id": "chat.composer.action",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "DSH 输入区操作"
+              }
+            },
+            "entry": {
+              "type": "mobile_web_runtime",
+              "path": "modules/dsh-compatible-mobile-client/index.mjs",
+              "style_path": "modules/dsh-compatible-mobile-client/index.css",
+              "content_hash": "pending",
+              "style_hash": "pending"
+            },
+            "sandbox": {
+              "type": "mobile_web_runtime"
+            },
+            "ordering": {
+              "priority": 420
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "dispatch": {
+              "entry_key": "dsh-mobile-chat-composer-action",
+              "cell_id": "dsh-mobile-chat-composer-action"
+            },
+            "integrity": {
+              "definition_hash": "dsh-mobile-chat-composer-action-v1"
+            }
+          }
+        },
+        {
+          "id": "dsh-mobile-chat-composer-dock-top",
+          "kind": "panel",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 输入区上方停靠区"
+          },
+          "spec": {
+            "contribution_id": "dsh-mobile-chat-composer-dock-top",
+            "extension_id": "com.amitia/dsh-compatible-host",
+            "module_id": "dsh-compatible-ui",
+            "kind": "panel",
+            "slot": {
+              "slot_id": "chat.composer.dock.top",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "DSH 输入区上方停靠区"
+              }
+            },
+            "entry": {
+              "type": "mobile_web_runtime",
+              "path": "modules/dsh-compatible-mobile-client/index.mjs",
+              "style_path": "modules/dsh-compatible-mobile-client/index.css",
+              "content_hash": "pending",
+              "style_hash": "pending"
+            },
+            "sandbox": {
+              "type": "mobile_web_runtime"
+            },
+            "ordering": {
+              "priority": 420
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "dispatch": {
+              "entry_key": "dsh-mobile-chat-composer-dock-top",
+              "cell_id": "dsh-mobile-chat-composer-dock-top"
+            },
+            "integrity": {
+              "definition_hash": "dsh-mobile-chat-composer-dock-top-v1"
+            }
+          }
+        },
+        {
+          "id": "dsh-mobile-chat-composer-dock-bottom",
+          "kind": "panel",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 输入区下方停靠区"
+          },
+          "spec": {
+            "contribution_id": "dsh-mobile-chat-composer-dock-bottom",
+            "extension_id": "com.amitia/dsh-compatible-host",
+            "module_id": "dsh-compatible-ui",
+            "kind": "panel",
+            "slot": {
+              "slot_id": "chat.composer.dock.bottom",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "DSH 输入区下方停靠区"
+              }
+            },
+            "entry": {
+              "type": "mobile_web_runtime",
+              "path": "modules/dsh-compatible-mobile-client/index.mjs",
+              "style_path": "modules/dsh-compatible-mobile-client/index.css",
+              "content_hash": "pending",
+              "style_hash": "pending"
+            },
+            "sandbox": {
+              "type": "mobile_web_runtime"
+            },
+            "ordering": {
+              "priority": 420
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "dispatch": {
+              "entry_key": "dsh-mobile-chat-composer-dock-bottom",
+              "cell_id": "dsh-mobile-chat-composer-dock-bottom"
+            },
+            "integrity": {
+              "definition_hash": "dsh-mobile-chat-composer-dock-bottom-v1"
+            }
+          }
+        },
+        {
+          "id": "dsh-mobile-chat-composer-left",
+          "kind": "composer_action",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 输入区左侧操作"
+          },
+          "spec": {
+            "contribution_id": "dsh-mobile-chat-composer-left",
+            "extension_id": "com.amitia/dsh-compatible-host",
+            "module_id": "dsh-compatible-ui",
+            "kind": "composer_action",
+            "slot": {
+              "slot_id": "chat.composer.left",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "DSH 输入区左侧操作"
+              }
+            },
+            "entry": {
+              "type": "mobile_web_runtime",
+              "path": "modules/dsh-compatible-mobile-client/index.mjs",
+              "style_path": "modules/dsh-compatible-mobile-client/index.css",
+              "content_hash": "pending",
+              "style_hash": "pending"
+            },
+            "sandbox": {
+              "type": "mobile_web_runtime"
+            },
+            "ordering": {
+              "priority": 420
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "dispatch": {
+              "entry_key": "dsh-mobile-chat-composer-left",
+              "cell_id": "dsh-mobile-chat-composer-left"
+            },
+            "integrity": {
+              "definition_hash": "dsh-mobile-chat-composer-left-v1"
+            }
+          }
+        },
+        {
+          "id": "dsh-mobile-chat-composer-right",
+          "kind": "composer_action",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 输入区右侧操作"
+          },
+          "spec": {
+            "contribution_id": "dsh-mobile-chat-composer-right",
+            "extension_id": "com.amitia/dsh-compatible-host",
+            "module_id": "dsh-compatible-ui",
+            "kind": "composer_action",
+            "slot": {
+              "slot_id": "chat.composer.right",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "DSH 输入区右侧操作"
+              }
+            },
+            "entry": {
+              "type": "mobile_web_runtime",
+              "path": "modules/dsh-compatible-mobile-client/index.mjs",
+              "style_path": "modules/dsh-compatible-mobile-client/index.css",
+              "content_hash": "pending",
+              "style_hash": "pending"
+            },
+            "sandbox": {
+              "type": "mobile_web_runtime"
+            },
+            "ordering": {
+              "priority": 420
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "dispatch": {
+              "entry_key": "dsh-mobile-chat-composer-right",
+              "cell_id": "dsh-mobile-chat-composer-right"
+            },
+            "integrity": {
+              "definition_hash": "dsh-mobile-chat-composer-right-v1"
+            }
+          }
+        },
+        {
+          "id": "dsh-mobile-chat-composer-model",
+          "kind": "composer_action",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 输入区模型选择"
+          },
+          "spec": {
+            "contribution_id": "dsh-mobile-chat-composer-model",
+            "extension_id": "com.amitia/dsh-compatible-host",
+            "module_id": "dsh-compatible-ui",
+            "kind": "composer_action",
+            "slot": {
+              "slot_id": "chat.composer.model",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "DSH 输入区模型选择"
+              }
+            },
+            "entry": {
+              "type": "mobile_web_runtime",
+              "path": "modules/dsh-compatible-mobile-client/index.mjs",
+              "style_path": "modules/dsh-compatible-mobile-client/index.css",
+              "content_hash": "pending",
+              "style_hash": "pending"
+            },
+            "sandbox": {
+              "type": "mobile_web_runtime"
+            },
+            "ordering": {
+              "priority": 420
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "dispatch": {
+              "entry_key": "dsh-mobile-chat-composer-model",
+              "cell_id": "dsh-mobile-chat-composer-model"
+            },
+            "integrity": {
+              "definition_hash": "dsh-mobile-chat-composer-model-v1"
+            }
+          }
+        },
+        {
+          "id": "dsh-mobile-chat-composer-overlay",
+          "kind": "panel",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 输入区浮层"
+          },
+          "spec": {
+            "contribution_id": "dsh-mobile-chat-composer-overlay",
+            "extension_id": "com.amitia/dsh-compatible-host",
+            "module_id": "dsh-compatible-ui",
+            "kind": "panel",
+            "slot": {
+              "slot_id": "chat.composer.overlay",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "DSH 输入区浮层"
+              }
+            },
+            "entry": {
+              "type": "mobile_web_runtime",
+              "path": "modules/dsh-compatible-mobile-client/index.mjs",
+              "style_path": "modules/dsh-compatible-mobile-client/index.css",
+              "content_hash": "pending",
+              "style_hash": "pending"
+            },
+            "sandbox": {
+              "type": "mobile_web_runtime"
+            },
+            "ordering": {
+              "priority": 420
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "dispatch": {
+              "entry_key": "dsh-mobile-chat-composer-overlay",
+              "cell_id": "dsh-mobile-chat-composer-overlay"
+            },
+            "integrity": {
+              "definition_hash": "dsh-mobile-chat-composer-overlay-v1"
+            }
+          }
+        },
+        {
+          "id": "dsh-mobile-chat-composer-model-label",
+          "kind": "status_item",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 输入区模型标签"
+          },
+          "spec": {
+            "contribution_id": "dsh-mobile-chat-composer-model-label",
+            "extension_id": "com.amitia/dsh-compatible-host",
+            "module_id": "dsh-compatible-ui",
+            "kind": "status_item",
+            "slot": {
+              "slot_id": "chat.composer.model.label",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "DSH 输入区模型标签"
+              }
+            },
+            "entry": {
+              "type": "mobile_web_runtime",
+              "path": "modules/dsh-compatible-mobile-client/index.mjs",
+              "style_path": "modules/dsh-compatible-mobile-client/index.css",
+              "content_hash": "pending",
+              "style_hash": "pending"
+            },
+            "sandbox": {
+              "type": "mobile_web_runtime"
+            },
+            "ordering": {
+              "priority": 420
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "dispatch": {
+              "entry_key": "dsh-mobile-chat-composer-model-label",
+              "cell_id": "dsh-mobile-chat-composer-model-label"
+            },
+            "integrity": {
+              "definition_hash": "dsh-mobile-chat-composer-model-label-v1"
+            }
+          }
+        },
+        {
+          "id": "dsh-mobile-chat-composer-model-options",
+          "kind": "composer_action",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 输入区模型菜单选项"
+          },
+          "spec": {
+            "contribution_id": "dsh-mobile-chat-composer-model-options",
+            "extension_id": "com.amitia/dsh-compatible-host",
+            "module_id": "dsh-compatible-ui",
+            "kind": "composer_action",
+            "slot": {
+              "slot_id": "chat.composer.model.options",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "DSH 输入区模型菜单选项"
+              }
+            },
+            "entry": {
+              "type": "mobile_web_runtime",
+              "path": "modules/dsh-compatible-mobile-client/index.mjs",
+              "style_path": "modules/dsh-compatible-mobile-client/index.css",
+              "content_hash": "pending",
+              "style_hash": "pending"
+            },
+            "sandbox": {
+              "type": "mobile_web_runtime"
+            },
+            "ordering": {
+              "priority": 420
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "dispatch": {
+              "entry_key": "dsh-mobile-chat-composer-model-options",
+              "cell_id": "dsh-mobile-chat-composer-model-options"
+            },
+            "integrity": {
+              "definition_hash": "dsh-mobile-chat-composer-model-options-v1"
+            }
+          }
+        },
+        {
+          "id": "dsh-mobile-chat-composer-permission",
+          "kind": "composer_action",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 输入区权限选择"
+          },
+          "spec": {
+            "contribution_id": "dsh-mobile-chat-composer-permission",
+            "extension_id": "com.amitia/dsh-compatible-host",
+            "module_id": "dsh-compatible-ui",
+            "kind": "composer_action",
+            "slot": {
+              "slot_id": "chat.composer.permission",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "DSH 输入区权限选择"
+              }
+            },
+            "entry": {
+              "type": "mobile_web_runtime",
+              "path": "modules/dsh-compatible-mobile-client/index.mjs",
+              "style_path": "modules/dsh-compatible-mobile-client/index.css",
+              "content_hash": "pending",
+              "style_hash": "pending"
+            },
+            "sandbox": {
+              "type": "mobile_web_runtime"
+            },
+            "ordering": {
+              "priority": 420
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "dispatch": {
+              "entry_key": "dsh-mobile-chat-composer-permission",
+              "cell_id": "dsh-mobile-chat-composer-permission"
+            },
+            "integrity": {
+              "definition_hash": "dsh-mobile-chat-composer-permission-v1"
+            }
+          }
+        },
+        {
+          "id": "dsh-mobile-chat-conversation-node",
+          "kind": "message_renderer",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 会话节点"
+          },
+          "spec": {
+            "contribution_id": "dsh-mobile-chat-conversation-node",
+            "extension_id": "com.amitia/dsh-compatible-host",
+            "module_id": "dsh-compatible-ui",
+            "kind": "message_renderer",
+            "slot": {
+              "slot_id": "chat.conversation.node",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "DSH 会话节点"
+              }
+            },
+            "entry": {
+              "type": "mobile_web_runtime",
+              "path": "modules/dsh-compatible-mobile-client/index.mjs",
+              "style_path": "modules/dsh-compatible-mobile-client/index.css",
+              "content_hash": "pending",
+              "style_hash": "pending"
+            },
+            "sandbox": {
+              "type": "mobile_web_runtime"
+            },
+            "ordering": {
+              "priority": 420
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "dispatch": {
+              "entry_key": "dsh-mobile-chat-conversation-node",
+              "cell_id": "dsh-mobile-chat-conversation-node"
+            },
+            "integrity": {
+              "definition_hash": "dsh-mobile-chat-conversation-node-v1"
+            }
+          }
+        },
+        {
+          "id": "dsh-mobile-extension-header-action",
+          "kind": "action",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 扩展中心操作"
+          },
+          "spec": {
+            "contribution_id": "dsh-mobile-extension-header-action",
+            "extension_id": "com.amitia/dsh-compatible-host",
+            "module_id": "dsh-compatible-ui",
+            "kind": "action",
+            "slot": {
+              "slot_id": "extension.center.header.action",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "DSH 扩展中心操作"
+              }
+            },
+            "entry": {
+              "type": "mobile_web_runtime",
+              "path": "modules/dsh-compatible-mobile-client/index.mjs",
+              "style_path": "modules/dsh-compatible-mobile-client/index.css",
+              "content_hash": "pending",
+              "style_hash": "pending"
+            },
+            "sandbox": {
+              "type": "mobile_web_runtime"
+            },
+            "ordering": {
+              "priority": 420
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "dispatch": {
+              "entry_key": "dsh-mobile-extension-header-action",
+              "cell_id": "dsh-mobile-extension-header-action"
+            },
+            "integrity": {
+              "definition_hash": "dsh-mobile-extension-header-action-v1"
+            }
+          }
+        },
+        {
+          "id": "dsh-mobile-extension-card-badge",
+          "kind": "badge",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 扩展徽标"
+          },
+          "spec": {
+            "contribution_id": "dsh-mobile-extension-card-badge",
+            "extension_id": "com.amitia/dsh-compatible-host",
+            "module_id": "dsh-compatible-ui",
+            "kind": "badge",
+            "slot": {
+              "slot_id": "extension.center.card.badge",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "DSH 扩展徽标"
+              }
+            },
+            "entry": {
+              "type": "mobile_web_runtime",
+              "path": "modules/dsh-compatible-mobile-client/index.mjs",
+              "style_path": "modules/dsh-compatible-mobile-client/index.css",
+              "content_hash": "pending",
+              "style_hash": "pending"
+            },
+            "sandbox": {
+              "type": "mobile_web_runtime"
+            },
+            "ordering": {
+              "priority": 420
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "dispatch": {
+              "entry_key": "dsh-mobile-extension-card-badge",
+              "cell_id": "dsh-mobile-extension-card-badge"
+            },
+            "integrity": {
+              "definition_hash": "dsh-mobile-extension-card-badge-v1"
+            }
+          }
+        },
+        {
+          "id": "dsh-mobile-extension-detail-action",
+          "kind": "action",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 扩展详情操作"
+          },
+          "spec": {
+            "contribution_id": "dsh-mobile-extension-detail-action",
+            "extension_id": "com.amitia/dsh-compatible-host",
+            "module_id": "dsh-compatible-ui",
+            "kind": "action",
+            "slot": {
+              "slot_id": "extension.detail.action",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "DSH 扩展详情操作"
+              }
+            },
+            "entry": {
+              "type": "mobile_web_runtime",
+              "path": "modules/dsh-compatible-mobile-client/index.mjs",
+              "style_path": "modules/dsh-compatible-mobile-client/index.css",
+              "content_hash": "pending",
+              "style_hash": "pending"
+            },
+            "sandbox": {
+              "type": "mobile_web_runtime"
+            },
+            "ordering": {
+              "priority": 420
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "dispatch": {
+              "entry_key": "dsh-mobile-extension-detail-action",
+              "cell_id": "dsh-mobile-extension-detail-action"
+            },
+            "integrity": {
+              "definition_hash": "dsh-mobile-extension-detail-action-v1"
+            }
+          }
+        },
+        {
+          "id": "dsh-mobile-extension-detail-tab",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 扩展详情页签"
+          },
+          "spec": {
+            "contribution_id": "dsh-mobile-extension-detail-tab",
+            "extension_id": "com.amitia/dsh-compatible-host",
+            "module_id": "dsh-compatible-ui",
+            "kind": "web_page",
+            "slot": {
+              "slot_id": "extension.detail.tab",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "DSH 扩展详情页签"
+              }
+            },
+            "entry": {
+              "type": "mobile_web_runtime",
+              "path": "modules/dsh-compatible-mobile-client/index.mjs",
+              "style_path": "modules/dsh-compatible-mobile-client/index.css",
+              "content_hash": "pending",
+              "style_hash": "pending"
+            },
+            "sandbox": {
+              "type": "mobile_web_runtime"
+            },
+            "ordering": {
+              "priority": 420
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "dispatch": {
+              "entry_key": "dsh-mobile-extension-detail-tab",
+              "cell_id": "dsh-mobile-extension-detail-tab"
+            },
+            "integrity": {
+              "definition_hash": "dsh-mobile-extension-detail-tab-v1"
+            }
+          }
+        },
+        {
+          "id": "dsh-mobile-extension-settings-section",
+          "kind": "settings_section",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 扩展设置"
+          },
+          "spec": {
+            "contribution_id": "dsh-mobile-extension-settings-section",
+            "extension_id": "com.amitia/dsh-compatible-host",
+            "module_id": "dsh-compatible-ui",
+            "kind": "settings_section",
+            "slot": {
+              "slot_id": "extension.settings.section",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "DSH 扩展设置"
+              }
+            },
+            "entry": {
+              "type": "mobile_web_runtime",
+              "path": "modules/dsh-compatible-mobile-client/index.mjs",
+              "style_path": "modules/dsh-compatible-mobile-client/index.css",
+              "content_hash": "pending",
+              "style_hash": "pending"
+            },
+            "sandbox": {
+              "type": "mobile_web_runtime"
+            },
+            "ordering": {
+              "priority": 420
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "dispatch": {
+              "entry_key": "dsh-mobile-extension-settings-section",
+              "cell_id": "dsh-mobile-extension-settings-section"
+            },
+            "integrity": {
+              "definition_hash": "dsh-mobile-extension-settings-section-v1"
+            }
+          }
+        },
+        {
+          "id": "dsh-mobile-system-settings-section",
+          "kind": "settings_section",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 通用设置"
+          },
+          "spec": {
+            "contribution_id": "dsh-mobile-system-settings-section",
+            "extension_id": "com.amitia/dsh-compatible-host",
+            "module_id": "dsh-compatible-ui",
+            "kind": "settings_section",
+            "slot": {
+              "slot_id": "system.settings.section",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "DSH 通用设置"
+              }
+            },
+            "entry": {
+              "type": "mobile_web_runtime",
+              "path": "modules/dsh-compatible-mobile-client/index.mjs",
+              "style_path": "modules/dsh-compatible-mobile-client/index.css",
+              "content_hash": "pending",
+              "style_hash": "pending"
+            },
+            "sandbox": {
+              "type": "mobile_web_runtime"
+            },
+            "ordering": {
+              "priority": 418
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "dispatch": {
+              "entry_key": "dsh-mobile-system-settings-section",
+              "cell_id": "dsh-mobile-system-settings-section"
+            },
+            "integrity": {
+              "definition_hash": "dsh-mobile-system-settings-section-v1"
+            }
+          }
+        },
+        {
+          "id": "dsh-mobile-extension-settings-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 扩展设置页面"
+          },
+          "spec": {
+            "contribution_id": "dsh-mobile-extension-settings-page",
+            "extension_id": "com.amitia/dsh-compatible-host",
+            "module_id": "dsh-compatible-ui",
+            "kind": "web_page",
+            "slot": {
+              "slot_id": "extension.settings.page",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "DSH 扩展设置页面"
+              }
+            },
+            "entry": {
+              "type": "mobile_web_runtime",
+              "path": "modules/dsh-compatible-mobile-client/index.mjs",
+              "style_path": "modules/dsh-compatible-mobile-client/index.css",
+              "content_hash": "pending",
+              "style_hash": "pending"
+            },
+            "sandbox": {
+              "type": "mobile_web_runtime"
+            },
+            "ordering": {
+              "priority": 420
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "dispatch": {
+              "entry_key": "dsh-mobile-extension-settings-page",
+              "cell_id": "dsh-mobile-extension-settings-page"
+            },
+            "integrity": {
+              "definition_hash": "dsh-mobile-extension-settings-page-v1"
+            }
+          }
+        },
+        {
+          "id": "dsh-mobile-right-pane-content",
+          "kind": "panel",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 右侧资源面板"
+          },
+          "spec": {
+            "contribution_id": "dsh-mobile-right-pane-content",
+            "extension_id": "com.amitia/dsh-compatible-host",
+            "module_id": "dsh-compatible-ui",
+            "kind": "panel",
+            "slot": {
+              "slot_id": "ui.sidebar.right.pane.tab",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "DSH 右侧资源面板"
+              }
+            },
+            "entry": {
+              "type": "mobile_web_runtime",
+              "path": "modules/dsh-compatible-mobile-client/index.mjs",
+              "style_path": "modules/dsh-compatible-mobile-client/index.css",
+              "content_hash": "pending",
+              "style_hash": "pending"
+            },
+            "sandbox": {
+              "type": "mobile_web_runtime"
+            },
+            "ordering": {
+              "priority": 420
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "dispatch": {
+              "entry_key": "dsh-mobile-right-pane-content",
+              "cell_id": "dsh-mobile-right-pane-content"
+            },
+            "integrity": {
+              "definition_hash": "dsh-mobile-right-pane-content-v1"
+            }
+          }
+        },
+        {
+          "id": "dsh-mobile-right-pane-title",
+          "kind": "status_item",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 右侧资源标题"
+          },
+          "spec": {
+            "contribution_id": "dsh-mobile-right-pane-title",
+            "extension_id": "com.amitia/dsh-compatible-host",
+            "module_id": "dsh-compatible-ui",
+            "kind": "status_item",
+            "slot": {
+              "slot_id": "ui.sidebar.right.pane.tab.title",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "DSH 右侧资源标题"
+              }
+            },
+            "entry": {
+              "type": "mobile_web_runtime",
+              "path": "modules/dsh-compatible-mobile-client/index.mjs",
+              "style_path": "modules/dsh-compatible-mobile-client/index.css",
+              "content_hash": "pending",
+              "style_hash": "pending"
+            },
+            "sandbox": {
+              "type": "mobile_web_runtime"
+            },
+            "ordering": {
+              "priority": 420
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "dispatch": {
+              "entry_key": "dsh-mobile-right-pane-title",
+              "cell_id": "dsh-mobile-right-pane-title"
+            },
+            "integrity": {
+              "definition_hash": "dsh-mobile-right-pane-title-v1"
+            }
+          }
+        },
+        {
+          "id": "dsh-compatible-route",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 插件兼容宿主路由"
+          },
+          "description": {
+            "default": "向桌面和移动端注册 DSH 容器管理入口。"
+          },
+          "spec": {
+            "providerId": "dsh-compatible-route",
+            "capability": "route.registry",
+            "mode": "replace",
+            "priority": 500,
+            "placement": "any",
+            "trustLevel": "official",
+            "entries": {
+              "electron_linux": {
+                "type": "declarative"
+              },
+              "electron_macos": {
+                "type": "declarative"
+              },
+              "electron_windows": {
+                "type": "declarative"
+              },
+              "web": {
+                "type": "declarative"
+              },
+              "android": {
+                "type": "declarative"
+              },
+              "ios": {
+                "type": "declarative"
+              },
+              "mobile": {
+                "type": "declarative"
+              }
+            },
+            "metadata": {
+              "navigationItems": [
+                {
+                  "id": "dsh-compatible-host",
+                  "label": "DSH 插件",
+                  "route": "/dsh-compatible-host",
+                  "icon": "extension",
+                  "group": "compatibility",
+                  "groupLabel": "兼容性",
+                  "order": 900,
+                  "placement": "contextual"
+                }
+              ],
+              "routes": [
+                {
+                  "id": "dsh-compatible-host",
+                  "path": "/dsh-compatible-host",
+                  "providerId": "dsh-compatible-page-provider",
+                  "capability": "page.provider",
+                  "priority": 500,
+                  "title": "DSH 插件"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "dsh-desktop-shell-host",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 客户端界面宿主"
+          },
+          "description": {
+            "default": "在 Amitia 应用外壳中装载已启用 DSH 插件的客户端界面。"
+          },
+          "spec": {
+            "contribution_id": "dsh-desktop-shell-host",
+            "extension_id": "com.amitia/dsh-compatible-host",
+            "module_id": "dsh-compatible-ui",
+            "kind": "web_page",
+            "slot": {
+              "slot_id": "ui.portal.overlay",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "DSH 客户端界面宿主"
+              }
+            },
+            "entry": {
+              "type": "client_module",
+              "path": "modules/dsh-compatible-ui/desktop/shell.mjs",
+              "content_hash": "pending"
+            },
+            "sandbox": {
+              "type": "client_module"
+            },
+            "ordering": {
+              "priority": 700
+            },
+            "visibility": {
+              "platforms": [
+                "windows",
+                "macos",
+                "linux"
+              ]
+            },
+            "dispatch": {
+              "entry_key": "dsh-desktop-shell-host",
+              "cell_id": "dsh-desktop-shell-host"
+            },
+            "integrity": {
+              "definition_hash": "dsh-desktop-shell-host-v1"
+            },
+            "actions": [
+              {
+                "action_id": "command",
+                "title": {
+                  "default": "执行 DSH 兼容宿主操作"
+                },
+                "target": {
+                  "type": "tool",
+                  "tool_id": "com.amitia/dsh-compatible-host/command"
+                },
+                "risk_level": "high"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "permissions": [
+    {
+      "name": "extensions.read",
+      "reason": "列出扩展内核提供的技能目录，用于映射 DSH skills 服务。",
+      "required": false,
+      "scope": "global"
+    },
+    {
+      "name": "storage.state.read",
+      "reason": "读取容器内的 DSH 子插件记录。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "storage.state.write",
+      "reason": "保存容器内的 DSH 子插件记录。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "service.network.request",
+      "reason": "下载 DSH 插件包和依赖。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "service.process.spawn",
+      "reason": "在插件私有目录中执行 DSH 依赖安装和隔离加载。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "message.interrupt",
+      "reason": "停止当前 DSH 插件关联会话中的活动回复。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "message.send",
+      "reason": "向 DSH 插件所关联的当前会话发送消息。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "message.append",
+      "reason": "向 DSH 插件所关联的当前会话追加消息。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "conversation.read",
+      "reason": "读取 DSH Agent 当前授权的会话上下文。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "conversation.manage",
+      "reason": "为 DSH Agent 创建受 Owner 授权的新会话。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "character.read",
+      "reason": "读取当前会话所属角色信息。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "project.read",
+      "reason": "列出 Owner 项目及其工作区，构建 DSH Workspace 目录。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "project.manage",
+      "reason": "为 DSH Workspace 创建、重命名和删除 Owner 项目。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "memory.read",
+      "reason": "执行 DSH 插件声明的记忆查询。",
+      "required": true,
+      "scope": "character"
+    },
+    {
+      "name": "provider.invoke",
+      "reason": "调用 DSH 插件映射的模型 Provider。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "event.emit",
+      "reason": "发布 DSH 插件映射的宿主事件。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "event.subscribe",
+      "reason": "订阅 DSH 插件所需的宿主事件。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "schedule.create",
+      "reason": "创建和读取 DSH 插件调度任务。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "schedule.manage",
+      "reason": "取消 DSH 插件调度任务。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "ui.dialog",
+      "reason": "展示 DSH 用户问题、审批和交互对话框。",
+      "required": true,
+      "scope": "session"
+    },
+    {
+      "name": "resource.read",
+      "reason": "通过宿主资源句柄读取 DSH 插件资源。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "resource.write",
+      "reason": "通过宿主资源句柄写入或删除 DSH 插件资源。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "workspace.read",
+      "reason": "读取 DSH 插件声明的当前工作区。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "workspace.write",
+      "reason": "写入 DSH 插件声明的当前工作区。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "runtime.health.read",
+      "reason": "读取 DSH 插件运行时健康状态和快照。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "service.files.extension_data",
+      "reason": "读取容器自己的 DSH 插件数据和缓存。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "tool.invoke",
+      "reason": "从插件页面调用容器管理命令。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "plugin.compose",
+      "reason": "注册 DSH 子插件映射的动态 Tool、UI Provider 和 Slot contribution。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "approval.request",
+      "reason": "把 DSH 工具审批请求转交当前会话的用户决定。",
+      "required": true,
+      "scope": "extension"
+    }
+  ],
+  "data": {
+    "schemaVersion": 1,
+    "scopes": [
+      "extension"
+    ],
+    "backup": true,
+    "export": true,
+    "uninstall": "retain",
+    "pluginData": {
+      "include": [
+        "dsh-data"
+      ]
+    }
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "contentTreeHash": ""
+  },
+  "development": {
+    "hotReload": true,
+    "sourceMaps": true,
+    "watchPaths": [
+      "src",
+      "ui"
+    ]
+  }
+}

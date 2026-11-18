@@ -829,6 +829,16 @@ function assertUIProviderEntry(
       if (entry.stylePath && !entry.styleHash?.trim()) throw new ValidationError(`web_module styleHash required for ${platform}`);
       return;
     }
+    case "mobile_web_runtime": {
+      const platformKey = platform.trim().toLowerCase();
+      if (!platformKey.startsWith("android") && !platformKey.startsWith("ios") && platformKey !== "mobile" && !platformKey.startsWith("flutter_")) {
+        throw new ValidationError(`mobile_web_runtime requires an Android/iOS/mobile platform entry, got ${platform}`);
+      }
+      if (!entry.path?.trim()) throw new ValidationError(`mobile_web_runtime path required for ${platform}`);
+      if (!entry.contentHash?.trim()) throw new ValidationError(`mobile_web_runtime contentHash required for ${platform}`);
+      if (entry.stylePath && !entry.styleHash?.trim()) throw new ValidationError(`mobile_web_runtime styleHash required for ${platform}`);
+      return;
+    }
     case "external_web_ui": {
       if (capability !== "workspace.tab") {
         throw new ValidationError("external_web_ui is only supported for workspace.tab");

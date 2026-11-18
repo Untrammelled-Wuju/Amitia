@@ -170,6 +170,328 @@ describe("DSH parity runtime contracts", () => {
     expect(() => slots.assertRenderAuthority(contribution.contributionId, "typed.parent.child")).toThrow(/not authorized/);
   });
 
+  it("claims root-level predeclared host children without widening non-root ownership", async () => {
+    const slots = new BrowserSlotRuntime();
+    const generatedAt = new Date(0).toISOString();
+    await slots.syncSnapshot({
+      slots: [
+        {
+          slotId: "host.parent",
+          contractVersion: 1,
+          supportedKinds: ["panel"],
+          kind: "single",
+          layout: "stack",
+          fallbackPolicy: "none",
+          scope: "root",
+          declarationEpoch: 1,
+          contributions: [],
+          generatedAt,
+        },
+        {
+          slotId: "host.root.child",
+          contractVersion: 1,
+          supportedKinds: ["status_item", "panel"],
+          kind: "keyed",
+          layout: "stack",
+          fallbackPolicy: "none",
+          parentSlotId: "root",
+          scope: "root",
+          declarationEpoch: 1,
+          contributions: [],
+          generatedAt,
+        },
+        {
+          slotId: "host.other.child",
+          contractVersion: 1,
+          supportedKinds: ["panel"],
+          kind: "single",
+          layout: "stack",
+          fallbackPolicy: "none",
+          parentSlotId: "host.other",
+          scope: "root",
+          declarationEpoch: 1,
+          contributions: [],
+          generatedAt,
+        },
+      ],
+      generatedAt,
+      version: 1,
+    });
+
+    const dispose = (slots.registerEntry as any)("host-plugin", {
+      name: "host.parent",
+      key: "host-view",
+      children: {
+        "host.root.child": { kind: "keyed", scope: "root", supportedKinds: ["status_item", "panel"] },
+      },
+    }, {} as any);
+    const contribution = slots.listContributions("host.parent")[0]!;
+    expect([...contribution.childSlotIds]).toEqual(["host.root.child"]);
+    expect(contribution.claimedStaticChildren).toEqual(["host.root.child"]);
+    expect(() => slots.assertRenderAuthority(contribution.contributionId, "host.root.child")).not.toThrow();
+    expect(() => (slots.registerEntry as any)("other-plugin", {
+      name: "host.parent",
+      key: "other-view",
+      children: {
+        "host.other.child": { kind: "single", scope: "root", supportedKinds: ["panel"] },
+      },
+    }, {} as any)).toThrow(/belongs to host.other/);
+
+    await dispose();
+    expect(() => slots.assertRenderAuthority(contribution.contributionId, "host.root.child")).toThrow(/not authorized/);
+  });
+
+  it("lets a page container render session-area children declared at root", async () => {
+    const slots = new BrowserSlotRuntime();
+    const generatedAt = new Date(0).toISOString();
+    await slots.syncSnapshot({
+      slots: [
+        {
+          slotId: "provider.page.provider",
+          contractVersion: 1,
+          supportedKinds: ["panel"],
+          kind: "chain",
+          layout: "stack",
+          fallbackPolicy: "none",
+          scope: "root",
+          parentSlotId: "provider.app.workspace",
+          declarationEpoch: 1,
+          contributions: [],
+          generatedAt,
+        },
+        {
+          slotId: "chat.conversation.root",
+          contractVersion: 1,
+          supportedKinds: ["panel"],
+          kind: "single",
+          layout: "stack",
+          fallbackPolicy: "none",
+          scope: "session-maybe",
+          parentSlotId: "root",
+          declarationEpoch: 1,
+          contributions: [],
+          generatedAt,
+        },
+      ],
+      generatedAt,
+      version: 1,
+    });
+    const dispose = (slots.registerEntry as any)("page", {
+      name: "provider.page.provider",
+      key: "page",
+      select: () => () => null,
+    }, {} as any);
+    const contribution = slots.listContributions("provider.page.provider")[0]!;
+
+    expect(slots.authorizeChildSlot(contribution.contributionId, "chat.conversation.root")).toBe(true);
+    expect(() => slots.assertRenderAuthority(contribution.contributionId, "chat.conversation.root")).not.toThrow();
+
+    await dispose();
+  });
+
+  it("lets a session contribution render same-area children declared at root", async () => {
+    const slots = new BrowserSlotRuntime();
+    const generatedAt = new Date(0).toISOString();
+    await slots.syncSnapshot({
+      slots: [
+        {
+          slotId: "chat.conversation.root",
+          contractVersion: 1,
+          supportedKinds: ["panel"],
+          kind: "single",
+          layout: "stack",
+          fallbackPolicy: "none",
+          scope: "session-maybe",
+          parentSlotId: "root",
+          declarationEpoch: 1,
+          contributions: [],
+          generatedAt,
+        },
+        {
+          slotId: "chat.conversation.header",
+          contractVersion: 1,
+          supportedKinds: ["panel"],
+          kind: "single",
+          layout: "stack",
+          fallbackPolicy: "none",
+          scope: "session-maybe",
+          parentSlotId: "root",
+          declarationEpoch: 1,
+          contributions: [],
+          generatedAt,
+        },
+      ],
+      generatedAt,
+      version: 1,
+    });
+    const dispose = (slots.registerEntry as any)("conversation", {
+      name: "chat.conversation.root",
+      key: "conversation",
+    }, {} as any);
+    const contribution = slots.listContributions("chat.conversation.root")[0]!;
+
+    expect(slots.authorizeChildSlot(contribution.contributionId, "chat.conversation.header")).toBe(true);
+    expect(() => slots.assertRenderAuthority(contribution.contributionId, "chat.conversation.header")).not.toThrow();
+
+    await dispose();
+  });
+
+  it("lets a session contribution render root-owned chat surface children", async () => {
+    const slots = new BrowserSlotRuntime();
+    const generatedAt = new Date(0).toISOString();
+    await slots.syncSnapshot({
+      slots: [
+        {
+          slotId: "chat.conversation.header",
+          contractVersion: 1,
+          supportedKinds: ["panel"],
+          kind: "single",
+          layout: "stack",
+          fallbackPolicy: "none",
+          scope: "session-maybe",
+          parentSlotId: "root",
+          declarationEpoch: 1,
+          contributions: [],
+          generatedAt,
+        },
+        {
+          slotId: "chat.header.leading",
+          contractVersion: 1,
+          supportedKinds: ["panel"],
+          kind: "single",
+          layout: "stack",
+          fallbackPolicy: "none",
+          scope: "root",
+          parentSlotId: "root",
+          declarationEpoch: 1,
+          contributions: [],
+          generatedAt,
+        },
+      ],
+      generatedAt,
+      version: 1,
+    });
+    const dispose = (slots.registerEntry as any)("conversation", {
+      name: "chat.conversation.header",
+      key: "header",
+    }, {} as any);
+    const contribution = slots.listContributions("chat.conversation.header")[0]!;
+
+    expect(slots.authorizeChildSlot(contribution.contributionId, "chat.header.leading")).toBe(true);
+    expect(() => slots.assertRenderAuthority(contribution.contributionId, "chat.header.leading")).not.toThrow();
+
+    await dispose();
+  });
+
+  it("keeps non-session contributions out of the session render area", async () => {
+    const slots = new BrowserSlotRuntime();
+    const generatedAt = new Date(0).toISOString();
+    await slots.syncSnapshot({
+      slots: [
+        {
+          slotId: "extension.center.header.action",
+          contractVersion: 1,
+          supportedKinds: ["action"],
+          kind: "list",
+          layout: "inline",
+          fallbackPolicy: "none",
+          scope: "root",
+          declarationEpoch: 1,
+          contributions: [],
+          generatedAt,
+        },
+        {
+          slotId: "chat.conversation.header",
+          contractVersion: 1,
+          supportedKinds: ["panel"],
+          kind: "single",
+          layout: "stack",
+          fallbackPolicy: "none",
+          scope: "session-maybe",
+          parentSlotId: "root",
+          declarationEpoch: 1,
+          contributions: [],
+          generatedAt,
+        },
+      ],
+      generatedAt,
+      version: 1,
+    });
+    const dispose = (slots.registerEntry as any)("extension", {
+      name: "extension.center.header.action",
+      key: "action",
+      id: "action",
+    }, {} as any);
+    const contribution = slots.listContributions("extension.center.header.action")[0]!;
+
+    expect(slots.authorizeChildSlot(contribution.contributionId, "chat.conversation.header")).toBe(false);
+    expect(() => slots.assertRenderAuthority(contribution.contributionId, "chat.conversation.header")).toThrow(/not authorized/);
+
+    await dispose();
+  });
+
+  it("accepts session-area child declarations owned by a sibling parent", async () => {
+    const slots = new BrowserSlotRuntime();
+    const generatedAt = new Date(0).toISOString();
+    await slots.syncSnapshot({
+      slots: [
+        {
+          slotId: "chat.composer.bar",
+          contractVersion: 1,
+          supportedKinds: ["panel"],
+          kind: "list",
+          layout: "stack",
+          fallbackPolicy: "none",
+          scope: "session",
+          declarationEpoch: 1,
+          contributions: [],
+          generatedAt,
+        },
+        {
+          slotId: "provider.conversation.composer",
+          contractVersion: 1,
+          supportedKinds: ["panel"],
+          kind: "single",
+          layout: "stack",
+          fallbackPolicy: "none",
+          scope: "session",
+          declarationEpoch: 1,
+          contributions: [],
+          generatedAt,
+        },
+        {
+          slotId: "chat.composer.overlay",
+          contractVersion: 1,
+          supportedKinds: ["panel"],
+          kind: "list",
+          layout: "stack",
+          fallbackPolicy: "none",
+          parentSlotId: "provider.conversation.composer",
+          scope: "session",
+          declarationEpoch: 1,
+          contributions: [],
+          generatedAt,
+        },
+      ],
+      generatedAt,
+      version: 1,
+    });
+
+    const dispose = (slots.registerEntry as any)("session-plugin", {
+      name: "chat.composer.bar",
+      key: "bar",
+      id: "bar",
+      children: {
+        "chat.composer.overlay": { kind: "list", scope: "session", supportedKinds: ["panel"] },
+      },
+    }, {} as any);
+    const contribution = slots.listContributions("chat.composer.bar")[0]!;
+    expect([...contribution.childSlotIds]).toEqual(["chat.composer.overlay"]);
+    expect(() => slots.assertRenderAuthority(contribution.contributionId, "chat.composer.overlay")).not.toThrow();
+
+    await dispose();
+  });
+
   it("recursively collapses child entries, stores, and grandchildren with the declaring parent", async () => {
     const slots = new BrowserSlotRuntime();
     await slots.declare({ slotId: "cascade.parent", contractVersion: 1, supportedKinds: ["panel"], kind: "single" });

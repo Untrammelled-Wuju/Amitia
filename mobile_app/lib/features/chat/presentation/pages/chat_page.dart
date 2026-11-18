@@ -2776,6 +2776,100 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
     final uiSnapshot = ref.watch(uiRuntimeProvider).valueOrNull;
     final conversationId = _runtime.conversationId?.trim() ?? '';
+    providerContext['sessionId'] = conversationId;
+    providerContext['session'] = {
+      'id': conversationId,
+      'sessionId': conversationId,
+      'characterId': characterId,
+      'channel': 'mobile',
+      'state': _runtime.sending ? 'running' : 'idle',
+      'status': _runtime.sending ? 'running' : 'idle',
+    };
+    providerContext['input'] = {
+      'draft': _composerController.text,
+      'attachmentIds': <String>[],
+      'draftRev': _composerController.text.length,
+      'phase': _runtime.sending ? 'sending' : 'plain',
+      'occurrences': <Object>[],
+      'queue': <Object>[],
+    };
+    providerContext['model'] = {
+      'id': selectedModelConfigId,
+      'name': selectedModelConfig?.name ?? '',
+      'modelName': selectedModelConfig?.model ?? '',
+      'provider': selectedModelConfig?.provider ?? '',
+      'reasoningEffort': _runtime.reasoningEffort,
+      'reasoningEnabled': _runtime.reasoningEnabled,
+      'options': modelConfigs
+          .map(
+            (model) => <String, dynamic>{
+              'id': model.id,
+              'name': model.name,
+              'modelName': model.model,
+              'provider': model.provider,
+              'supportsReasoning': model.supportsReasoning,
+            },
+          )
+          .toList(growable: false),
+    };
+    providerContext['inputActions'] = {
+      'insertQuote': (String value, [Object? summary]) {
+        final quote = value.trim();
+        if (quote.isEmpty) return false;
+        final block = quote.split('\n').map((line) => '> $line').join('\n');
+        final selection = _composerController.selection.isValid
+            ? _composerController.selection
+            : TextSelection.collapsed(offset: _composerController.text.length);
+        final current = _composerController.text;
+        final next =
+            '${current.substring(0, selection.start)}$block\n${current.substring(selection.end)}';
+        _composerController.value = TextEditingValue(
+          text: next,
+          selection: TextSelection.collapsed(
+            offset: selection.start + block.length + 1,
+          ),
+        );
+        return true;
+      },
+      'captureInsertion': () {
+        final selection = _composerController.selection.isValid
+            ? _composerController.selection
+            : TextSelection.collapsed(offset: _composerController.text.length);
+        return {
+          'start': selection.start,
+          'end': selection.end,
+          'draftRev': _composerController.text.length,
+        };
+      },
+      'insertText': (String value, Map<String, dynamic> span) {
+        final current = _composerController.text;
+        final start =
+            (span['start'] as num?)?.toInt().clamp(0, current.length) ??
+            current.length;
+        final end =
+            (span['end'] as num?)?.toInt().clamp(start, current.length) ??
+            start;
+        _composerController.value = TextEditingValue(
+          text: '${current.substring(0, start)}$value${current.substring(end)}',
+          selection: TextSelection.collapsed(offset: start + value.length),
+        );
+        return true;
+      },
+      'setDraft': (String value) {
+        _composerController.value = TextEditingValue(
+          text: value,
+          selection: TextSelection.collapsed(offset: value.length),
+        );
+      },
+      'persistDraft': () {},
+      'addAttachments': (List<Object?> ids) => false,
+      'removeAttachment': (String id) {},
+      'pruneAttachments': (List<Object?> ids) {},
+      'submit': () {
+        final value = _composerController.text.trim();
+        if (value.isNotEmpty) _onSend(value);
+      },
+    };
     final runtimeSessionState = conversationId.isEmpty
         ? null
         : ref
@@ -3039,6 +3133,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               MobileExtensionSlot(
+                slotId: 'chat.composer.dock.top',
+                context: {...providerContext, 'surface': 'composer-dock-top'},
+                actions: providerActions,
+              ),
+              MobileExtensionSlot(
                 slotId: 'chat.composer.hint',
                 context: {...providerContext, 'surface': 'composer-hint'},
                 actions: providerActions,
@@ -3174,6 +3273,63 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                   },
                   actions: providerActions,
                 ),
+                extensionLeading: MobileExtensionSlot(
+                  slotId: 'chat.composer.left',
+                  context: {...providerContext, 'surface': 'composer-left'},
+                  actions: providerActions,
+                ),
+                extensionTrailing: MobileExtensionSlot(
+                  slotId: 'chat.composer.right',
+                  context: {...providerContext, 'surface': 'composer-right'},
+                  actions: providerActions,
+                ),
+                extensionOverlay: MobileExtensionSlot(
+                  slotId: 'chat.composer.overlay',
+                  context: {...providerContext, 'surface': 'composer-overlay'},
+                  actions: providerActions,
+                ),
+                extensionModel: (fallback) => MobileExtensionSlot(
+                  slotId: 'chat.composer.model',
+                  context: {...providerContext, 'surface': 'composer-model'},
+                  actions: providerActions,
+                  fallback: fallback,
+                ),
+                extensionModelLabel: (fallback) => MobileExtensionSlot(
+                  slotId: 'chat.composer.model.label',
+                  context: {
+                    ...providerContext,
+                    'surface': 'composer-model-label',
+                  },
+                  actions: providerActions,
+                  fallback: fallback,
+                  declaredBySlotId: 'chat.composer.model',
+                ),
+                extensionModelOptions: MobileExtensionSlot(
+                  slotId: 'chat.composer.model.options',
+                  context: {
+                    ...providerContext,
+                    'surface': 'composer-model-options',
+                  },
+                  actions: providerActions,
+                  declaredBySlotId: 'chat.composer.model',
+                ),
+                extensionPermission: (fallback) => MobileExtensionSlot(
+                  slotId: 'chat.composer.permission',
+                  context: {
+                    ...providerContext,
+                    'surface': 'composer-permission',
+                  },
+                  actions: providerActions,
+                  fallback: fallback,
+                ),
+              ),
+              MobileExtensionSlot(
+                slotId: 'chat.composer.dock.bottom',
+                context: {
+                  ...providerContext,
+                  'surface': 'composer-dock-bottom',
+                },
+                actions: providerActions,
               ),
             ],
           ),
@@ -3204,381 +3360,460 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                       child: Stack(
                         children: [
                           Positioned.fill(
-                            child: AnimatedSwitcher(
-                              duration: AppMotion.standard,
-                              reverseDuration: AppMotion.quick,
-                              switchInCurve: AppMotion.enterCurve,
-                              switchOutCurve: AppMotion.exitCurve,
-                              layoutBuilder: (currentChild, previousChildren) {
-                                return Stack(
-                                  fit: StackFit.expand,
-                                  children: [
-                                    ...previousChildren,
-                                    ?currentChild,
-                                  ],
-                                );
-                              },
-                              transitionBuilder: (child, animation) {
-                                return FadeTransition(
-                                  opacity: animation,
-                                  child: child,
-                                );
-                              },
-                              child: KeyedSubtree(
-                                key: ValueKey<String>(
-                                  'conversation-messages:${conversationId.isEmpty ? 'draft' : conversationId}',
-                                ),
-                                child: showEmptyState
-                                    ? _buildEmptyChatState(
-                                        context,
-                                        characterName,
-                                        workspaceName,
-                                      )
-                                    : ListView.builder(
-                                        controller: _scrollController,
-                                        padding: EdgeInsets.fromLTRB(
-                                          0,
-                                          contentTopInset + 24,
-                                          0,
-                                          (composerHeight -
-                                                      MediaQuery.paddingOf(
-                                                        context,
-                                                      ).bottom)
-                                                  .clamp(0.0, double.infinity) +
-                                              32,
-                                        ),
-                                        itemCount:
-                                            flowItems.length +
-                                            (pendingRoleSwitch ? 1 : 0) +
-                                            (showHistoryLoader ? 1 : 0),
-                                        itemBuilder: (context, contentIndex) {
-                                          if (showHistoryLoader &&
-                                              contentIndex == 0) {
-                                            return SizedBox(
-                                              height: 56,
-                                              child: Center(
-                                                child:
-                                                    _runtime
-                                                        .isLoadingOlderMessages
-                                                    ? const SizedBox(
-                                                        width: 18,
-                                                        height: 18,
-                                                        child:
-                                                            CircularProgressIndicator(
-                                                              strokeWidth: 2,
-                                                            ),
-                                                      )
-                                                    : Text(
-                                                        '正在加载更早消息…',
-                                                        style:
-                                                            AppTypography.caption(
-                                                              context,
-                                                            ),
-                                                      ),
-                                              ),
-                                            );
-                                          }
-                                          final adjustedIndex =
-                                              showHistoryLoader
-                                              ? contentIndex - 1
-                                              : contentIndex;
-                                          final pendingRoleSwitchIndex =
-                                              flowItems.length;
-                                          if (pendingRoleSwitch &&
-                                              adjustedIndex ==
-                                                  pendingRoleSwitchIndex) {
-                                            return AmitiaRoleSwitchDivider(
-                                              key: const ValueKey(
-                                                'role-switch-pending',
-                                              ),
-                                              characterName: characterName,
-                                            );
-                                          }
-                                          final item = flowItems[adjustedIndex];
-                                          if (item.errorDetail != null) {
-                                            return KeyedSubtree(
-                                              key: ValueKey(item.key),
-                                              child: ChatErrorNotice(
-                                                detail: item.errorDetail!,
-                                                onRetry:
-                                                    item.messageIndex != null &&
-                                                        item.messageIndex! >=
-                                                            0 &&
-                                                        _runtime.canRetryMessage(
+                            child: UIProviderHost(
+                              capability: UICapability.conversationMessages,
+                              context: providerContext,
+                              actions: providerActions,
+                              fallback: AnimatedSwitcher(
+                                duration: AppMotion.standard,
+                                reverseDuration: AppMotion.quick,
+                                switchInCurve: AppMotion.enterCurve,
+                                switchOutCurve: AppMotion.exitCurve,
+                                layoutBuilder:
+                                    (currentChild, previousChildren) {
+                                      return Stack(
+                                        fit: StackFit.expand,
+                                        children: [
+                                          ...previousChildren,
+                                          ?currentChild,
+                                        ],
+                                      );
+                                    },
+                                transitionBuilder: (child, animation) {
+                                  return FadeTransition(
+                                    opacity: animation,
+                                    child: child,
+                                  );
+                                },
+                                child: KeyedSubtree(
+                                  key: ValueKey<String>(
+                                    'conversation-messages:${conversationId.isEmpty ? 'draft' : conversationId}',
+                                  ),
+                                  child: showEmptyState
+                                      ? _buildEmptyChatState(
+                                          context,
+                                          characterName,
+                                          workspaceName,
+                                        )
+                                      : ListView.builder(
+                                          controller: _scrollController,
+                                          padding: EdgeInsets.fromLTRB(
+                                            0,
+                                            contentTopInset + 24,
+                                            0,
+                                            (composerHeight -
+                                                        MediaQuery.paddingOf(
+                                                          context,
+                                                        ).bottom)
+                                                    .clamp(
+                                                      0.0,
+                                                      double.infinity,
+                                                    ) +
+                                                32,
+                                          ),
+                                          itemCount:
+                                              flowItems.length +
+                                              (pendingRoleSwitch ? 1 : 0) +
+                                              (showHistoryLoader ? 1 : 0),
+                                          itemBuilder: (context, contentIndex) {
+                                            if (showHistoryLoader &&
+                                                contentIndex == 0) {
+                                              return SizedBox(
+                                                height: 56,
+                                                child: Center(
+                                                  child:
+                                                      _runtime
+                                                          .isLoadingOlderMessages
+                                                      ? const SizedBox(
+                                                          width: 18,
+                                                          height: 18,
+                                                          child:
+                                                              CircularProgressIndicator(
+                                                                strokeWidth: 2,
+                                                              ),
+                                                        )
+                                                      : Text(
+                                                          '正在加载更早消息…',
+                                                          style:
+                                                              AppTypography.caption(
+                                                                context,
+                                                              ),
+                                                        ),
+                                                ),
+                                              );
+                                            }
+                                            final adjustedIndex =
+                                                showHistoryLoader
+                                                ? contentIndex - 1
+                                                : contentIndex;
+                                            final pendingRoleSwitchIndex =
+                                                flowItems.length;
+                                            if (pendingRoleSwitch &&
+                                                adjustedIndex ==
+                                                    pendingRoleSwitchIndex) {
+                                              return AmitiaRoleSwitchDivider(
+                                                key: const ValueKey(
+                                                  'role-switch-pending',
+                                                ),
+                                                characterName: characterName,
+                                              );
+                                            }
+                                            final item =
+                                                flowItems[adjustedIndex];
+                                            if (item.errorDetail != null) {
+                                              return KeyedSubtree(
+                                                key: ValueKey(item.key),
+                                                child: ChatErrorNotice(
+                                                  detail: item.errorDetail!,
+                                                  onRetry:
+                                                      item.messageIndex !=
+                                                              null &&
+                                                          item.messageIndex! >=
+                                                              0 &&
+                                                          _runtime.canRetryMessage(
+                                                            item.messageIndex!,
+                                                          )
+                                                      ? () => _retryMessage(
                                                           item.messageIndex!,
                                                         )
-                                                    ? () => _retryMessage(
-                                                        item.messageIndex!,
-                                                      )
+                                                      : null,
+                                                ),
+                                              );
+                                            }
+                                            if (!item.isMessage) {
+                                              final node = item.node!;
+                                              return KeyedSubtree(
+                                                key: ValueKey(item.key),
+                                                child: MobileExtensionSlot(
+                                                  slotId:
+                                                      'chat.conversation.node',
+                                                  contributionId:
+                                                      node.contributionId,
+                                                  context: {
+                                                    ...providerContext,
+                                                    'conversationNode': node
+                                                        .toJson(),
+                                                    'eventType': node.eventType,
+                                                  },
+                                                  actions: providerActions,
+                                                ),
+                                              );
+                                            }
+
+                                            final index = item.messageIndex!;
+                                            final message = item.message!;
+                                            final messageCharacter = characters
+                                                .where(
+                                                  (item) =>
+                                                      item.id ==
+                                                      message.characterId,
+                                                )
+                                                .firstOrNull;
+                                            final messageCharacterName =
+                                                message.characterName
+                                                    .trim()
+                                                    .isNotEmpty
+                                                ? message.characterName.trim()
+                                                : messageCharacter?.name
+                                                          .trim()
+                                                          .isNotEmpty ==
+                                                      true
+                                                ? messageCharacter!.name.trim()
+                                                : message.characterId
+                                                      .trim()
+                                                      .isEmpty
+                                                ? characterName
+                                                : '未知角色';
+                                            final messageAvatarInitial =
+                                                messageCharacterName.isNotEmpty
+                                                ? messageCharacterName
+                                                      .characters
+                                                      .first
+                                                : '?';
+                                            final isAgentTask =
+                                                message.type ==
+                                                MessageType.agentTask;
+                                            final messagePayload =
+                                                _providerMessage(message);
+                                            final messageContext =
+                                                <String, dynamic>{
+                                                  ...providerContext,
+                                                  'messageId': message.id,
+                                                  'sourceOwnerId':
+                                                      message.sourceOwnerId,
+                                                  'messageType':
+                                                      message.type.name,
+                                                  'direction':
+                                                      message.role ==
+                                                          MessageRole.user
+                                                      ? 'outgoing'
+                                                      : message.role ==
+                                                            MessageRole.system
+                                                      ? 'system'
+                                                      : 'incoming',
+                                                  'senderType':
+                                                      message.role ==
+                                                          MessageRole.user
+                                                      ? 'user'
+                                                      : message.role ==
+                                                            MessageRole.system
+                                                      ? 'system'
+                                                      : 'character',
+                                                  'extensionType':
+                                                      messagePayload['extensionType'] ??
+                                                      '',
+                                                  'message': messagePayload,
+                                                  'messageIndex': index,
+                                                };
+                                            final builtinMessage = RepaintBoundary(
+                                              child: AmitiaMessageBubble(
+                                                aiNameEnabled: ref.watch(
+                                                  aiNamePreferencesProvider,
+                                                ),
+                                                aiAvatarEnabled: ref.watch(
+                                                  aiAvatarPreferencesProvider,
+                                                ),
+                                                aiAvatarShape: ref.watch(
+                                                  aiAvatarShapeProvider,
+                                                ),
+                                                userMessageMaterial: ref.watch(
+                                                  userMessageMaterialProvider,
+                                                ),
+                                                message: message,
+                                                messageStyle: ref.watch(
+                                                  chatAppearancePreferencesProvider,
+                                                ),
+                                                showAvatar:
+                                                    _shouldShowAssistantIdentity(
+                                                      index,
+                                                    ),
+                                                showHeader:
+                                                    _shouldShowAssistantIdentity(
+                                                      index,
+                                                    ),
+                                                compactBottom:
+                                                    _shouldCompactBottom(index),
+                                                avatarInitial:
+                                                    messageAvatarInitial,
+                                                avatarColor: avatarColor,
+                                                avatarCharacterId:
+                                                    messageCharacter?.id ??
+                                                    (message.characterId
+                                                            .trim()
+                                                            .isEmpty
+                                                        ? characterId
+                                                        : message.characterId),
+                                                avatarUrl:
+                                                    message.characterAvatar
+                                                        .trim()
+                                                        .isNotEmpty
+                                                    ? message.characterAvatar
+                                                    : messageCharacter
+                                                              ?.avatar ??
+                                                          (message.characterId
+                                                                  .trim()
+                                                                  .isEmpty
+                                                              ? character
+                                                                        ?.avatar ??
+                                                                    ''
+                                                              : ''),
+                                                characterName:
+                                                    messageCharacterName,
+                                                userInitial: userInitial,
+                                                userAvatarColor:
+                                                    userAvatarColor,
+                                                userName: userName,
+                                                agentActivities:
+                                                    activitiesForMessage(
+                                                      message,
+                                                    ),
+                                                extensionImages: (fallback) =>
+                                                    MobileExtensionSlot(
+                                                      slotId:
+                                                          message.role ==
+                                                              MessageRole.user
+                                                          ? 'chat.message.user.images'
+                                                          : 'chat.message.images',
+                                                      context: {
+                                                        ...messageContext,
+                                                        'message':
+                                                            messagePayload,
+                                                        'surface':
+                                                            message.role ==
+                                                                MessageRole.user
+                                                            ? 'message-user-images'
+                                                            : 'message-images',
+                                                      },
+                                                      actions: providerActions,
+                                                      fallback: fallback,
+                                                    ),
+                                                onRetry:
+                                                    _runtime.canRetryMessage(
+                                                      index,
+                                                    )
+                                                    ? () => _retryMessage(index)
+                                                    : null,
+                                                onReply:
+                                                    message.type ==
+                                                        MessageType.systemNotice
+                                                    ? null
+                                                    : () => _setReplyTarget(
+                                                        message,
+                                                      ),
+                                                onCopy:
+                                                    message.type ==
+                                                            MessageType
+                                                                .systemNotice ||
+                                                        message.content
+                                                            .trim()
+                                                            .isEmpty
+                                                    ? null
+                                                    : () =>
+                                                          _copyMessage(message),
+                                                onEdit:
+                                                    message.role ==
+                                                        MessageRole.user
+                                                    ? () =>
+                                                          _editMessage(message)
+                                                    : null,
+                                                onAgentTaskTap: isAgentTask
+                                                    ? () {
+                                                        final taskId =
+                                                            message.agentTaskId
+                                                                ?.trim() ??
+                                                            '';
+                                                        context.push(
+                                                          taskId.isEmpty
+                                                              ? AppRoutes.agent
+                                                              : AppRoutes.agentTask(
+                                                                  taskId,
+                                                                ),
+                                                        );
+                                                      }
                                                     : null,
                                               ),
                                             );
-                                          }
-                                          if (!item.isMessage) {
-                                            final node = item.node!;
-                                            return KeyedSubtree(
-                                              key: ValueKey(item.key),
-                                              child: MobileExtensionSlot(
-                                                slotId:
-                                                    'chat.conversation.node',
-                                                contributionId:
-                                                    node.contributionId,
-                                                context: {
-                                                  ...providerContext,
-                                                  'conversationNode': node
-                                                      .toJson(),
-                                                  'eventType': node.eventType,
-                                                },
-                                                actions: providerActions,
-                                              ),
+                                            final messageRenderer =
+                                                UIMessageRendererRegistry.resolve(
+                                                  uiSnapshot,
+                                                  messageType:
+                                                      message.type.name,
+                                                  role: message.role.name,
+                                                );
+                                            final providerMessage = UIProviderHost(
+                                              capability: UICapability
+                                                  .conversationMessageRenderer,
+                                              providerId:
+                                                  messageRenderer?.providerId,
+                                              fallback: builtinMessage,
+                                              context: {
+                                                ...providerContext,
+                                                'message': messagePayload,
+                                                'messageIndex': index,
+                                              },
+                                              actions: providerActions,
                                             );
-                                          }
-
-                                          final index = item.messageIndex!;
-                                          final message = item.message!;
-                                          final messageCharacter = characters
-                                              .where(
-                                                (item) =>
-                                                    item.id ==
-                                                    message.characterId,
-                                              )
-                                              .firstOrNull;
-                                          final messageCharacterName =
-                                              message.characterName
-                                                  .trim()
-                                                  .isNotEmpty
-                                              ? message.characterName.trim()
-                                              : messageCharacter?.name
-                                                        .trim()
-                                                        .isNotEmpty ==
-                                                    true
-                                              ? messageCharacter!.name.trim()
-                                              : message.characterId
+                                            final slotMessage =
+                                                MobileExtensionSlot(
+                                                  slotId:
+                                                      'chat.message.renderer',
+                                                  context: messageContext,
+                                                  actions: providerActions,
+                                                  fallback: providerMessage,
+                                                );
+                                            final renderedMessage =
+                                                (messageContext['extensionType']
+                                                            ?.toString() ??
+                                                        '')
                                                     .trim()
                                                     .isEmpty
-                                              ? characterName
-                                              : '未知角色';
-                                          final messageAvatarInitial =
-                                              messageCharacterName.isNotEmpty
-                                              ? messageCharacterName
-                                                    .characters
-                                                    .first
-                                              : '?';
-                                          final isAgentTask =
-                                              message.type ==
-                                              MessageType.agentTask;
-                                          final builtinMessage = RepaintBoundary(
-                                            child: AmitiaMessageBubble(
-                                              aiNameEnabled: ref.watch(
-                                                aiNamePreferencesProvider,
-                                              ),
-                                              aiAvatarEnabled: ref.watch(
-                                                aiAvatarPreferencesProvider,
-                                              ),
-                                              aiAvatarShape: ref.watch(
-                                                aiAvatarShapeProvider,
-                                              ),
-                                              userMessageMaterial: ref.watch(
-                                                userMessageMaterialProvider,
-                                              ),
-                                              message: message,
-                                              messageStyle: ref.watch(
-                                                chatAppearancePreferencesProvider,
-                                              ),
-                                              showAvatar:
-                                                  _shouldShowAssistantIdentity(
-                                                    index,
-                                                  ),
-                                              showHeader:
-                                                  _shouldShowAssistantIdentity(
-                                                    index,
-                                                  ),
-                                              compactBottom:
-                                                  _shouldCompactBottom(index),
-                                              avatarInitial:
-                                                  messageAvatarInitial,
-                                              avatarColor: avatarColor,
-                                              avatarCharacterId:
-                                                  messageCharacter?.id ??
-                                                  (message.characterId
-                                                          .trim()
-                                                          .isEmpty
-                                                      ? characterId
-                                                      : message.characterId),
-                                              avatarUrl:
-                                                  message.characterAvatar
-                                                      .trim()
-                                                      .isNotEmpty
-                                                  ? message.characterAvatar
-                                                  : messageCharacter?.avatar ??
-                                                        (message.characterId
-                                                                .trim()
-                                                                .isEmpty
-                                                            ? character
-                                                                      ?.avatar ??
-                                                                  ''
-                                                            : ''),
-                                              characterName:
-                                                  messageCharacterName,
-                                              userInitial: userInitial,
-                                              userAvatarColor: userAvatarColor,
-                                              userName: userName,
-                                              agentActivities:
-                                                  activitiesForMessage(message),
-                                              onRetry:
-                                                  _runtime.canRetryMessage(
-                                                    index,
-                                                  )
-                                                  ? () => _retryMessage(index)
-                                                  : null,
-                                              onReply:
-                                                  message.type ==
-                                                      MessageType.systemNotice
-                                                  ? null
-                                                  : () => _setReplyTarget(
-                                                      message,
+                                                ? slotMessage
+                                                : MobileExtensionSlot(
+                                                    slotId:
+                                                        'chat.message.custom_renderer',
+                                                    context: messageContext,
+                                                    actions: providerActions,
+                                                    fallback: slotMessage,
+                                                  );
+                                            final hasAttachment =
+                                                (message.resourceUri ?? '')
+                                                    .trim()
+                                                    .isNotEmpty ||
+                                                (message.fileName ?? '')
+                                                    .trim()
+                                                    .isNotEmpty;
+                                            return KeyedSubtree(
+                                              key: ValueKey(item.key),
+                                              child: Column(
+                                                mainAxisSize: MainAxisSize.min,
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.stretch,
+                                                children: [
+                                                  if (index > 0 &&
+                                                      shouldShowRoleSwitch(
+                                                        _runtime
+                                                            .messages[index -
+                                                            1],
+                                                        message,
+                                                      ))
+                                                    AmitiaRoleSwitchDivider(
+                                                      characterName:
+                                                          messageCharacterName,
                                                     ),
-                                              onCopy:
-                                                  message.type ==
-                                                          MessageType
-                                                              .systemNotice ||
-                                                      message.content
-                                                          .trim()
-                                                          .isEmpty
-                                                  ? null
-                                                  : () => _copyMessage(message),
-                                              onEdit:
-                                                  message.role ==
-                                                      MessageRole.user
-                                                  ? () => _editMessage(message)
-                                                  : null,
-                                              onAgentTaskTap: isAgentTask
-                                                  ? () {
-                                                      final taskId =
-                                                          message.agentTaskId
-                                                              ?.trim() ??
-                                                          '';
-                                                      context.push(
-                                                        taskId.isEmpty
-                                                            ? AppRoutes.agent
-                                                            : AppRoutes.agentTask(
-                                                                taskId,
-                                                              ),
-                                                      );
-                                                    }
-                                                  : null,
-                                            ),
-                                          );
-                                          final messageRenderer =
-                                              UIMessageRendererRegistry.resolve(
-                                                uiSnapshot,
-                                                messageType: message.type.name,
-                                                role: message.role.name,
-                                              );
-                                          final providerMessage = UIProviderHost(
-                                            capability: UICapability
-                                                .conversationMessageRenderer,
-                                            providerId:
-                                                messageRenderer?.providerId,
-                                            fallback: builtinMessage,
-                                            context: {
-                                              ...providerContext,
-                                              'message': _providerMessage(
-                                                message,
-                                              ),
-                                              'messageIndex': index,
-                                            },
-                                            actions: providerActions,
-                                          );
-                                          final messageContext =
-                                              <String, dynamic>{
-                                                ...providerContext,
-                                                'messageId': message.id,
-                                                'sourceOwnerId':
-                                                    message.sourceOwnerId,
-                                                'messageType':
-                                                    message.type.name,
-                                                'message': _providerMessage(
-                                                  message,
-                                                ),
-                                                'messageIndex': index,
-                                              };
-                                          final hasAttachment =
-                                              (message.resourceUri ?? '')
-                                                  .trim()
-                                                  .isNotEmpty ||
-                                              (message.fileName ?? '')
-                                                  .trim()
-                                                  .isNotEmpty;
-                                          return KeyedSubtree(
-                                            key: ValueKey(item.key),
-                                            child: Column(
-                                              mainAxisSize: MainAxisSize.min,
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.stretch,
-                                              children: [
-                                                if (index > 0 &&
-                                                    shouldShowRoleSwitch(
-                                                      _runtime.messages[index -
-                                                          1],
-                                                      message,
-                                                    ))
-                                                  AmitiaRoleSwitchDivider(
-                                                    characterName:
-                                                        messageCharacterName,
-                                                  ),
-                                                providerMessage,
-                                                if (hasAttachment)
+                                                  renderedMessage,
+                                                  if (hasAttachment)
+                                                    Padding(
+                                                      padding:
+                                                          const EdgeInsets.fromLTRB(
+                                                            52,
+                                                            2,
+                                                            12,
+                                                            2,
+                                                          ),
+                                                      child: MobileExtensionSlot(
+                                                        slotId:
+                                                            'chat.message.attachment_renderer',
+                                                        context: messageContext,
+                                                        actions:
+                                                            providerActions,
+                                                      ),
+                                                    ),
                                                   Padding(
                                                     padding:
                                                         const EdgeInsets.fromLTRB(
                                                           52,
-                                                          2,
+                                                          0,
                                                           12,
                                                           2,
                                                         ),
                                                     child: MobileExtensionSlot(
                                                       slotId:
-                                                          'chat.message.attachment_renderer',
+                                                          'chat.message.badge',
                                                       context: messageContext,
                                                       actions: providerActions,
                                                     ),
                                                   ),
-                                                Padding(
-                                                  padding:
-                                                      const EdgeInsets.fromLTRB(
-                                                        52,
-                                                        0,
-                                                        12,
-                                                        2,
-                                                      ),
-                                                  child: MobileExtensionSlot(
-                                                    slotId:
-                                                        'chat.message.badge',
-                                                    context: messageContext,
-                                                    actions: providerActions,
+                                                  Padding(
+                                                    padding:
+                                                        const EdgeInsets.fromLTRB(
+                                                          52,
+                                                          0,
+                                                          12,
+                                                          6,
+                                                        ),
+                                                    child: MobileExtensionSlot(
+                                                      slotId:
+                                                          'chat.message.action',
+                                                      context: messageContext,
+                                                      actions: providerActions,
+                                                    ),
                                                   ),
-                                                ),
-                                                Padding(
-                                                  padding:
-                                                      const EdgeInsets.fromLTRB(
-                                                        52,
-                                                        0,
-                                                        12,
-                                                        6,
-                                                      ),
-                                                  child: MobileExtensionSlot(
-                                                    slotId:
-                                                        'chat.message.action',
-                                                    context: messageContext,
-                                                    actions: providerActions,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          );
-                                        },
-                                      ),
+                                                ],
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                ),
                               ),
                             ),
                           ),
@@ -3663,6 +3898,27 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 extensionActions: MobileExtensionSlot(
                   slotId: 'chat.header.action',
                   context: {...providerContext, 'surface': 'header'},
+                  actions: providerActions,
+                ),
+                extensionLeading: MobileExtensionSlot(
+                  slotId: 'chat.header.leading',
+                  context: {...providerContext, 'surface': 'header-leading'},
+                  actions: providerActions,
+                ),
+                extensionLineage: (fallback) => MobileExtensionSlot(
+                  slotId: 'chat.header.lineage',
+                  context: {
+                    ...providerContext,
+                    'surface': 'header-lineage',
+                    'lineageSessionId': conversationId,
+                    'displayTitle': currentConversationTitle,
+                  },
+                  actions: providerActions,
+                  fallback: fallback,
+                ),
+                extensionCorner: MobileExtensionSlot(
+                  slotId: 'chat.header.corner',
+                  context: {...providerContext, 'surface': 'header-corner'},
                   actions: providerActions,
                 ),
               ),
@@ -4179,6 +4435,9 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
   final List<OwnedGroupMember> groupMembers;
   final bool isGroup;
   final Widget? extensionActions;
+  final Widget? extensionLeading;
+  final Widget? extensionCorner;
+  final Widget Function(Widget fallback)? extensionLineage;
 
   const _ChatTopBar({
     required this.onBack,
@@ -4193,6 +4452,9 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
     required this.groupMembers,
     required this.isGroup,
     this.extensionActions,
+    this.extensionLeading,
+    this.extensionCorner,
+    this.extensionLineage,
   });
 
   @override
@@ -4236,19 +4498,35 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
                     ),
                   ),
                   const SizedBox(width: 4),
+                  if (extensionLeading != null) ...[
+                    extensionLeading!,
+                    const SizedBox(width: 4),
+                  ],
                   Expanded(
                     child: Row(
                       children: [
                         Flexible(
-                          child: Text(
-                            title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppTypography.body(context).copyWith(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
+                          child:
+                              extensionLineage?.call(
+                                Text(
+                                  title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: AppTypography.body(context).copyWith(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ) ??
+                              Text(
+                                title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppTypography.body(context).copyWith(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
                         ),
                         const SizedBox(width: 8),
                         _ChatHeaderAvatars(
@@ -4372,6 +4650,7 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
                       iconSize: 22,
                     ),
                   ),
+                  if (extensionCorner != null) extensionCorner!,
                 ],
               ),
             ),

@@ -122,7 +122,7 @@ func TestSendDesiredCommandReplaysImmutableOutboxSnapshot(t *testing.T) {
 	if err := repo.SendDesiredCommand(ctx, "op-1", "space-1", "device-1", "runtime-1", "ins-1", 12); err != nil {
 		t.Fatalf("send desired command: %v", err)
 	}
-	cmd, err := repo.facade.Commands().GetCommandByIdempotencyKey("desired:device-1:12")
+	cmd, err := repo.facade.Commands().GetCommandByIdempotencyKey("desired:device-1:ins-1:12")
 	if err != nil {
 		t.Fatalf("load command: %v", err)
 	}
@@ -150,7 +150,7 @@ func TestSendDesiredCommandIdempotentWhenSnapshotCommandExists(t *testing.T) {
 	}
 	if _, err := repo.facade.Commands().CreateDurableCommand(
 		"space-1", "device-1", string(runtimev1.CommandTypeSyncDesiredState),
-		"desired:device-1:12", "desired:device-1", seq, publisherPayload(t, recoverySnapshot(12)),
+		"desired:device-1:ins-1:12", "desired:device-1:ins-1", seq, publisherPayload(t, recoverySnapshot(12)),
 	); err != nil {
 		t.Fatalf("seed command: %v", err)
 	}
@@ -158,7 +158,7 @@ func TestSendDesiredCommandIdempotentWhenSnapshotCommandExists(t *testing.T) {
 		t.Fatalf("replay must stay idempotent, got %v", err)
 	}
 	var count int64
-	if err := db.Model(&runtimev1.RuntimeCommand{}).Where("idempotency_key = ?", "desired:device-1:12").Count(&count).Error; err != nil {
+	if err := db.Model(&runtimev1.RuntimeCommand{}).Where("idempotency_key = ?", "desired:device-1:ins-1:12").Count(&count).Error; err != nil {
 		t.Fatalf("count commands: %v", err)
 	}
 	if count != 1 {

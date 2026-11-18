@@ -19,6 +19,25 @@
         </button>
       </div>
       <div v-if="block.error" class="amrp-tool-error">{{ block.error }}</div>
+      <ExtensionSlot
+        slot-id="chat.message.tool.images"
+        :context="{ ...(extensionContext || {}), tool: block, images: toolImages }"
+        fallback="default"
+        layout="stack"
+        surface-role="message"
+        bare
+        render-fallback-while-scope-pending
+      />
+      <ExtensionSlot
+        v-if="block.name === 'cordis_run'"
+        slot-id="chat.message.tool.cordis"
+        :context="{ ...(extensionContext || {}), tool: block }"
+        :dispatch-key="block.id"
+        fallback="none"
+        layout="stack"
+        surface-role="message"
+        render-fallback-while-scope-pending
+      />
       <div class="amrp-tool-actions">
         <span v-if="block.duration">{{ block.duration }} ms</span>
         <button type="button" @click="copyDetails">复制详情</button>
@@ -32,14 +51,27 @@ import { computed, ref } from "vue";
 import { ElMessage } from "element-plus";
 import type { ToolBlock } from "../types";
 import { copyText, prettyJson } from "../utils";
+import ExtensionSlot from "@/components/extension/ExtensionSlot.vue";
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   block: ToolBlock;
-}>();
+  extensionContext?: Record<string, unknown>;
+}>(), {
+  extensionContext: () => ({}),
+});
 
 const expanded = ref(false);
 const resultExpanded = ref(false);
 const resultText = computed(() => prettyJson(props.block.result));
+const toolImages = computed(() => {
+  const value = props.block.result;
+  if (!value || typeof value !== "object") return [];
+  if (Array.isArray((value as any).images)) return (value as any).images;
+  if (Array.isArray((value as any).attachments)) {
+    return (value as any).attachments.filter((item: any) => item?.kind === "image");
+  }
+  return [];
+});
 const summary = computed(() => {
   if (props.block.error) return props.block.error;
   if (typeof props.block.arguments === "object" && props.block.arguments) {

@@ -1,0 +1,28 @@
+{
+  "name": "@amitia-test/multi-entry-plugin",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./index.js"
+    },
+    "./types": {
+      "import": "./types.js"
+    },
+    "./review": {
+      "import": "./review.js"
+    },
+    "./search/client": {
+      "import": "./search-client.js"
+    },
+    "./client": {
+      "import": "./client.js"
+    }
+  },
+  "dsh": {
+    "manifestVersion": 1,
+    "client": {
+      "platform": "web"
+    }
+  }
+}

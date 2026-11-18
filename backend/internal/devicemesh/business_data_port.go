@@ -139,14 +139,24 @@ func (rt *Runtime) LocalMemoryArchiveEmpty(ctx context.Context, scope coordinati
 	if err := rt.validateDataRoute(ctx, scope); err != nil {
 		return false, err
 	}
-	if scope.Coordinated || scope.TargetDeviceID != rt.LocalDeviceID || scope.ResourceOwnerID != rt.LocalDeviceID {
+	if scope.TargetDeviceID != rt.LocalDeviceID {
+		return false, nil
+	}
+	ownerID := scope.ResourceOwnerID
+	if scope.Coordinated {
+		if scope.InitiatorDeviceID != rt.LocalDeviceID || rt.CoreDeviceID != rt.LocalDeviceID ||
+			scope.ResourceOwnerID != scope.CoreID || rt.CoreDataPort == nil {
+			return false, nil
+		}
+		ownerID = ""
+	} else if ownerID != rt.LocalDeviceID {
 		return false, nil
 	}
 	roles, err := rt.Roles(ctx, scope)
 	if err != nil || len(roles) != 0 {
 		return false, err
 	}
-	hasRecords, err := business.HasLiveMemoryArchiveRecords(ctx, rt.DB, scope.ResourceOwnerID)
+	hasRecords, err := business.HasLiveMemoryArchiveRecords(ctx, rt.DB, ownerID)
 	return !hasRecords, err
 }
 

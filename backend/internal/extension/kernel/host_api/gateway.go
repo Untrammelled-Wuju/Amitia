@@ -4,12 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/u-ai/backend/internal/timeoutpolicy"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 )
 
 type DefaultGateway struct {
@@ -203,12 +204,23 @@ func (g *DefaultGateway) Call(ctx context.Context, request CallRequest) CallResu
 		g.recordAudit(ctx, request, result)
 		return result
 	}
-	if err := g.scopeCheck.Check(ctx, request.RuntimeIdentity, request.ScopeSnapshotID, route.ScopePolicy); err != nil {
+	var scopeErr error
+	if strings.TrimSpace(request.TargetScopeSnapshotID) != "" {
+		targetChecker, ok := g.scopeCheck.(TargetScopeChecker)
+		if !ok {
+			scopeErr = fmt.Errorf("host_api: target scope snapshot %s requires a target scope checker (fail closed)", request.TargetScopeSnapshotID)
+		} else {
+			scopeErr = targetChecker.CheckTarget(ctx, request.RuntimeIdentity, request, route.ScopePolicy)
+		}
+	} else {
+		scopeErr = g.scopeCheck.Check(ctx, request.RuntimeIdentity, request.ScopeSnapshotID, route.ScopePolicy)
+	}
+	if scopeErr != nil {
 		result := CallResult{
 			Status: StatusRejected,
 			Error: &Error{
 				Code:    ErrorCodeScopeDenied,
-				Message: err.Error(),
+				Message: scopeErr.Error(),
 			},
 		}
 		g.recordAudit(ctx, request, result)

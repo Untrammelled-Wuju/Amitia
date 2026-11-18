@@ -113,6 +113,76 @@ terminate_tree() {
     terminate_tree "$child"
   done
   kill "$pid" >/dev/null 2>&1 || true
+  local waited=0
+  while kill -0 "$pid" 2>/dev/null && [ "$waited" -lt 20 ]; do
+    sleep 0.1
+    waited=$((waited + 1))
+  done
+  kill -9 "$pid" >/dev/null 2>&1 || true
+}
+
+project_process_patterns() {
+  printf '%s\n' \
+    "$ROOT/desktop/node_modules/.*/electron/dist/Electron.app/Contents/MacOS/Electron" \
+    "$ROOT/desktop/node_modules/.*/vite/bin/vite.js" \
+    "node_modules/vite/bin/vite.js --host 127.0.0.1 --port 5178" \
+    "node_modules/vite/bin/vite.js --host 127.0.0.1 --port 5178 .*" \
+    "scripts/dev-vite.mjs" \
+    "../scripts/dev-vite.mjs node_modules/vite/bin/vite.js" \
+    "$ROOT/desktop/resources/core/AmitiaCore" \
+    "$ROOT/desktop/resources/core/$TARGET/AmitiaCore" \
+    "$ROOT/AmitiaData/plugin-host" \
+    "$ROOT/AmitiaData/extensions-v2/installations" \
+    "$ROOT/AmitiaData/qdrant/qdrant" \
+    "$ROOT/AmitiaData/surrealdb/surreal"
+}
+
+project_processes_alive() {
+  local pattern pids pid stat
+  while IFS= read -r pattern; do
+    pids="$(pgrep -f "$pattern" 2>/dev/null || true)"
+    for pid in $pids; do
+      stat="$(ps -o stat= -p "$pid" 2>/dev/null | tr -d '[:space:]')"
+      case "$stat" in
+        *U*|*Z*) continue ;;
+      esac
+      return 0
+    done
+  done < <(project_process_patterns)
+  if lsof -tiTCP:5178 -sTCP:LISTEN >/dev/null 2>&1; then
+    return 0
+  fi
+  return 1
+}
+
+force_stop_project_processes() {
+  local pattern
+  while IFS= read -r pattern; do
+    pkill -KILL -f "$pattern" >/dev/null 2>&1 || true
+  done < <(project_process_patterns)
+}
+
+wait_project_processes_exit() {
+  local attempt
+  for attempt in $(seq 1 100); do
+    if ! project_processes_alive; then
+      return 0
+    fi
+    sleep 0.1
+  done
+  echo "旧项目进程未在 10 秒内退出，执行强制终止" >&2
+  force_stop_project_processes
+  for attempt in $(seq 1 50); do
+    if ! project_processes_alive; then
+      return 0
+    fi
+    sleep 0.1
+  done
+  echo "旧项目进程强制终止后仍未退出" >&2
+  project_process_patterns | while IFS= read -r pattern; do
+    pgrep -fl "$pattern" 2>/dev/null || true
+  done >&2
+  exit 1
 }
 
 stop_project_processes() {
@@ -121,12 +191,32 @@ stop_project_processes() {
   fi
   pkill -f "$ROOT/desktop/node_modules/.*/electron/dist/Electron.app/Contents/MacOS/Electron" >/dev/null 2>&1 || true
   pkill -f "$ROOT/desktop/node_modules/.*/vite/bin/vite.js" >/dev/null 2>&1 || true
+  pkill -f "node_modules/vite/bin/vite.js --host 127.0.0.1 --port 5178" >/dev/null 2>&1 || true
+  pkill -f "node_modules/vite/bin/vite.js --host 127.0.0.1 --port 5178 .*" >/dev/null 2>&1 || true
+  pkill -f "scripts/dev-vite.mjs" >/dev/null 2>&1 || true
+  pkill -f "../scripts/dev-vite.mjs node_modules/vite/bin/vite.js" >/dev/null 2>&1 || true
+  project_vite_pid="$(lsof -tiTCP:5178 -sTCP:LISTEN 2>/dev/null || true)"
+  if [ -n "$project_vite_pid" ]; then
+    project_vite_command="$(ps -p "$project_vite_pid" -o command= 2>/dev/null || true)"
+    case "$project_vite_command" in
+      *node_modules/vite/bin/vite.js*)
+        project_vite_parent="$(ps -p "$project_vite_pid" -o ppid= 2>/dev/null | tr -d '[:space:]' || true)"
+        if [ -n "$project_vite_parent" ]; then terminate_tree "$project_vite_parent"; fi
+        terminate_tree "$project_vite_pid"
+        ;;
+      *)
+        echo "端口 5178 被非项目进程占用: $project_vite_command" >&2
+        exit 1
+        ;;
+    esac
+  fi
   pkill -f "$ROOT/desktop/resources/core/AmitiaCore" >/dev/null 2>&1 || true
   pkill -f "$ROOT/desktop/resources/core/$TARGET/AmitiaCore" >/dev/null 2>&1 || true
   pkill -f "$ROOT/AmitiaData/plugin-host" >/dev/null 2>&1 || true
   pkill -f "$ROOT/AmitiaData/extensions-v2/installations" >/dev/null 2>&1 || true
   pkill -f "$ROOT/AmitiaData/qdrant/qdrant" >/dev/null 2>&1 || true
   pkill -f "$ROOT/AmitiaData/surrealdb/surreal" >/dev/null 2>&1 || true
+  wait_project_processes_exit
 }
 
 if [ ! -x "$DATA_DIR/node/bin/node" ]; then
@@ -140,7 +230,6 @@ command -v pnpm >/dev/null 2>&1 || { echo "未找到 pnpm，请先启用 corepac
 echo "[1/5] 清理旧进程"
 stop_project_processes
 rm -f "$RUN_DIR/endpoint.json"
-sleep 1
 
 echo "[2/5] 准备核心 ($TARGET)"
 if [ ! -f "$ROOT/desktop/resources/core/AmitiaCore" ] && [ ! -f "$ROOT/desktop/resources/core/$TARGET/AmitiaCore" ]; then
@@ -189,7 +278,32 @@ for package in front desktop; do
   fi
 done
 
+ensure_web_port_free() {
+  local attempt pid command
+  for attempt in $(seq 1 150); do
+    pid="$(lsof -tiTCP:5178 -sTCP:LISTEN 2>/dev/null | head -n 1 || true)"
+    if [ -z "$pid" ]; then
+      return 0
+    fi
+    command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+    case "$command" in
+      *node_modules/vite/bin/vite.js*|*scripts/dev-vite.mjs*)
+        terminate_tree "$pid"
+        kill -9 "$pid" >/dev/null 2>&1 || true
+        ;;
+      *)
+        echo "端口 5178 被非项目进程占用: $command" >&2
+        exit 1
+        ;;
+    esac
+    sleep 0.2
+  done
+  echo "端口 5178 未在 30 秒内释放" >&2
+  exit 1
+}
+
 echo "[5/5] 启动桌面端与核心"
+ensure_web_port_free
 export AMITIA_RUNTIME_ROOT="$DATA_DIR"
 export AMITIA_CONFIG_DIR="$DATA_DIR/config"
 export AMITIA_WORKSPACE_DIR="$ROOT"

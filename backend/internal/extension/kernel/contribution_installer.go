@@ -629,6 +629,7 @@ func (i *TypedContributionInstaller) buildToolOp(ctx context.Context, contrib do
 		Permissions  json.RawMessage `json:"permissions,omitempty"`
 		Scope        json.RawMessage `json:"scope,omitempty"`
 		Internal     bool            `json:"internal,omitempty"`
+		TimeoutMS    int64           `json:"timeoutMs,omitempty"`
 		Runtime      map[string]any  `json:"runtime,omitempty"`
 		Metadata     map[string]any  `json:"metadata,omitempty"`
 	}
@@ -713,6 +714,10 @@ func (i *TypedContributionInstaller) buildToolOp(ctx context.Context, contrib do
 		Scope:        scopeRule,
 		Runtime:      runtimeBinding,
 		Metadata:     def.Metadata,
+	}
+	if def.TimeoutMS > 0 {
+		toolDef.TimeoutMS = def.TimeoutMS
+		toolDef.ExecutionPolicy.Timeout = time.Duration(def.TimeoutMS) * time.Millisecond
 	}
 
 	permIDs := make([]string, 0)
@@ -800,7 +805,7 @@ func (i *TypedContributionInstaller) buildDesktopPetPluginOp(ctx context.Context
 			})
 			if i.container.DesktopPetPluginBoundary != nil {
 				if err := i.container.DesktopPetPluginBoundary.MarkContributionAvailable(ctx, contrib.ExtensionID, contrib); err != nil {
-					log.Printf("[desktop-pet-plugin] mark contribution available failed: %v", err)
+					return fmt.Errorf("petx: install contribution %s: %w", contrib.ID, err)
 				}
 			}
 			return nil
@@ -1361,7 +1366,10 @@ func (i *TypedContributionInstaller) buildUIContributionOp(ctx context.Context, 
 		}
 	}
 
-	isClientModule := uiDef.Entry.Type == ui_contribution.SandboxClientModule || uiDef.Sandbox.Type == ui_contribution.SandboxClientModule
+	isClientModule := uiDef.Entry.Type == ui_contribution.SandboxClientModule ||
+		uiDef.Entry.Type == ui_contribution.SandboxMobileWebRuntime ||
+		uiDef.Sandbox.Type == ui_contribution.SandboxClientModule ||
+		uiDef.Sandbox.Type == ui_contribution.SandboxMobileWebRuntime
 	if isClientModule {
 		relativePath := filepath.Clean(filepath.FromSlash(strings.TrimSpace(uiDef.Entry.Path)))
 		if relativePath == "." || relativePath == ".." || strings.HasPrefix(relativePath, ".."+string(filepath.Separator)) || filepath.IsAbs(relativePath) {
@@ -1369,6 +1377,15 @@ func (i *TypedContributionInstaller) buildUIContributionOp(ctx context.Context, 
 		}
 		if strings.TrimSpace(uiDef.Entry.ContentHash) == "" {
 			return installOp{}, fmt.Errorf("client module contribution %s requires entry.content_hash", uiDef.ContributionID)
+		}
+		if strings.TrimSpace(uiDef.Entry.StylePath) != "" && strings.TrimSpace(uiDef.Entry.StyleHash) == "" {
+			return installOp{}, fmt.Errorf("client module contribution %s requires entry.style_hash when style_path is set", uiDef.ContributionID)
+		}
+		if stylePath := strings.TrimSpace(uiDef.Entry.StylePath); stylePath != "" {
+			cleanStyle := filepath.Clean(filepath.FromSlash(stylePath))
+			if cleanStyle == "." || cleanStyle == ".." || strings.HasPrefix(cleanStyle, ".."+string(filepath.Separator)) || filepath.IsAbs(cleanStyle) {
+				return installOp{}, fmt.Errorf("client module contribution %s requires a safe entry.style_path", uiDef.ContributionID)
+			}
 		}
 	}
 	hasPage := !hostRuntime && (uiDef.Kind == ui_contribution.UIContributionSchemaPage || (uiDef.Kind == ui_contribution.UIContributionWebPage && uiDef.Sandbox.Type == ui_contribution.SandboxSchemaRenderer))

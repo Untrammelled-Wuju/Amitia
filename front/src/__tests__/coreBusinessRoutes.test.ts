@@ -8,7 +8,6 @@ const coreRoutes = [
   "/storage",
   "/creative-workshop",
   "/creative-workshop/character-cards",
-  "/creative-workshop/pet",
   "/creative-workshop/pet/installations",
   "/game-center",
   "/game-center/plugin",

@@ -96,16 +96,33 @@ SPDX-License-Identifier: AGPL-3.0-only
             删除
           </el-button>
         </div>
+        <ExtensionSlot
+          slot-id="settings.model.provider"
+          :context="providerCardContext(cfg, 'saved')"
+          :dispatch-key="cfg.apiType"
+          fallback="none"
+          layout="stack"
+          surface-role="main"
+        />
       </div>
     </div>
 
     <el-empty v-else description="还没有模型配置" :image-size="80">
       <el-button type="primary" @click="emit('add')">新增配置</el-button>
     </el-empty>
+    <ExtensionSlot
+      slot-id="settings.model.footer"
+      :context="modelFooterContext"
+      fallback="none"
+      layout="stack"
+      surface-role="main"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
+import ExtensionSlot from "@/components/extension/ExtensionSlot.vue";
+
 const props = defineProps<{
   configs: any[];
   testingId: number | null;
@@ -119,6 +136,27 @@ const emit = defineEmits<{
   (e: "delete", id: number): void;
   (e: "add"): void;
 }>();
+
+function providerCardContext(cfg: any, mode: 'saved' | 'draft') {
+  return {
+    settingsNs: String(cfg.apiType || ''),
+    provider: String(cfg.apiType || ''),
+    providerName: providerName(cfg.apiType),
+    mode,
+    configId: cfg.id,
+    modelName: String(cfg.modelName || ''),
+    baseUrl: String(cfg.baseUrl || ''),
+    hasApiKey: cfg.hasApiKey === true,
+    active: cfg.isActive === true,
+    disabled: cfg.disabled === true,
+    status: String(cfg.lastTestStatus || ''),
+  };
+}
+
+const modelFooterContext = {
+  settingsNs: 'models',
+  surface: 'models-footer',
+};
 
 function providerName(apiType: string): string {
   const p = props.providers.find((pr: any) => pr.id === apiType);

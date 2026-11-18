@@ -16,15 +16,20 @@ import {
 import type { ClientObservable } from "@/ui-runtime/slotContract";
 import { browserClientPluginRuntime, type ClientContributionInstance, type ClientSlotContribution } from "@/ui-runtime/clientPluginRuntime";
 import { CLIENT_SLOT_RUNTIME_CONTEXT } from "@/ui-runtime/clientSlotContext";
+import type { UIPluginContext } from "@/ui-runtime/uiContext";
 import { useChatStore } from "@/stores/chat";
 import { useAppStore } from "@/stores/app";
+import { openContextMenu, type ContextMenuAction } from "@/components/context-menu/contextMenuStore";
 
 const props = defineProps<{
   contribution: ClientSlotContribution;
   context: Record<string, unknown>;
   matched?: unknown;
   hookContext?: unknown;
+  hocChildren?: VNode;
 }>();
+
+const RenderVNode = (props: { node: VNode }) => props.node;
 
 // Dynamic import avoids a static module cycle: ExtensionSlot -> Host -> outlet.
 const AuthorizedSlotOutlet = defineAsyncComponent(() => import("./ExtensionSlot.vue"));
@@ -48,6 +53,7 @@ function currentSessionId(): string | undefined {
 }
 
 const sessionId = computed(currentSessionId);
+const uiContext = computed(() => props.context as unknown as UIPluginContext);
 const instance = computed<ClientContributionInstance>(() =>
   browserClientPluginRuntime.slots.acquireContributionInstance(props.contribution.contributionId, sessionId.value),
 );
@@ -169,7 +175,7 @@ function renderAuthorizedSlot(
   const slots = options.fallback === undefined ? undefined : { default: () => options.fallback };
   return h(AuthorizedSlotOutlet, {
     slotId,
-    context: owner,
+    context: { ...props.context, ...owner },
     dispatchKey: options.entryKey,
     dispatchOnly: options.only,
     hookContext: options.hookContext,
@@ -186,6 +192,98 @@ function renderSlot(slotId: string, owner: Record<string, unknown> = {}, options
 
 function renderSlotChain(slotId: string, owner: Record<string, unknown> = {}, options?: { fallback?: unknown; overlay?: boolean; hookContext?: unknown }): VNode {
   return renderAuthorizedSlot(slotId, owner, { ...options, chain: true });
+}
+
+function useContextMenu() {
+  return {
+    getTriggerProps(request: unknown) {
+      return {
+        onContextmenu(event: MouseEvent) {
+          if (!event || typeof event.preventDefault !== 'function') return;
+          event.preventDefault();
+          event.stopPropagation();
+          const descriptor = typeof request === 'function'
+            ? (request as () => unknown)()
+            : request;
+          const input = descriptor && typeof descriptor === 'object'
+            ? descriptor as Record<string, unknown>
+            : {};
+          const value = input.value && typeof input.value === 'object'
+            ? input.value as Record<string, unknown>
+            : {};
+          const kind = String(input.kind || '');
+          const items: ContextMenuAction[] = [];
+          if (kind === 'file') {
+            const path = String(value.path || input.path || '').trim();
+            const ownerSession = String(value.sessionId || input.sessionId || sessionId.value || '').trim();
+            if (path) {
+              items.push(
+                {
+                  id: 'copy-file-path',
+                  label: '复制文件路径',
+                  action: async () => {
+                    await navigator.clipboard.writeText(path);
+                  },
+                },
+                {
+                  id: 'open-file-workbench',
+                  label: '在工作台打开文件',
+                  action: () => {
+                    window.dispatchEvent(new CustomEvent('amitia:workbench:open', {
+                      detail: {
+                        protocolVersion: 1,
+                        conversationId: ownerSession,
+                        kind: 'file',
+                        resourceUri: path,
+                        workspaceUri: '',
+                        title: path.split('/').pop() || path,
+                      },
+                    }));
+                  },
+                },
+              );
+            }
+          } else if (kind === 'url') {
+            const url = String(value.url || input.url || '').trim();
+            if (url) {
+              items.push(
+                {
+                  id: 'open-url',
+                  label: '在新窗口打开链接',
+                  action: () => {
+                    window.open(url, '_blank', 'noopener,noreferrer');
+                  },
+                },
+                {
+                  id: 'copy-url',
+                  label: '复制链接地址',
+                  action: async () => {
+                    await navigator.clipboard.writeText(url);
+                  },
+                },
+              );
+            }
+          }
+          if (!items.length) {
+            const serialized = JSON.stringify(descriptor ?? null);
+            items.push({
+              id: 'copy-context',
+              label: '复制上下文',
+              action: async () => {
+                await navigator.clipboard.writeText(serialized);
+              },
+            });
+          }
+          openContextMenu({
+            x: event.clientX,
+            y: event.clientY,
+            title: kind === 'file' ? '文件操作' : kind === 'url' ? '链接操作' : '上下文操作',
+            items,
+          });
+        },
+      };
+    },
+  };
 }
 
 function sessionSnapshot(): Record<string, unknown> | undefined {
@@ -245,9 +343,22 @@ const commonInjectedFace = computed(() => bindInjectedFace(
 ));
 const injectedFace = computed(() => bindInjectedFace(instance.value.injected));
 const localeTranslator = computed(() => {
-  browserClientPluginRuntime.locale.revision.value;
+  const runtime = browserClientPluginRuntime.locale;
+  runtime.revision.value;
   const namespace = props.contribution.localeNamespace;
-  return namespace ? browserClientPluginRuntime.locale.bind(namespace) : undefined;
+  if (!namespace) return undefined;
+  if (runtime.has(namespace)) return runtime.bind(namespace);
+  console.error(
+    `[extension] locale namespace ${namespace} is not registered for ${props.contribution.contributionId}`,
+    new Error(`locale namespace ${namespace} is not registered`),
+  );
+  return (key: string, params?: Record<string, unknown>) => {
+    let value = key;
+    for (const [name, raw] of Object.entries(params ?? {})) {
+      value = value.replaceAll(`{${name}}`, String(raw));
+    }
+    return value;
+  };
 });
 const componentProps = computed<Record<string, unknown>>(() => ({
   // Registration ownerDefaults are defaults only; render occurrence owner props win.
@@ -259,6 +370,7 @@ const componentProps = computed<Record<string, unknown>>(() => ({
   pluginId: props.contribution.pluginId,
   contributionId: props.contribution.contributionId,
   sessionId: sessionId.value,
+  uiContext: uiContext.value,
   useStore,
   actions: instance.value.actions,
   useSession,
@@ -266,6 +378,7 @@ const componentProps = computed<Record<string, unknown>>(() => ({
   SessionProvider,
   renderSlot,
   renderSlotChain,
+  useContextMenu,
   ...(localeTranslator.value ? { t: localeTranslator.value } : {}),
   ...(props.matched !== undefined ? { matched: props.matched } : {}),
 }));
@@ -274,6 +387,7 @@ provide(CLIENT_SLOT_RUNTIME_CONTEXT, {
   pluginId: props.contribution.pluginId,
   slotId: props.contribution.slotId,
   contributionId: props.contribution.contributionId,
+  uiContext,
   parent,
 });
 </script>
@@ -282,5 +396,7 @@ provide(CLIENT_SLOT_RUNTIME_CONTEXT, {
   <component
     :is="contribution.component"
     v-bind="componentProps"
-  />
+  >
+    <RenderVNode v-if="hocChildren" :node="hocChildren" />
+  </component>
 </template>

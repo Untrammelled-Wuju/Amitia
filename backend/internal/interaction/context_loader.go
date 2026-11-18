@@ -146,6 +146,8 @@ func applySnapshotField(snapshot *ContextSnapshot, name string, field SnapshotFi
 		setSnapshotField(&snapshot.Channel, field)
 	case "temporal":
 		setSnapshotField(&snapshot.Temporal, field)
+	case "promptExtensions":
+		setSnapshotField(&snapshot.PromptExtensions, field)
 	default:
 	}
 }

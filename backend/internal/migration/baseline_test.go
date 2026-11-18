@@ -4,11 +4,50 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/u-ai/backend/internal/desktoppet/installation"
+	"github.com/u-ai/backend/internal/desktoppet/installation/binding"
+	"github.com/u-ai/backend/internal/desktoppet/installation/desired"
 	"github.com/u-ai/backend/internal/desktoppet/installation/journal"
 	"github.com/u-ai/backend/internal/desktoppet/installation/operation"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
+
+func TestBaselineScopesDesktopPetStateAndBindingToInstallation(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "baseline.db")), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ApplyBaseline(db); err != nil {
+		t.Fatal(err)
+	}
+	repo := installation.NewRepository(db, nil)
+	for _, id := range []string{"first", "second"} {
+		if _, err := repo.UpsertRuntimeDesiredStateCAS(db, "space", "device", &desired.RuntimeDesiredState{
+			SpaceID: "space", DeviceID: "device", InstallationID: id, DesiredRevision: 1, DesiredEnabled: true,
+		}, -1); err != nil {
+			t.Fatalf("write state for %s: %v", id, err)
+		}
+	}
+	for _, id := range []string{"first", "second"} {
+		if err := repo.UpsertActiveBindingTx(db, &binding.DeviceActiveInstallationBinding{
+			SpaceID: "space", DeviceID: "device", InstallationID: id,
+		}); err != nil {
+			t.Fatalf("write binding for %s: %v", id, err)
+		}
+	}
+	if err := repo.DeleteActiveBindingTx(db, "space", "device", "first"); err != nil {
+		t.Fatal(err)
+	}
+	state, err := repo.GetRuntimeDesiredStateTx(db, "space", "device", "second")
+	if err != nil || state == nil || !state.DesiredEnabled {
+		t.Fatalf("second desired state was not retained: %+v, %v", state, err)
+	}
+	bound, err := repo.GetActiveBindingForSpaceDeviceTx(db, "space", "device", "second")
+	if err != nil || bound.InstallationID != "second" {
+		t.Fatalf("second binding was not retained: %+v, %v", bound, err)
+	}
+}
 
 func TestEnsureDesktopPetInstallationOperationColumns(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "baseline.db")), &gorm.Config{})

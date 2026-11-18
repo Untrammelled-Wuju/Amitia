@@ -1,0 +1,13 @@
+{
+  "name": "@deepseek-ai/dsh-storage-json",
+  "version": "0.0.0-local",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./index.js"
+    }
+  },
+  "dsh": {
+    "manifestVersion": 1
+  }
+}

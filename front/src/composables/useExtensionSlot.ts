@@ -3,30 +3,16 @@ import { useExtensionUIStore, type UIContributionSummary } from "@/stores/extens
 import { useTheme } from "@/composables/useTheme";
 import { resolveHostEnvironment } from "@/composables/useHostEnvironment";
 import { browserClientPluginRuntime } from "@/ui-runtime/clientPluginRuntime";
+import {
+  buildUIPluginContext,
+  type UIPluginContext,
+  type UIPluginSurfaceContext,
+  type UIPluginSurfaceRole,
+} from "@/ui-runtime/uiContext";
 
-export type ExtensionSurfaceRole = "header" | "status" | "sidebar" | "message" | "composer" | "main" | "overlay";
-
-export interface ExtensionSurfaceContext {
-  role: ExtensionSurfaceRole;
-  width: number;
-  height: number;
-  breakpoint: "xs" | "sm" | "md" | "lg" | "xl";
-}
-
-export interface SlotContext {
-  slotId: string;
-  contractVersion: number;
-  platform: "windows" | "macos" | "linux" | "web";
-  theme: { mode: "light" | "dark"; density: "comfortable" | "compact" };
-  locale: string;
-  data: Record<string, unknown>;
-  host: "web" | "desktop";
-  os: "windows" | "macos" | "linux" | "unknown";
-  surface: ExtensionSurfaceContext;
-  capabilities: string[];
-  scope: "root" | "session-maybe" | "session";
-  sessionId?: string;
-}
+export type ExtensionSurfaceRole = UIPluginSurfaceRole;
+export type ExtensionSurfaceContext = UIPluginSurfaceContext;
+export type SlotContext = UIPluginContext;
 
 export interface UseExtensionSlotOptions {
   slotId: string;
@@ -84,7 +70,7 @@ export function useExtensionSlot(options: UseExtensionSlotOptions) {
     const capabilities = Array.isArray(contextRef.value.capabilities)
       ? (contextRef.value.capabilities as unknown[]).filter((item): item is string => typeof item === "string")
       : [];
-    return {
+    return buildUIPluginContext({
       slotId,
       contractVersion: slotSnapshot.value?.contractVersion ?? clientSlotDefinition.value?.contractVersion ?? 1,
       platform: env.platform,
@@ -95,9 +81,12 @@ export function useExtensionSlot(options: UseExtensionSlotOptions) {
       os: env.os,
       surface,
       capabilities,
+      permissions: Array.isArray(contextRef.value.permissions) ? contextRef.value.permissions : [],
       scope: scope.value,
-      ...(sessionId.value ? { sessionId: sessionId.value } : {}),
-    };
+      ...(typeof contextRef.value.actions === "object" && contextRef.value.actions ? { actions: contextRef.value.actions as Record<string, (...args: any[]) => unknown> } : {}),
+      ...(typeof contextRef.value.navigate === "function" ? { navigate: contextRef.value.navigate as (target: string, type?: string) => unknown } : {}),
+      route: typeof contextRef.value.route === "string" ? contextRef.value.route : undefined,
+    });
   }
 
   function detectLocale(): string {

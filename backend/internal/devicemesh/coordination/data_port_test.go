@@ -29,6 +29,10 @@ func TestSnapshotRejectsCrossOwnerCrossRoleAndDuplicateData(t *testing.T) {
 	if err := coordination.ValidateSnapshot(scope, snapshot); err != nil {
 		t.Fatal(err)
 	}
+	snapshot.RuntimeContext = map[string]json.RawMessage{"promptExtensions": json.RawMessage(`{}`)}
+	if err := coordination.ValidateSnapshot(scope, snapshot); err != nil {
+		t.Fatalf("prompt extensions runtime context rejected: %v", err)
+	}
 	snapshot.OwnerID = "b"
 	if err := coordination.ValidateSnapshot(scope, snapshot); !errors.Is(err, coordination.ErrWrongOwner) {
 		t.Fatal(err)

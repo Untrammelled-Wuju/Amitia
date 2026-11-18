@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sort"
 	"strings"
 	"time"
 
@@ -13,6 +14,105 @@ import (
 	"gorm.io/gorm"
 	amitialog "log"
 )
+
+type PromptExtensionContextLoader struct {
+	provider extensioncontext.Provider
+}
+
+func NewPromptExtensionContextLoader(provider extensioncontext.Provider) *PromptExtensionContextLoader {
+	return &PromptExtensionContextLoader{provider: provider}
+}
+
+func (l *PromptExtensionContextLoader) Name() string           { return "promptExtensions" }
+func (l *PromptExtensionContextLoader) IsRequired() bool       { return false }
+func (l *PromptExtensionContextLoader) Timeout() time.Duration { return 800 * time.Millisecond }
+func (l *PromptExtensionContextLoader) CacheKey(scope InteractionScope, version string) string {
+	return version + ":prompt-extensions:" + scope.CharacterID + ":" + scope.ConversationID
+}
+
+func (l *PromptExtensionContextLoader) Load(ctx context.Context, scope InteractionScope, version string) (SnapshotField[any], error) {
+	if l.provider == nil {
+		return FieldUnavailable[any](l.Name()), nil
+	}
+	raw, err := l.provider.Resolve(ctx, "chat.realtime.prompt", extensioncontext.Request{
+		SpaceID:        scope.SpaceID,
+		CharacterID:    scope.CharacterID,
+		ConversationID: scope.ConversationID,
+		At:             time.Now(),
+	})
+	if err != nil {
+		return FieldUnavailable[any](l.Name()), err
+	}
+	snapshot, err := extensioncontext.Decode(raw)
+	if err != nil {
+		return FieldUnavailable[any](l.Name()), err
+	}
+	sections := make([]PromptExtensionSection, 0)
+	for _, contribution := range snapshot.Contributions {
+		if contribution.Error != "" {
+			continue
+		}
+		var payload struct {
+			ID       string                   `json:"id"`
+			Content  string                   `json:"content"`
+			Priority int                      `json:"priority"`
+			Sections []PromptExtensionSection `json:"sections"`
+			Contexts []PromptExtensionSection `json:"contexts"`
+		}
+		if err := json.Unmarshal(contribution.Data, &payload); err != nil {
+			return FieldUnavailable[any](l.Name()), err
+		}
+		if len(payload.Sections) > 0 {
+			for _, section := range payload.Sections {
+				if strings.TrimSpace(section.Content) == "" {
+					continue
+				}
+				if section.Source == "" {
+					section.Source = contribution.Source
+				}
+				sections = append(sections, section)
+			}
+		}
+		if len(payload.Contexts) > 0 {
+			for _, context := range payload.Contexts {
+				if strings.TrimSpace(context.Content) == "" {
+					continue
+				}
+				if context.ID == "" {
+					context.ID = "context:" + strings.TrimSpace(context.Source)
+				} else if !strings.HasPrefix(context.ID, "context:") {
+					context.ID = "context:" + context.ID
+				}
+				if context.Source == "" {
+					context.Source = contribution.Source
+				}
+				sections = append(sections, context)
+			}
+		}
+		if len(payload.Sections) > 0 || len(payload.Contexts) > 0 {
+			continue
+		}
+		if strings.TrimSpace(payload.Content) == "" {
+			continue
+		}
+		sections = append(sections, PromptExtensionSection{
+			ID:       payload.ID,
+			Content:  payload.Content,
+			Priority: payload.Priority,
+			Source:   contribution.Source,
+		})
+	}
+	if len(sections) == 0 {
+		return FieldUnavailable[any](l.Name()), nil
+	}
+	sort.SliceStable(sections, func(i, j int) bool {
+		if sections[i].Priority != sections[j].Priority {
+			return sections[i].Priority > sections[j].Priority
+		}
+		return sections[i].ID < sections[j].ID
+	})
+	return FieldReady[any](PromptExtensionSet{Sections: sections, Count: len(sections)}, l.Name(), version), nil
+}
 
 type ChannelContextLoader struct{}
 

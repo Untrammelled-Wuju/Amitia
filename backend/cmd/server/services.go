@@ -300,6 +300,10 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	charRepo := character.NewRepository(ctx)
 	kernelCharReader := newKernelCharacterReader()
 	kernelConvReader := newKernelConversationReader()
+	kernelConversationCreator := newConversationCreatorAdapter()
+	kernelProjectAdapter := newProjectAdapter()
+	kernelTurnController := newConversationTurnControllerAdapter()
+	kernelDirectory := newKernelDirectoryAdapter()
 	kernelMemQuerySvc := newKernelMemoryQueryService()
 	var nodeResolver script_host.NodeEnvironmentResolver
 	var artifactResolver script_host.ArtifactResolver
@@ -432,15 +436,38 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		WithTaskOwnershipBinding(taskOwnershipBinding).
 		WithRuntimeIdentity(kernelRuntimeIdentity).
 		WithWorkshopModelGenerator(chatSvc).
+		WithModelGateway(newModelGatewayAdapter(chatSvc)).
+		WithModelDefaultsProvider(newModelGatewayAdapter(chatSvc)).
+		WithConversationForker(kernelConversationCreator).
 		WithDBPath(kernelDBPath).
 		WithScopeRelationDB(scopeRelationDB).
 		WithExtensionRoot(kernelRoot).
 		WithCharacterReader(kernelCharReader).
+		WithCharacterRevisionReader(func(readCtx context.Context, characterID string) (int64, error) {
+			var revision int64
+			if err := ctx.DB.WithContext(readCtx).Raw("SELECT revision FROM characters WHERE id = ?", characterID).Row().Scan(&revision); err != nil {
+				return 0, err
+			}
+			return revision, nil
+		}).
 		WithConversationReader(kernelConvReader).
 		WithMemoryQueryService(kernelMemQuerySvc).
 		WithAgentAdminController(agentAdminController).
 		WithConversationMessageSender(newConversationMessageSenderAdapter(kernelChatAppender)).
 		WithConversationMessageAppender(kernelChatAppender).
+		WithConversationCreator(kernelConversationCreator).
+		WithConversationLister(kernelConversationCreator).
+		WithConversationDeleter(kernelConversationCreator).
+		WithConversationWorkspaceResolver(kernelConversationCreator).
+		WithConversationTurnController(kernelTurnController).
+		WithConversationArchiver(kernelConversationCreator).
+		WithConversationPinner(kernelConversationCreator).
+		WithDirectoryLister(kernelDirectory).
+		WithDirectoryCreator(kernelDirectory).
+		WithProjectLister(kernelProjectAdapter).
+		WithProjectCreator(kernelProjectAdapter).
+		WithProjectUpdater(kernelProjectAdapter).
+		WithProjectDeleter(kernelProjectAdapter).
 		WithVectorStore(newKernelVectorStoreAdapter(ctx.DB)).
 		WithNodeEnvironmentResolver(nodeResolver).
 		WithHostArtifactResolver(artifactResolver).
@@ -1273,6 +1300,11 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		kernelChatAppender.engine, kernelChatAppender.coreID = services.OwnedBusiness, localSpace.SpaceID()
 		kernelChatAppender.channelDelivery = deviceMeshRuntime
 		kernelConvReader.engine, kernelConvReader.coreID = services.OwnedBusiness, localSpace.SpaceID()
+		kernelConversationCreator.engine, kernelConversationCreator.coreID = services.OwnedBusiness, localSpace.SpaceID()
+		kernelConversationCreator.workspaceService = services.WorkspaceService
+		kernelProjectAdapter.engine, kernelProjectAdapter.coreID = services.OwnedBusiness, localSpace.SpaceID()
+		kernelProjectAdapter.workspaces = services.WorkspaceService
+		kernelTurnController.engine, kernelTurnController.coreID = services.OwnedBusiness, localSpace.SpaceID()
 		kernelCharReader.engine, kernelCharReader.catalog, kernelCharReader.coreID = services.OwnedBusiness, deviceMeshRuntime, localSpace.SpaceID()
 		var inferenceAuthority chat.InferenceAuthority
 		if deviceMeshRuntime.LocalHandler != nil {
@@ -1539,6 +1571,7 @@ func newRuntimeContextLoaderRegistry(ctx *app.AppContext, charRepo character.Rep
 	runtimeRegistry.Register(interaction.NewConversationContextLoader(ctx.DB))
 	runtimeRegistry.Register(interaction.NewBeliefContextLoader(memoryReader))
 	runtimeRegistry.Register(interaction.NewLifeContextLoader(extensionContext))
+	runtimeRegistry.Register(interaction.NewPromptExtensionContextLoader(extensionContext))
 	runtimeRegistry.Register(interaction.NewUnresolvedThreadContextLoader(ctx.DB))
 	if len(temporalServices) > 0 && temporalServices[0] != nil {
 		runtimeRegistry.Register(interaction.NewTemporalContextLoader(temporalServices[0]))

@@ -159,6 +159,9 @@ func runtimeBudgetModules(snapshot ContextSnapshot, path PathType) []TokenBudget
 	if snapshot.UnresolvedThreads.Status == LoadStatusReady && snapshot.UnresolvedThreads.Value.Count > 0 {
 		modules = append(modules, TokenBudgetModule{Name: "unresolved_threads", Tokens: 220, Priority: BudgetPriorityHighAuthority})
 	}
+	if snapshot.PromptExtensions.Status == LoadStatusReady && snapshot.PromptExtensions.Value.Count > 0 {
+		modules = append(modules, TokenBudgetModule{Name: "prompt_extensions", Tokens: 220, Priority: BudgetPriorityHighAuthority})
+	}
 	if path == PathTypeDeep {
 		modules = append(modules, TokenBudgetModule{Name: "deep_reasoning", Tokens: 360, Priority: BudgetPriorityCurrentIntent})
 	}

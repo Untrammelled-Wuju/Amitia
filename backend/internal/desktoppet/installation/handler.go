@@ -693,7 +693,7 @@ func (h *CoordinatorHandler) loadRuntimeView(ctx context.Context, spaceID, devic
 	var sessionAuthority *runtimeSessionAuthority
 	var actualStateAuthority *runtimeActualStateAuthority
 	err := h.repo.Transaction(ctx, func(tx RepositoryV2) error {
-		state, err := tx.GetRuntimeDesiredStateTx(tx.DB(), spaceID, deviceID)
+		state, err := tx.GetRuntimeDesiredStateTx(tx.DB(), spaceID, deviceID, installationID)
 		if err != nil {
 			return err
 		}

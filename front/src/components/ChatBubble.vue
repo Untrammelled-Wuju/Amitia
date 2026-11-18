@@ -13,6 +13,7 @@ SPDX-License-Identifier: AGPL-3.0-only
     :show-avatar="showAvatar"
     :show-header="showHeader"
     :compact-bottom="compactBottom"
+    :extension-context="extensionContext"
     @retry="$emit('retry', $event)"
     @reply="$emit('reply', $event)"
     @edit="$emit('edit', $event)"
@@ -47,6 +48,7 @@ const props = withDefaults(
     showAvatar?: boolean;
     showHeader?: boolean;
     compactBottom?: boolean;
+    extensionContext?: Record<string, unknown>;
   }>(),
   {
     charName: "Amitia",
@@ -59,6 +61,7 @@ const props = withDefaults(
     showAvatar: true,
     showHeader: true,
     compactBottom: false,
+    extensionContext: () => ({}),
   },
 );
 

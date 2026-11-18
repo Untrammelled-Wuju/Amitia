@@ -38,6 +38,14 @@
         <dd>{{ formatTime(current.expiresAt || current.createdAt) }}</dd>
       </div>
     </dl>
+    <ExtensionSlot
+      v-if="current"
+      slot-id="chat.approval.detail"
+      :context="{ ...current, sessionId: conversationId, conversationId, approvalId: current.approvalId, toolCallId: current.payload?.toolCallId || current.payload?.callId }"
+      fallback="none"
+      layout="stack"
+      surface-role="main"
+    />
     <section v-if="current?.kind === 'agent_approval'" class="approval-arguments">
       <strong>调用参数</strong>
       <pre>{{ prettyArguments }}</pre>
@@ -77,6 +85,7 @@ import { ElMessage } from "element-plus";
 import { apiClient } from "@/composables/useApi";
 import { ownedChatRuntimeRequest } from "@/runtime/owned-chat-management";
 import { decideSourceTaskApproval } from "@/views/kernel/tasks/api";
+import ExtensionSlot from "@/components/extension/ExtensionSlot.vue";
 
 interface AttentionItem {
   id: string;
@@ -223,17 +232,17 @@ function dismissCurrent() {
 }
 
 async function resolveAgent(item: AttentionItem, approved: boolean) {
-  if (!item.conversationId || !item.turnId || !item.approvalId) {
-    throw new Error("审批缺少会话或回合绑定");
+  if (!item.conversationId || !item.approvalId) {
+    throw new Error("审批缺少会话绑定");
   }
   resolving.value = true;
   try {
     const result = await ownedChatRuntimeRequest<{ id: string; turnId: string; approved: boolean }>(
       "approval",
-      { conversationId: item.conversationId, turnId: item.turnId, approvalId: item.approvalId, approved },
+      { conversationId: item.conversationId, turnId: item.turnId || "", approvalId: item.approvalId, approved },
       item.roleId || "",
     );
-    if (result.id !== item.approvalId || result.turnId !== item.turnId || result.approved !== approved) {
+    if (result.id !== item.approvalId || (result.turnId || "") !== (item.turnId || "") || result.approved !== approved) {
       throw new Error("审批结果与当前请求不匹配");
     }
     dismissed.value.add(item.id);

@@ -48,6 +48,9 @@ def find_tsc(node_bin, plugin_host_dir):
     local_npm_modules = os.path.join(plugin_host_dir, NODE_MODULES_DIR, "typescript", "bin", "tsc")
     if os.path.isfile(local_npm_modules):
         return local_npm_modules
+    source_npm_modules = os.path.join(PLUGIN_HOST_ROOT, NODE_MODULES_DIR, "typescript", "bin", "tsc")
+    if os.path.isfile(source_npm_modules):
+        return source_npm_modules
     return None
 
 

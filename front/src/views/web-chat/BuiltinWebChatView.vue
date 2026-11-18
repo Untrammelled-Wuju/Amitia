@@ -3,6 +3,15 @@ SPDX-FileCopyrightText: 2026 彭旭
 SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
+  <ExtensionSlot
+    slot-id="chat.conversation.root"
+    :context="chatExtensionContext"
+    fallback="default"
+    layout="stack"
+    surface-role="main"
+    bare
+    render-fallback-while-scope-pending
+  >
   <UIProviderHost
     v-if="externalConversationProvider"
     capability="conversation.shell"
@@ -15,11 +24,38 @@ SPDX-License-Identifier: AGPL-3.0-only
     <el-dialog v-if="boundCallScope" v-model="callActive" data-amitia-ui="component.dialog" fullscreen :show-close="false" :close-on-click-modal="false" :close-on-press-escape="false" destroy-on-close>
       <RealtimeCallDialog :mode="callMode" voice-type="" resource-id="" :conversation-id="boundCallConversation" :character-id="boundCallScope.roleId" :expected-execution-scope="boundCallScope" :historical-role-id="boundCallHistoricalRole" :char-name="charName" :char-avatar="charAvatar" @close="handleEndCall" @conversation-saved="handleOwnedCallSaved" />
     </el-dialog>
+    <ExtensionSlot
+      slot-id="chat.conversation.session"
+      :context="chatExtensionContext"
+      fallback="default"
+      layout="stack"
+      surface-role="main"
+      bare
+      render-fallback-while-scope-pending
+    >
     <section ref="chatSurfaceRef" class="chat-surface" :class="{ 'chat-surface--sidebar': conversationSidebarVisible }" data-amitia-ui="chat.surface">
     <AutomationStatusIndicator :status="automationStatus" />
 
     <Teleport v-if="titlebarTeleportReady" :to="titlebarTeleportTarget" :disabled="!useTitlebarChrome">
     <div ref="chatHeaderRef" class="chat-header-region" :class="{ 'is-titlebar': useTitlebarChrome }">
+    <ExtensionSlot
+      slot-id="chat.conversation.header"
+      :context="chatExtensionContext"
+      fallback="default"
+      layout="inline"
+      surface-role="header"
+      bare
+      render-fallback-while-scope-pending
+    >
+    <ExtensionSlot
+      slot-id="chat.conversation.session.header"
+      :context="chatExtensionContext"
+      fallback="default"
+      layout="inline"
+      surface-role="header"
+      bare
+      render-fallback-while-scope-pending
+    >
     <UIProviderHost
       capability="conversation.header"
       :fallback="ChatHeaderBar"
@@ -47,6 +83,16 @@ SPDX-License-Identifier: AGPL-3.0-only
       @view-summary="handleViewSummary"
       @manage-group="showGroupMembers = true"
     ><template #extension-actions><button type="button" class="sidebar-toggle-btn" aria-label="切换工作区" title="工作区" @click="workbench.toggleVisible()"><el-icon><GridIcon /></el-icon></button><button v-if="hasConversationSidebar && isSmallViewport" type="button" class="sidebar-toggle-btn" aria-label="展开插件侧栏" @click="sidebarDrawerOpen = true"><el-icon><MenuIcon /></el-icon></button><ChatHeaderExtensionHost :context="chatExtensionContext" /></template></UIProviderHost>
+    </ExtensionSlot>
+    <ExtensionSlot
+      slot-id="chat.conversation.subagent.footer"
+      :context="chatExtensionContext"
+      fallback="none"
+      layout="stack"
+      surface-role="header"
+      render-fallback-while-scope-pending
+    />
+    </ExtensionSlot>
     </div>
     </Teleport>
       <div class="chat-body-wrapper">
@@ -80,6 +126,14 @@ SPDX-License-Identifier: AGPL-3.0-only
         />
       </ExtensionSlot>
       <div class="conversation-messages-region" :aria-busy="conversationSwitching">
+        <ExtensionSlot
+          slot-id="chat.conversation.views"
+          :context="chatExtensionContext"
+          fallback="none"
+          layout="tabs"
+          surface-role="main"
+          render-fallback-while-scope-pending
+        />
         <UIProviderHost
           capability="conversation.messages"
           :fallback="MessagesArea"
@@ -162,6 +216,15 @@ SPDX-License-Identifier: AGPL-3.0-only
     </div>
     <div class="chat-scroll-fade chat-scroll-fade--top" aria-hidden="true"></div>
     <div class="chat-scroll-fade chat-scroll-fade--bottom" aria-hidden="true"></div>
+    <ExtensionSlot
+      slot-id="chat.composer.root"
+      :context="chatExtensionContext"
+      fallback="default"
+      layout="stack"
+      surface-role="composer"
+      bare
+      render-fallback-while-scope-pending
+    >
     <div ref="composerRegionRef" class="composer-region" data-amitia-ui="chat.composer">
       <div v-if="group" class="group-composer-members" aria-label="群成员点名">
         <button v-for="member in activeGroupMembers" :key="member.memberId" type="button" @click="insertGroupMention(member)">@{{ member.characterName }}</button>
@@ -216,6 +279,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       @cancel-reply="replyTarget = null"
       @update:permission="handlePermissionModeChange"
     /></div>
+    </ExtensionSlot>
 
     <CharacterPickerDialog
       v-model:visible="showCharPicker"
@@ -244,7 +308,9 @@ SPDX-License-Identifier: AGPL-3.0-only
     </el-drawer>
 
     </section>
+    </ExtensionSlot>
   </div>
+  </ExtensionSlot>
 </template>
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick, watch, inject } from "vue";

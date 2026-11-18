@@ -22,7 +22,10 @@ exports.default = defineExtension({
       parameters: { type: "object", properties: {} },
       runtimeBinding: "host_internal",
       metadata: { handlerName: "hello" },
-    }, async () => successResult({ ok: true }));
+    }, async (_input, invocation) => successResult({
+      scope: invocation.runtime.scope,
+      toolCallId: invocation.toolCallId,
+    }));
   },
   async deactivate() {},
 });
@@ -42,7 +45,7 @@ exports.default = defineExtension({
           jsonrpc: "2.0",
           id: "call",
           method: "runtime.invoke",
-          params: { contributionId: "hello", input: {} },
+          params: { contributionId: "hello", input: {}, spaceId: "space", characterId: "role", conversationId: "session", toolCallId: "model-call" },
         }) + "\n");
       }
       if (message.id === "call") {
@@ -59,5 +62,8 @@ exports.default = defineExtension({
     }) + "\n");
   });
   child.kill("SIGTERM");
-  assert.deepEqual(result.result, { ok: true });
+  assert.deepEqual(result.result, {
+    scope: { scope: "conversation", spaceId: "space", characterId: "role", conversationId: "session" },
+    toolCallId: "model-call",
+  });
 });

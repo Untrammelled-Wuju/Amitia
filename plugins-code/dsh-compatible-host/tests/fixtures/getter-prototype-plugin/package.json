@@ -1,0 +1,13 @@
+{
+  "name": "@amitia-test/getter-prototype-plugin",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./index.js"
+    }
+  },
+  "dsh": {
+    "manifestVersion": 1
+  }
+}

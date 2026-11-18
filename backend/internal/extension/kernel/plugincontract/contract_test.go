@@ -55,6 +55,30 @@ func TestParseValidManifest(t *testing.T) {
 	}
 }
 
+func TestPetxRequiresExactlyOneEmbeddedPetResource(t *testing.T) {
+	manifest, err := Parse([]byte(validManifest))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pet := manifest.Modules[0].Contributions[0]
+	pet.Kind = "petx"
+	pet.Adapter = "desktop_pet"
+	pet.Spec = map[string]any{"contributionKind": "pet_resource", "resourceRef": "assets/pet/manifest.json"}
+	manifest.Modules[0].Contributions = []ContributionDescriptor{pet}
+	if report := manifest.Validate(); hasIssue(report, "petx_one_resource") || hasIssue(report, "pet_resource_ref") {
+		t.Fatalf("valid pet resource rejected: %+v", report.Issues)
+	}
+	manifest.Modules[0].Contributions = append(manifest.Modules[0].Contributions, pet)
+	if report := manifest.Validate(); !hasIssue(report, "petx_one_resource") {
+		t.Fatalf("multiple pets accepted: %+v", report.Issues)
+	}
+	manifest.Modules[0].Contributions = []ContributionDescriptor{pet}
+	manifest.Modules[0].Contributions[0].Spec = map[string]any{"contributionKind": "pet_resource"}
+	if report := manifest.Validate(); !hasIssue(report, "pet_resource_ref") {
+		t.Fatalf("missing resource accepted: %+v", report.Issues)
+	}
+}
+
 func TestParseRejectsLegacyManifestFields(t *testing.T) {
 	legacy := `{
 	  "manifestVersion": 1,
@@ -155,6 +179,59 @@ func TestManifestProjectsDataPolicyIntoDomainMetadata(t *testing.T) {
 	scopes, ok := definition.Metadata["data.scopes"].([]string)
 	if !ok || len(scopes) != 1 || scopes[0] != "device" {
 		t.Fatalf("data scopes were not projected: %#v", definition.Metadata["data.scopes"])
+	}
+}
+
+func TestManifestProjectsPluginDataScopeIntoDomainMetadata(t *testing.T) {
+	manifest, err := Parse([]byte(validManifest))
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest.Data = &DataContract{
+		SchemaVersion: 1,
+		Backup:        true,
+		Uninstall:     "retain",
+		PluginData:    &PluginDataContract{Include: []string{"dsh-data"}},
+	}
+	if report := manifest.Validate(); report.HasErrors() {
+		t.Fatalf("valid plugin data scope rejected: %+v", report.Issues)
+	}
+	definition, err := manifest.ToExtensionDefinition()
+	if err != nil {
+		t.Fatal(err)
+	}
+	includes, ok := definition.Metadata["data.pluginData.include"].([]string)
+	if !ok || len(includes) != 1 || includes[0] != "dsh-data" {
+		t.Fatalf("plugin data include was not projected: %#v", definition.Metadata["data.pluginData.include"])
+	}
+}
+
+func TestManifestRejectsUnsafePluginDataScope(t *testing.T) {
+	cases := map[string]*PluginDataContract{
+		"absolute":     {Include: []string{"/dsh-data"}},
+		"parent":       {Include: []string{"../dsh-data"}},
+		"backslash":    {Include: []string{"dsh-data\\storage"}},
+		"unnormalized": {Include: []string{"dsh-data/./storage"}},
+		"empty":        {Include: []string{""}},
+		"blank":        {Include: nil},
+	}
+	for name, pluginData := range cases {
+		manifest, err := Parse([]byte(validManifest))
+		if err != nil {
+			t.Fatal(err)
+		}
+		manifest.Data = &DataContract{SchemaVersion: 1, Backup: true, Uninstall: "retain", PluginData: pluginData}
+		if report := manifest.Validate(); !hasIssue(report, "data_plugin_data") {
+			t.Fatalf("%s: expected plugin data rejection, got %+v", name, report.Issues)
+		}
+	}
+	manifest, err := Parse([]byte(validManifest))
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest.Data = &DataContract{SchemaVersion: 1, Backup: false, Uninstall: "retain", PluginData: &PluginDataContract{Include: []string{"dsh-data"}}}
+	if report := manifest.Validate(); !hasIssue(report, "data_plugin_data") {
+		t.Fatalf("expected plugin data scope without backup to be rejected, got %+v", report.Issues)
 	}
 }
 

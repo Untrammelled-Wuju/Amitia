@@ -29,6 +29,22 @@ SPDX-License-Identifier: AGPL-3.0-only
         @select-mention="selectMention"
         @load-more="loadAgentSkills(true)"
       />
+      <ExtensionSlot
+        slot-id="chat.composer.dock.top"
+        :context="composerSlotContext"
+        fallback="none"
+        layout="stack"
+        surface-role="composer"
+      />
+      <ExtensionSlot
+        slot-id="chat.composer.bar"
+        :context="composerSlotContext"
+        fallback="default"
+        layout="stack"
+        surface-role="composer"
+        bare
+        render-fallback-while-scope-pending
+      >
       <div ref="inputWrapperRef" class="input-wrapper" data-amitia-ui="chat.composer.surface">
         <ComposerExtensionHost
           v-if="characterId"
@@ -61,7 +77,17 @@ SPDX-License-Identifier: AGPL-3.0-only
             />
           </div>
 
-          <div v-if="hasComposerContext" class="composer-context">
+          <ExtensionSlot
+            v-if="hasComposerContext"
+            slot-id="chat.composer.attachments"
+            :context="composerSlotContext"
+            fallback="default"
+            layout="stack"
+            surface-role="composer"
+            bare
+            render-fallback-while-scope-pending
+          >
+          <div class="composer-context">
             <div v-if="attachedImage" class="attachment-card image-attachment">
               <span
                 class="attachment-thumb"
@@ -126,9 +152,18 @@ SPDX-License-Identifier: AGPL-3.0-only
               </button>
             </div>
           </div>
+          </ExtensionSlot>
 
           <div class="input-row">
           <div class="input-left-actions">
+            <ExtensionSlot
+              v-if="characterId"
+              slot-id="chat.composer.left"
+              :context="composerSlotContext"
+              fallback="none"
+              layout="inline"
+              surface-role="composer"
+            />
             <ComposerActionExtensionHost
               v-if="characterId"
               :character-id="characterId"
@@ -142,16 +177,23 @@ SPDX-License-Identifier: AGPL-3.0-only
               :draft="text"
             />
             <el-button :icon="Plus" circle size="small" class="add-btn" data-amitia-ui="chat.composer.add" :aria-disabled="isInputDisabled" title="上传文件或选择技能" aria-label="上传文件或选择技能" @click="isInputDisabled ? showInputUnavailable() : openComposerMenu()" />
-            <el-popover
-              v-model:visible="permissionMenuOpen"
-              placement="top-start"
-              :width="280"
-              trigger="click"
-              :hide-after="0"
-              :teleported="true"
-              append-to="#amitia-overlay-root"
-              popper-class="permission-picker-popper"
+            <ExtensionSlot
+              slot-id="chat.composer.permission"
+              :context="composerSlotContext"
+              fallback="default"
+              layout="inline"
+              surface-role="composer"
             >
+              <el-popover
+                v-model:visible="permissionMenuOpen"
+                placement="top-start"
+                :width="280"
+                trigger="click"
+                :hide-after="0"
+                :teleported="true"
+                append-to="#amitia-overlay-root"
+                popper-class="permission-picker-popper"
+              >
               <template #reference>
                 <button
                   type="button"
@@ -207,7 +249,8 @@ SPDX-License-Identifier: AGPL-3.0-only
                   <el-icon v-if="permissionMode === 'full_access'" class="permission-check"><Check /></el-icon>
                 </button>
               </div>
-            </el-popover>
+              </el-popover>
+            </ExtensionSlot>
             <el-popover
               v-if="supportsWorkspaceDirectory"
               v-model:visible="workspaceMenuOpen"
@@ -334,30 +377,57 @@ SPDX-License-Identifier: AGPL-3.0-only
           </div>
 
                     <div class="input-actions">
-            <el-popover
-              v-model:visible="modelMenuOpen"
-              placement="top-end"
-              :width="260"
-              trigger="click"
-              :hide-after="0"
-              :teleported="true"
-              append-to="#amitia-overlay-root"
-              popper-class="composer-model-popper"
-              @hide="resetModelMenu"
+            <ExtensionSlot
+              slot-id="chat.composer.right"
+              :context="composerSlotContext"
+              fallback="none"
+              layout="inline"
+              surface-role="composer"
+            />
+            <ExtensionSlot
+              slot-id="chat.composer.model"
+              :context="composerSlotContext"
+              fallback="default"
+              layout="inline"
+              surface-role="composer"
             >
+              <el-popover
+                v-model:visible="modelMenuOpen"
+                placement="top-end"
+                :width="260"
+                trigger="click"
+                :hide-after="0"
+                :teleported="true"
+                append-to="#amitia-overlay-root"
+                popper-class="composer-model-popper"
+                @hide="resetModelMenu"
+              >
               <template #reference>
-                <button
-                  type="button"
+                <span
                   class="model-effort-trigger"
                   data-amitia-ui="chat.composer.model"
+                  role="button"
+                  tabindex="0"
+                  aria-haspopup="dialog"
                   :aria-disabled="isInputDisabled"
                   @click.capture="guardUnavailableInput($event)"
+                  @keydown.enter.prevent="modelMenuOpen = !modelMenuOpen"
+                  @keydown.space.prevent="modelMenuOpen = !modelMenuOpen"
                 >
                   <span v-if="isGroup && activeModelRole">{{ activeModelRole.name }} · </span>
-                  <span>{{ selectedModelLabel }}</span>
+                  <ExtensionSlot
+                    slot-id="chat.composer.model.label"
+                    :context="composerSlotContext"
+                    fallback="default"
+                    layout="inline"
+                    surface-role="composer"
+                    bare
+                  >
+                    <span>{{ selectedModelLabel }}</span>
+                  </ExtensionSlot>
                   <span> · </span>
                   <span>{{ reasoningLabel }}</span>
-                </button>
+                </span>
               </template>
               <div class="model-menu-viewport">
               <Transition name="model-menu-fade" mode="out-in">
@@ -456,6 +526,13 @@ SPDX-License-Identifier: AGPL-3.0-only
                     请先在思考模式中选择“支持”
                   </div>
                 </div>
+                <ExtensionSlot
+                  slot-id="chat.composer.model.options"
+                  :context="composerSlotContext"
+                  fallback="none"
+                  layout="stack"
+                  surface-role="composer"
+                />
               </div>
               <div
                 v-else-if="modelMenuView === 'reasoning'"
@@ -515,7 +592,8 @@ SPDX-License-Identifier: AGPL-3.0-only
                 </div>
               </Transition>
               </div>
-            </el-popover>
+              </el-popover>
+            </ExtensionSlot>
             <el-button
               v-if="!generating && (voiceMode || !hasSendableContent)"
               circle
@@ -556,8 +634,23 @@ SPDX-License-Identifier: AGPL-3.0-only
             </el-button>
           </div>
           </div>
+          <ExtensionSlot
+            slot-id="chat.composer.overlay"
+            :context="composerSlotContext"
+            fallback="none"
+            layout="stack"
+            surface-role="composer"
+          />
 
       </div>
+      </ExtensionSlot>
+      <ExtensionSlot
+        slot-id="chat.composer.dock.bottom"
+        :context="composerSlotContext"
+        fallback="none"
+        layout="stack"
+        surface-role="composer"
+      />
     </div>
   </div>
 </template>
@@ -592,6 +685,7 @@ import { resolveHostEnvironment } from "@/composables/useHostEnvironment";
 import ComposerExtensionHost from "./extension/chat/ComposerExtensionHost.vue";
 import ComposerActionExtensionHost from "./extension/chat/ComposerActionExtensionHost.vue";
 import ComposerCommandPalette from "./ComposerCommandPalette.vue";
+import ExtensionSlot from "./extension/ExtensionSlot.vue";
 import {
   useConversationWorkspace,
   type WorkspaceMountSummary,
@@ -1064,6 +1158,123 @@ const hostCapabilities = computed(() => {
   }
   return caps;
 });
+
+const composerRevision = ref(0);
+watch(
+  () => text.value,
+  () => {
+    composerRevision.value += 1;
+  },
+);
+
+const composerInputActions = Object.freeze({
+  insertQuote(value: string, summary?: unknown) {
+    const quote = String(value || "").trim();
+    if (!quote) return false;
+    const label = String((summary as { label?: unknown } | undefined)?.label || "").trim();
+    const block = quote.split("\n").map((line) => `> ${line}`).join("\n");
+    const insertion = label ? `${block}\n<!-- ${label} -->\n` : `${block}\n`;
+    const element = inputRef.value;
+    const start = element?.selectionStart ?? text.value.length;
+    const end = element?.selectionEnd ?? start;
+    setText(`${text.value.slice(0, start)}${insertion}${text.value.slice(end)}`);
+    autoResize();
+    focus();
+    return true;
+  },
+  captureInsertion() {
+    const element = inputRef.value;
+    const start = element?.selectionStart ?? text.value.length;
+    const end = element?.selectionEnd ?? start;
+    return { start, end, draftRev: composerRevision.value };
+  },
+  insertText(value: string, span: { start?: number; end?: number; draftRev?: number }) {
+    if (Number(span?.draftRev) !== composerRevision.value || isInputDisabled.value) return false;
+    const start = Math.max(0, Math.min(Number(span?.start) || 0, text.value.length));
+    const end = Math.max(start, Math.min(Number(span?.end) || start, text.value.length));
+    setText(`${text.value.slice(0, start)}${String(value || "")}${text.value.slice(end)}`);
+    autoResize();
+    focus();
+    return true;
+  },
+  setDraft(value: string) {
+    setText(String(value || ""));
+    autoResize();
+  },
+  persistDraft() {},
+  addAttachments() {
+    return false;
+  },
+  removeAttachment(id: string) {
+    if (String(id) === "image" && attachedImage.value) {
+      clearImage();
+      return;
+    }
+    if (String(id) === "video" && attachedVideo.value) {
+      clearVideo();
+      return;
+    }
+    throw new Error(`DSH draft attachment ${id} is not owned by the Amitia composer`);
+  },
+  pruneAttachments() {},
+  submit() {
+    void submitComposer();
+  },
+});
+
+const composerAttachmentIds = computed(() => {
+  const ids: string[] = [];
+  if (attachedImage.value) ids.push("image");
+  if (attachedVideo.value) ids.push("video");
+  return ids;
+});
+
+const composerSlotContext = computed(() => ({
+  characterId: props.characterId,
+  conversationId: props.conversationId,
+  sessionId: props.conversationId,
+  channel: props.channel,
+  platform: env.platform,
+  host: env.host,
+  os: env.os,
+  conversationState: props.generating ? "generating" : "idle",
+  capabilities: hostCapabilities.value,
+  locked: isInputDisabled.value,
+  permissionMode: props.permissionMode,
+  session: {
+    id: props.conversationId,
+    sessionId: props.conversationId,
+    characterId: props.characterId,
+    channel: props.channel,
+    state: props.generating ? "running" : "idle",
+    status: props.generating ? "running" : "idle",
+    workspace: currentWorkspace.value,
+  },
+  input: {
+    draft: text.value,
+    attachmentIds: composerAttachmentIds.value,
+    draftRev: composerRevision.value,
+    phase: props.generating ? "sending" : props.isSubmitting ? "submitting" : "plain",
+    occurrences: [],
+    queue: [],
+  },
+  inputActions: composerInputActions,
+  model: {
+    id: effectiveSelectedModelId.value,
+    name: selectedModelLabel.value,
+    modelName: selectedModel.value?.modelName || selectedModel.value?.name || "",
+    provider: selectedModel.value ? providerLabel(selectedModel.value) : "",
+    reasoningEffort: effectiveReasoningEffort.value,
+    reasoningEnabled: effectiveReasoningEnabled.value,
+    options: llmModels.value.map((model: any) => ({
+      id: model.id,
+      name: model.name || model.modelName || "",
+      modelName: model.modelName || "",
+      provider: providerLabel(model),
+      supportsReasoning: model.supportsReasoning === true,
+    })),
+  },
+}));
 
 const { holding, startHold, endHold, cancelHold } = useVoiceInput(
   (blob: Blob, duration?: number) =>
@@ -2006,6 +2217,8 @@ defineExpose({ focus, setText, insertText: insertComposerText, clear: clearText 
 }
 
 .model-effort-trigger {
+  display: inline-flex;
+  align-items: center;
   max-width: 200px;
   height: 28px;
   overflow: hidden;

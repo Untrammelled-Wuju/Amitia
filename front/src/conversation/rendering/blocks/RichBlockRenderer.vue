@@ -1,6 +1,6 @@
 <template>
   <RendererErrorBoundary :label="blockName">
-    <AmitiaToolBlock v-if="block.kind === 'tool'" :block="block" />
+    <AmitiaToolBlock v-if="block.kind === 'tool'" :block="block" :extension-context="extensionContext" />
     <AmitiaFileBlock v-else-if="block.kind === 'file'" :block="block" />
     <AmitiaImageBlock v-else-if="block.kind === 'image'" :images="[block]" />
     <AmitiaAudioBlock v-else-if="block.kind === 'audio'" :block="block" />
@@ -28,6 +28,7 @@ import RendererErrorBoundary from "./RendererErrorBoundary.vue";
 
 const props = defineProps<{
   block: RichBlock;
+  extensionContext?: Record<string, unknown>;
 }>();
 
 const labels: Record<RichBlock["kind"], string> = {

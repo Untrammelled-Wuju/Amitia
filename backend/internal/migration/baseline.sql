@@ -2598,11 +2598,10 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_desired_states (
     revision INTEGER NOT NULL DEFAULT 0,
     updated_at TEXT DEFAULT '',
     created_at TEXT DEFAULT '',
-    UNIQUE(installation_id)
+    UNIQUE(space_id, device_id, installation_id)
 );
 CREATE INDEX IF NOT EXISTS idx_dprds_installation ON desktop_pet_runtime_desired_states(installation_id);
 CREATE INDEX IF NOT EXISTS idx_dprds_user ON desktop_pet_runtime_desired_states(space_id);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_dprds_user_device ON desktop_pet_runtime_desired_states(space_id, device_id) WHERE space_id <> '' AND device_id <> '';
 CREATE INDEX IF NOT EXISTS idx_dprds_runtime ON desktop_pet_runtime_desired_states(runtime_id);
 CREATE INDEX IF NOT EXISTS idx_dprds_desired_revision ON desktop_pet_runtime_desired_states(space_id, device_id, desired_revision);
 
@@ -2798,7 +2797,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_device_active_installation_bindings (
     bound_by TEXT NOT NULL DEFAULT '',
     created_at TEXT DEFAULT '',
     updated_at TEXT DEFAULT '',
-    PRIMARY KEY(space_id, device_id)
+    PRIMARY KEY(space_id, device_id, installation_id)
 );
 CREATE INDEX IF NOT EXISTS idx_dpdainst_installation ON desktop_pet_device_active_installation_bindings(installation_id);
 CREATE INDEX IF NOT EXISTS idx_dpdainst_pet ON desktop_pet_device_active_installation_bindings(pet_id);

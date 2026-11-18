@@ -62,9 +62,9 @@ function bindSdkTools(extension: LoadedExtension, registry: HandlerRegistry, spe
           platform: process.platform,
           locale: "default",
           traceId: spec.traceId ?? "",
-          scope: { scope: "global" },
+          scope: invocation.runtime.scope,
         },
-        toolCallId: invocation.invocationId,
+        toolCallId: invocation.toolCallId,
       });
       if (result && typeof result === "object" && "ok" in result) {
         if (!result.ok) {

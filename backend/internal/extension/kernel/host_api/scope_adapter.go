@@ -3,6 +3,7 @@ package host_api
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
@@ -124,6 +125,56 @@ func (c *ManagerScopeChecker) Check(ctx context.Context, identity runtime_superv
 		}
 	}
 
+	return nil
+}
+
+func (c *ManagerScopeChecker) CheckTarget(ctx context.Context, identity runtime_supervisor.RuntimeIdentity, request CallRequest, policy ScopePolicy) error {
+	if c == nil || c.Manager == nil || c.SnapshotStore == nil {
+		return ErrScopeDenied
+	}
+	targetID := strings.TrimSpace(request.TargetScopeSnapshotID)
+	if targetID == "" {
+		return fmt.Errorf("%w: empty target scope snapshot", ErrScopeDenied)
+	}
+	if err := c.Check(ctx, identity, strings.TrimSpace(request.ScopeSnapshotID), ScopePolicy{}); err != nil {
+		return err
+	}
+	target, err := c.SnapshotStore.Get(ctx, targetID)
+	if err != nil {
+		return fmt.Errorf("%w: load target snapshot %s: %w", ErrScopeDenied, targetID, err)
+	}
+	if target == nil {
+		return fmt.Errorf("%w: target snapshot %s not found", ErrScopeDenied, targetID)
+	}
+	now := c.Now()
+	if target.ExpiresAt != nil && now.After(*target.ExpiresAt) {
+		return fmt.Errorf("%w: target snapshot %s expired", ErrScopeDenied, targetID)
+	}
+	extID := string(identity.ExtensionID)
+	modID := string(identity.ModuleID)
+	if target.ExtensionID != "" && target.ExtensionID != extID {
+		return fmt.Errorf("%w: target snapshot extension %s does not match caller %s", ErrScopeDenied, target.ExtensionID, extID)
+	}
+	if modID != "" && target.ModuleID != "" && target.ModuleID != modID {
+		return fmt.Errorf("%w: target snapshot module %s does not match caller %s", ErrScopeDenied, target.ModuleID, modID)
+	}
+	if identity.Generation > 0 && target.Generation != identity.Generation {
+		return fmt.Errorf("%w: target snapshot generation %d does not match caller generation %d", ErrScopeDenied, target.Generation, identity.Generation)
+	}
+	if spaceID := strings.TrimSpace(request.SpaceID); spaceID != "" && target.SpaceID != spaceID {
+		return fmt.Errorf("%w: target snapshot space %s does not match caller space %s", ErrScopeDenied, target.SpaceID, spaceID)
+	}
+	if characterID := strings.TrimSpace(request.CharacterID); characterID != "" && target.CharacterID != characterID {
+		return fmt.Errorf("%w: target snapshot character %s does not match caller character %s", ErrScopeDenied, target.CharacterID, characterID)
+	}
+	if conversationID := strings.TrimSpace(request.ConversationID); conversationID != "" && target.ConversationID != conversationID {
+		return fmt.Errorf("%w: target snapshot conversation %s does not match caller conversation %s", ErrScopeDenied, target.ConversationID, conversationID)
+	}
+	if len(policy.RequireRoles) > 0 {
+		if !roleSatisfied(policy.RequireRoles, target) {
+			return fmt.Errorf("%w: target snapshot required roles %v not satisfied", ErrScopeDenied, policy.RequireRoles)
+		}
+	}
 	return nil
 }
 

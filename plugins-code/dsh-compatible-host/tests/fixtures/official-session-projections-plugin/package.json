@@ -1,0 +1,11 @@
+{
+  "name": "@amitia-test/official-session-projections-plugin",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./index.js"
+  },
+  "dsh": {
+    "manifestVersion": 1
+  }
+}

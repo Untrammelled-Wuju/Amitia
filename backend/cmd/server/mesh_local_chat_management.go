@@ -51,6 +51,11 @@ func chatManagementString(row map[string]any, key string) string {
 	return value
 }
 
+func chatManagementBool(row map[string]any, key string) bool {
+	value, _ := row[key].(bool)
+	return value
+}
+
 func (p *meshLocalDataPort) chatManagementRecords(ctx context.Context, role string) ([]ownedChatManagementRecord, error) {
 	db := p.services.KernelContainer.DeviceRegistry.Database()
 	rows, err := db.QueryContext(ctx, `SELECT kind,resource_id,revision,body,role_id FROM kernel_device_owned_resources WHERE owner_id=? AND (role_id=? OR (kind='memory' AND json_extract(CAST(body AS TEXT),'$.executionScope.roleId')=?)) AND deleted=0 AND kind IN ('conversation','message','summary','memory','working') ORDER BY kind,resource_id`, p.ownerID, role, role)
@@ -143,6 +148,12 @@ func chatManagementSelected(records []ownedChatManagementRecord, request coordin
 		return false
 	}
 	ids := map[string]bool{}
+	conversationsWithMessages := map[string]bool{}
+	for _, row := range records {
+		if row.Kind == "message" {
+			conversationsWithMessages[chatManagementString(row.Body, "conversationId")] = true
+		}
+	}
 	for _, row := range records {
 		if row.Kind != "conversation" {
 			continue
@@ -154,6 +165,12 @@ func chatManagementSelected(records []ownedChatManagementRecord, request coordin
 			continue
 		}
 		if request.ArchivedOnly && strings.TrimSpace(chatManagementString(row.Body, "archivedAt")) == "" {
+			continue
+		}
+		if !request.ArchivedOnly && request.ConversationID == "" && strings.TrimSpace(chatManagementString(row.Body, "archivedAt")) != "" {
+			continue
+		}
+		if chatManagementBool(row.Body, "draft") && request.ConversationID != row.ID && !conversationsWithMessages[row.ID] {
 			continue
 		}
 		if !contains(request.Channels, chatManagementString(row.Body, "channel")) || !contains(request.Sources, chatManagementString(row.Body, "source")) {
@@ -308,7 +325,7 @@ func (p *meshLocalDataPort) manageChatForRole(ctx context.Context, scope coordin
 	if err != nil {
 		return nil, err
 	}
-	if request.ConversationID != "" {
+	if request.Operation != "conversation/create" && request.Operation != "conversation/prepare" && request.ConversationID != "" {
 		found := false
 		for _, row := range selected {
 			found = found || row.Kind == "conversation" && row.ID == request.ConversationID
@@ -320,7 +337,7 @@ func (p *meshLocalDataPort) manageChatForRole(ctx context.Context, scope coordin
 	switch request.Operation {
 	case "feedback-stats", "feedback/list", "feedback/create", "feedback/delete":
 		return p.managedChatFeedback(ctx, scope, request, records)
-	case "conversations", "conversation/create", "conversation/read", "conversation/rename", "conversation/delete":
+	case "conversations", "conversation/create", "conversation/prepare", "conversation/read", "conversation/rename", "conversation/delete", "conversation/archive", "conversation/pin", "conversation/fork":
 		return p.managedConversationAction(ctx, scope, role, request, records, selected)
 	case "stats":
 		counts := chatManagementCounts(records, true)

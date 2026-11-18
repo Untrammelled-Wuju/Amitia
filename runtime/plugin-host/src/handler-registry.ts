@@ -4,6 +4,15 @@ const { AsyncLocalStorage } = require("node:async_hooks");
 
 export interface InvocationContext {
   invocationId: string;
+  toolCallId: string;
+  runtime: {
+    scope: {
+      scope: "global" | "character" | "conversation";
+      spaceId?: string;
+      characterId?: string;
+      conversationId?: string;
+    };
+  };
   isCanceled: boolean;
   onCancel: (handler: () => void) => void;
 }

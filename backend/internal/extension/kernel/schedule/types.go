@@ -14,6 +14,7 @@ const (
 	TriggerTypeInterval TriggerType = "interval"
 	TriggerTypeOneShot  TriggerType = "one_shot"
 	TriggerTypeCalendar TriggerType = "calendar"
+	TriggerTypeRRule    TriggerType = "rrule"
 )
 
 type ExecutionOwner string
@@ -31,6 +32,7 @@ const (
 	TargetTypeTask           TargetType = "task"
 	TargetTypeRuntimeHandler TargetType = "runtime_handler"
 	TargetTypeHostWorkload   TargetType = "host_workload"
+	TargetTypeSessionPrompt  TargetType = "session_prompt"
 )
 
 type IdempotencyMode string
@@ -166,6 +168,10 @@ type CalendarTriggerDefinition struct {
 	Weekdays  []int     `json:"weekdays,omitempty"`
 }
 
+type RRuleTriggerDefinition struct {
+	Rule string `json:"rule"`
+}
+
 type ScheduleTriggerDefinition struct {
 	RestoredOccurrences int                        `json:"restoredOccurrences,omitempty"`
 	MaxOccurrences      int                        `json:"maxOccurrences,omitempty"`
@@ -174,13 +180,25 @@ type ScheduleTriggerDefinition struct {
 	Interval            *IntervalTriggerDefinition `json:"interval,omitempty"`
 	OneShot             *OneShotTriggerDefinition  `json:"oneShot,omitempty"`
 	Calendar            *CalendarTriggerDefinition `json:"calendar,omitempty"`
+	RRule               *RRuleTriggerDefinition    `json:"rrule,omitempty"`
 }
 
 type ScheduleTargetDefinition struct {
-	Type            TargetType      `json:"type"`
-	TargetID        string          `json:"targetId"`
-	InputTemplate   json.RawMessage `json:"inputTemplate,omitempty"`
-	IdempotencyMode IdempotencyMode `json:"idempotencyMode"`
+	Type               TargetType          `json:"type"`
+	TargetID           string              `json:"targetId"`
+	InputTemplate      json.RawMessage     `json:"inputTemplate,omitempty"`
+	SessionPromptScope *SessionPromptScope `json:"sessionPromptScope,omitempty"`
+	IdempotencyMode    IdempotencyMode     `json:"idempotencyMode"`
+}
+
+type SessionPromptScope struct {
+	SpaceID                string          `json:"spaceId"`
+	CharacterID            string          `json:"characterId"`
+	ProjectID              string          `json:"projectId,omitempty"`
+	ConversationID         string          `json:"conversationId"`
+	ReservedConversationID string          `json:"reservedConversationId,omitempty"`
+	TargetKind             string          `json:"targetKind"`
+	OwnedExecutionScope    json.RawMessage `json:"ownedExecutionScope"`
 }
 
 type ScheduleMisfirePolicy struct {
@@ -238,6 +256,7 @@ type ScheduleContributionDefinition struct {
 	Description            string                    `json:"description"`
 	Trigger                ScheduleTriggerDefinition `json:"trigger"`
 	Target                 ScheduleTargetDefinition  `json:"target"`
+	SessionPromptScope     *SessionPromptScope       `json:"sessionPromptScope,omitempty"`
 	Timezone               string                    `json:"timezone"`
 	StartAt                *time.Time                `json:"startAt,omitempty"`
 	EndAt                  *time.Time                `json:"endAt,omitempty"`

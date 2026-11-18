@@ -57,6 +57,9 @@ func ownedRuntimeContextData(runtime *interaction.RuntimeAssembly) map[string]an
 	if snapshot.UnresolvedThreads.Status == interaction.LoadStatusReady {
 		data["unresolvedThreads"] = snapshot.UnresolvedThreads.Value
 	}
+	if snapshot.PromptExtensions.Status == interaction.LoadStatusReady {
+		data["promptExtensions"] = snapshot.PromptExtensions.Value
+	}
 	if snapshot.Channel.Status == interaction.LoadStatusReady {
 		data["channel"] = snapshot.Channel.Value
 	}

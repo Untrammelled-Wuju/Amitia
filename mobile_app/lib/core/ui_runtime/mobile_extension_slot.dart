@@ -9,9 +9,12 @@ import '../../features/extensions/schema_ui/engine/data_source_loader.dart';
 import '../../features/extensions/schema_ui/models/schema_ui_types.dart';
 import '../../features/extensions/schema_ui/renderer/schema_ui_renderer.dart';
 import 'mobile_dynamic_runtime.dart';
+import 'mobile_ui_host_actions.dart';
 import 'mobile_ui_visibility.dart';
+import 'mobile_web_runtime_layout.dart';
 import 'plugin_surface_resolver.dart';
 import 'renderers/sandbox_web_provider_host.dart';
+import 'renderers/mobile_web_runtime_provider_host.dart';
 import 'schema_ui_bridge_controller.dart';
 import 'ui_provider.dart';
 import 'ui_runtime_controller.dart';
@@ -58,6 +61,7 @@ class MobileExtensionSlot extends ConsumerWidget {
       'panel',
       'drawer',
       'modal',
+      'hidden',
     };
     return allowed.contains(layout) ? layout : null;
   }
@@ -133,7 +137,7 @@ class MobileExtensionSlot extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final requestedFallback = _normalizedFallback(this.context['slotFallback']);
-    final snapshot = ref.watch(uiRuntimeProvider).valueOrNull;
+    final snapshot = ref.watch(effectiveUIRuntimeSnapshotProvider);
     if (snapshot == null) {
       return _fallbackWidget(
         context,
@@ -192,6 +196,11 @@ class MobileExtensionSlot extends ConsumerWidget {
     final slotContext = <String, dynamic>{
       ...this.context,
       'slotScope': slot.scope,
+      'slotKind': slot.kind,
+      'slotLayout': slot.layout,
+      'slotFallbackPolicy': slot.fallbackPolicy,
+      'slotDeclarationEpoch': slot.declarationEpoch,
+      'dynamicSlot': slot.dynamicSlot,
       'surfaceRole': surfaceRole,
       if (inheritedSurface is Map)
         'surface': <String, dynamic>{
@@ -258,6 +267,18 @@ class MobileExtensionSlot extends ConsumerWidget {
     }
     if (contributions.isEmpty) return _fallbackWidget(context, fallbackMode);
 
+    final layerDescriptors = <Map<String, dynamic>>[
+      for (var index = 0; index < contributions.length; index++)
+        <String, dynamic>{
+          'index': index,
+          'contributionId': contributions[index].contributionId,
+          'sourceContributionId': contributions[index].sourceContributionId,
+          'extensionId': contributions[index].extensionId,
+          'entryKey': contributions[index].entryKey,
+          'ordering': contributions[index].ordering,
+          'priority': contributions[index].priority,
+        },
+    ];
     final children = contributions
         .map((item) {
           final matched =
@@ -275,22 +296,55 @@ class MobileExtensionSlot extends ConsumerWidget {
               'entryKey': _identity(item.entryKey, item.contributionId),
               'cellId': _identity(item.cellId, item.contributionId),
               'matched': matched,
+              if (slot.kind == 'hoc')
+                'hoc': <String, dynamic>{
+                  'slotId': slot.slotId,
+                  'contributionId': item.contributionId,
+                  'entryKey': item.entryKey,
+                  'entryKeyExplicit': item.entryKeyExplicit,
+                  'ordering': item.ordering,
+                  'priority': item.priority,
+                  'layers': layerDescriptors,
+                },
             },
             actions: actions,
           );
         })
         .toList(growable: false);
 
+    if (slot.kind == 'hoc') {
+      final hocFallback = _fallbackWidget(context, fallbackMode);
+      var content = hocFallback;
+      for (var index = children.length - 1; index >= 0; index--) {
+        content = _HocLayer(
+          key: ValueKey<String>('hoc:${contributions[index].contributionId}'),
+          slotId: slot.slotId,
+          contributionId: contributions[index].contributionId,
+          layer: children[index],
+          child: content,
+        );
+      }
+      return content;
+    }
+
+    if (layout == 'hidden') return const SizedBox.shrink();
+    final compactGrid = isCompactMobileWebRuntimeContext({
+      ...slotContext,
+      'slotId': slot.slotId,
+    });
     return switch (layout) {
       'row' || 'inline' => Wrap(spacing: 8, runSpacing: 8, children: children),
-      'grid' => GridView.count(
-        crossAxisCount: 2,
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        crossAxisSpacing: 8,
-        mainAxisSpacing: 8,
-        children: children,
-      ),
+      'grid' =>
+        compactGrid
+            ? Wrap(spacing: 8, runSpacing: 8, children: children)
+            : GridView.count(
+                crossAxisCount: 2,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisSpacing: 8,
+                mainAxisSpacing: 8,
+                children: children,
+              ),
       'tabs' => Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: children
@@ -311,6 +365,34 @@ class MobileExtensionSlot extends ConsumerWidget {
         children: children,
       ),
     };
+  }
+}
+
+class _HocLayer extends StatelessWidget {
+  const _HocLayer({
+    super.key,
+    required this.slotId,
+    required this.contributionId,
+    required this.layer,
+    required this.child,
+  });
+
+  final String slotId;
+  final String contributionId;
+  final Widget layer;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      container: true,
+      label: '扩展包裹层 $contributionId',
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [layer, child],
+      ),
+    );
   }
 }
 
@@ -431,7 +513,11 @@ class _ContributionHostState extends ConsumerState<_ContributionHost> {
   Widget build(BuildContext context) {
     final contribution = widget.contribution;
     final runtimeContext = widget.runtimeContext;
-    final actions = widget.actions;
+    final actions = buildMobileUIHostActions(
+      context: context,
+      ref: ref,
+      actions: widget.actions,
+    );
     final surface = resolveMobilePluginSurface(
       kind: contribution.kind,
       entryType: contribution.entryType,
@@ -479,14 +565,21 @@ class _ContributionHostState extends ConsumerState<_ContributionHost> {
           },
         );
       case MobilePluginSurfaceKind.web:
-        final entryType = contribution.entryType == 'web_isolated'
+        final mobileRuntime = contribution.entryType == 'mobile_web_runtime';
+        final entryType = mobileRuntime
+            ? UIProviderEntryType.mobileWebRuntime
+            : contribution.entryType == 'web_isolated'
             ? UIProviderEntryType.webIsolated
             : UIProviderEntryType.webRestricted;
         final entry = UIProviderEntry(
-          contributionId: contribution.contributionId,
+          contributionId: _sourceContributionId,
           type: entryType,
           path: contribution.entryPath,
           schemaPath: contribution.schemaPath,
+          stylePath: contribution.stylePath,
+          styleHash: contribution.styleHash,
+          contentHash: contribution.entryHash,
+          moduleToken: contribution.moduleToken,
         );
         final provider = UIProviderDefinition(
           providerId: 'slot:${contribution.contributionId}',
@@ -504,14 +597,24 @@ class _ContributionHostState extends ConsumerState<_ContributionHost> {
           builtin: false,
           metadata: const {},
         );
-        return SandboxWebProviderHost(
-          provider: provider,
-          entry: entry,
-          context: runtimeContext,
-          actions: actions,
-          fallback: widget.fallback,
-          inlineComposerAction: contribution.slotId == 'chat.composer.action',
-        );
+        return mobileRuntime
+            ? MobileWebRuntimeProviderHost(
+                provider: provider,
+                entry: entry,
+                context: runtimeContext,
+                actions: actions,
+                fallback: widget.fallback,
+                contributionId: _sourceContributionId,
+              )
+            : SandboxWebProviderHost(
+                provider: provider,
+                entry: entry,
+                context: runtimeContext,
+                actions: actions,
+                fallback: widget.fallback,
+                inlineComposerAction:
+                    contribution.slotId == 'chat.composer.action',
+              );
       case MobilePluginSurfaceKind.hostRuntime:
       case MobilePluginSurfaceKind.native:
       case MobilePluginSurfaceKind.none:

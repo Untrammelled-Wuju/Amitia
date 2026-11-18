@@ -3,35 +3,81 @@ SPDX-FileCopyrightText: 2026 彭旭
 SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
-  <div class="settings-page" :class="{ 'settings-refined': refinedAppearance }" data-amitia-ui="settings.page">
-    <div class="settings-compact-navigation">
-      <label for="settings-section-mobile">设置分类</label>
-      <select id="settings-section-mobile" :value="currentEntry" @change="navigateToSetting">
-        <option value="" disabled>选择设置项目</option>
-        <optgroup v-for="group in settingsGroups" :key="group.title" :label="group.title">
-          <option v-for="item in group.items" :key="item.path" :value="item.path">{{ item.label }}</option>
-        </optgroup>
-      </select>
+  <ExtensionSlot
+    slot-id="settings.shell"
+    :context="settingsContext"
+    fallback="default"
+    layout="panel"
+    surface-role="main"
+    bare
+  >
+    <div class="settings-page" :class="{ 'settings-refined': refinedAppearance }" data-amitia-ui="settings.page">
+      <div class="settings-content-actions">
+        <ExtensionSlot
+          slot-id="settings.shell.action"
+          :context="settingsContext"
+          fallback="none"
+          layout="inline"
+          surface-role="header"
+          bare
+        />
+        <button type="button" class="settings-close" aria-label="关闭设置" @click="closeSettings">
+          <span aria-hidden="true">×</span>
+          <ExtensionSlot
+            slot-id="settings.shell.close"
+            :context="settingsContext"
+            fallback="default"
+            layout="inline"
+            surface-role="status"
+            bare
+          >
+            <span class="settings-visually-hidden">关闭设置</span>
+          </ExtensionSlot>
+        </button>
+      </div>
+      <ExtensionSlot
+        slot-id="settings.onboarding"
+        :context="settingsContext"
+        fallback="none"
+        layout="stack"
+        surface-role="main"
+      />
+      <ExtensionSlot
+        slot-id="extension.settings.tab"
+        :context="{ ...settingsContext, surface: 'plugins-settings' }"
+        fallback="none"
+        layout="tabs"
+        surface-role="main"
+      />
+      <div class="settings-compact-navigation">
+        <label for="settings-section-mobile">设置分类</label>
+        <select id="settings-section-mobile" :value="currentEntry" @change="navigateToSetting">
+          <option value="" disabled>选择设置项目</option>
+          <optgroup v-for="group in settingsGroups" :key="group.title" :label="group.title">
+            <option v-for="item in group.items" :key="item.path" :value="item.path">{{ item.label }}</option>
+          </optgroup>
+        </select>
+      </div>
+      <ExtensionSlot
+        slot-id="system.status.item"
+        :context="settingsContext"
+        fallback="none"
+        layout="inline"
+        surface-role="status"
+        class="settings-status-slot"
+      />
+      <router-view />
+      <ExtensionSlot
+        v-for="slotId in settingsSlots"
+        :key="slotId"
+        :slot-id="slotId"
+        :context="settingsContext"
+        fallback="none"
+        layout="stack"
+        surface-role="main"
+      />
     </div>
-    <ExtensionSlot
-      slot-id="system.status.item"
-      :context="settingsContext"
-      fallback="none"
-      layout="inline"
-      surface-role="status"
-      class="settings-status-slot"
-    />
-    <router-view />
-    <ExtensionSlot
-      v-for="slotId in settingsSlots"
-      :key="slotId"
-      :slot-id="slotId"
-      :context="settingsContext"
-      fallback="none"
-      layout="stack"
-      surface-role="main"
-    />
-  </div>
+  </ExtensionSlot>
 </template>
 
 <script setup lang="ts">
@@ -65,10 +111,18 @@ function navigateToSetting(event: Event) {
     void router.push(path);
   }
 }
+
+function closeSettings() {
+  void router.push("/chat");
+}
 </script>
 
 <style scoped>
 .settings-page { min-width: 0; }
+.settings-content-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin-bottom: 10px; }
+.settings-close { position: relative; width: 30px; height: 30px; display: grid; place-items: center; border: 0; border-radius: 7px; background: transparent; color: var(--text-secondary); cursor: pointer; font-size: 20px; }
+.settings-close:hover { background: var(--control-hover-bg); color: var(--text-primary); }
+.settings-visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .settings-status-slot { margin-bottom: 12px; }
 .settings-compact-navigation { display: none; }
 .settings-refined :deep(.el-card) {

@@ -80,6 +80,8 @@ func (m *Manifest) Validate() ValidationReport {
 	}
 	moduleIDs := make(map[string]bool)
 	contributionIDs := make(map[string]bool)
+	petContributionCount := 0
+	petResourceCount := 0
 	for moduleIndex := range m.Modules {
 		module := &m.Modules[moduleIndex]
 		modulePath := fmt.Sprintf("modules[%d]", moduleIndex)
@@ -146,6 +148,15 @@ func (m *Manifest) Validate() ValidationReport {
 		for contributionIndex := range module.Contributions {
 			contribution := &module.Contributions[contributionIndex]
 			contributionPath := fmt.Sprintf("%s.contributions[%d]", modulePath, contributionIndex)
+			if contribution.Kind == "petx" {
+				petContributionCount++
+				if kind, _ := contribution.Spec["contributionKind"].(string); kind == "pet_resource" {
+					petResourceCount++
+					if ref, _ := contribution.Spec["resourceRef"].(string); strings.TrimSpace(ref) == "" {
+						report.Add(contributionPath+".spec.resourceRef", "pet_resource_ref", "pet resource reference is required")
+					}
+				}
+			}
 			validateContribution(contributionPath, contribution, &report)
 			validateReservedMetadata(contributionPath+".metadata", contribution.Metadata, &report)
 			key := m.Plugin.ID + "/" + contribution.ID
@@ -162,6 +173,9 @@ func (m *Manifest) Validate() ValidationReport {
 		if module.Placement != "" && !module.Placement.Valid() {
 			report.Add(modulePath+".placement", "placement", "invalid placement")
 		}
+	}
+	if petContributionCount > 0 && (petContributionCount != 1 || petResourceCount != 1) {
+		report.Add("modules", "petx_one_resource", "a petx package must contain exactly one pet resource contribution")
 	}
 	validatePermissions("permissions", m.Permissions, &report)
 	validateResources("resources", m.Resources, &report)
@@ -231,6 +245,21 @@ func (m *Manifest) Validate() ValidationReport {
 		if m.Data.Uninstall == "export" && !m.Data.Export {
 			report.Add("data.uninstall", "data_uninstall", "export uninstall policy requires data.export")
 		}
+		if m.Data.PluginData != nil {
+			if !m.Data.Backup {
+				report.Add("data.pluginData", "data_plugin_data", "plugin data include requires data.backup")
+			}
+			if len(m.Data.PluginData.Include) == 0 {
+				report.Add("data.pluginData.include", "data_plugin_data", "plugin data include must list at least one relative path")
+			}
+			for index, include := range m.Data.PluginData.Include {
+				issue := pluginDataIncludeIssue(include)
+				if issue == "" {
+					continue
+				}
+				report.Add(fmt.Sprintf("data.pluginData.include[%d]", index), "data_plugin_data", issue)
+			}
+		}
 	}
 	if m.Integrity.Algorithm != "sha256" {
 		report.Add("integrity.algorithm", "integrity_algorithm", "integrity algorithm must be sha256")
@@ -244,6 +273,30 @@ func (m *Manifest) Validate() ValidationReport {
 		}
 	}
 	return report
+}
+
+func pluginDataIncludeIssue(include string) string {
+	trimmed := strings.TrimSpace(include)
+	if trimmed == "" {
+		return "plugin data include path must not be empty"
+	}
+	if trimmed != include {
+		return "plugin data include path must not contain leading or trailing spaces"
+	}
+	if strings.HasPrefix(trimmed, "/") || strings.HasPrefix(trimmed, "\\") {
+		return "plugin data include path must be relative to the extension plugin data directory"
+	}
+	if strings.Contains(trimmed, "\\") {
+		return "plugin data include path must use forward slashes"
+	}
+	cleaned := path.Clean(trimmed)
+	if cleaned == "." || cleaned == ".." || strings.HasPrefix(cleaned, "../") {
+		return "plugin data include path must stay inside the extension plugin data directory"
+	}
+	if cleaned != trimmed {
+		return "plugin data include path must be normalized"
+	}
+	return ""
 }
 
 func validateRuntime(path string, runtime *RuntimeSpec, report *ValidationReport) {
@@ -293,6 +346,9 @@ func validateHostAccess(path string, access *HostAccess, report *ValidationRepor
 			default:
 				report.Add(path+".filesystem.roots", "host_access", "filesystem root must be package or plugin_data")
 			}
+		}
+		if access.Filesystem.DurableSync && access.Filesystem.Mode != "read_write" {
+			report.Add(path+".filesystem.durableSync", "host_access", "durableSync requires filesystem mode read_write")
 		}
 	}
 	if access.Network != nil {

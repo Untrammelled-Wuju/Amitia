@@ -7,10 +7,12 @@ import { useExtensionUIStore } from "@/stores/extensionUI";
 import { resolvePageProvider } from "@/ui-runtime/pageProviderRegistry";
 import { canonicalUISurfaceId } from "@/ui-runtime/uiSurfaceCatalog";
 import { buildProviderRouteContext } from "@/ui-runtime/routeContext";
+import { useAppStore } from "@/stores/app";
 
 const props = defineProps<{ fallback: Component }>();
 const route = useRoute();
 const store = useExtensionUIStore();
+const appStore = useAppStore();
 
 const capability = computed<UIProviderCapability | null>(() => {
   const path = route.path;
@@ -50,6 +52,13 @@ const providerContext = computed(() => buildProviderRouteContext(
   },
 ));
 
+const providerActions = {
+  toggleSidebar() {
+    appStore.toggleSidebar();
+    return appStore.sidebarCollapsed;
+  },
+};
+
 onMounted(() => { if (!store.snapshot) void store.refreshSnapshot(); });
 </script>
 
@@ -60,6 +69,7 @@ onMounted(() => { if (!store.snapshot) void store.refreshSnapshot(); });
     :provider-id="providerId"
     :fallback="fallback"
     :context="providerContext"
+    :actions="providerActions"
   />
   <component :is="fallback" v-else />
 </template>

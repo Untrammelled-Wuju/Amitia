@@ -55,6 +55,7 @@ export type BubbleContentItem =
   | { key: string; kind: "text"; content: string }
   | { key: string; kind: "turn"; turn: AssistantTurnData }
   | { key: string; kind: "thinking"; content: string; complete: boolean; duration?: number }
+  | { key: string; kind: "images"; images: Extract<RichBlock, { kind: "image" }>[] }
   | { key: string; kind: "block"; block: RichBlock };
 
 export function projectBubbleContent(message: AIMessageData, turn?: AssistantTurnData | null): BubbleContentItem[] {
@@ -96,9 +97,25 @@ export function projectBubbleContent(message: AIMessageData, turn?: AssistantTur
     const texts = message.role === "user" ? (content.trim() ? [content] : []) : splitBubbleText(content, complete);
     texts.forEach((text, index) => output.push({ key: `${message.id}:text:${index}`, kind: "text", content: text }));
   }
+  let imageGroup: Extract<RichBlock, { kind: "image" }>[] = [];
+  const flushImages = () => {
+    if (!imageGroup.length) return;
+    output.push({
+      key: `${message.id}:images:${imageGroup.map((image) => image.id).join(":")}`,
+      kind: "images",
+      images: imageGroup,
+    });
+    imageGroup = [];
+  };
   for (const block of message.blocks) {
     if (turn?.items.length && block.kind === "tool") continue;
+    if (block.kind === "image" && block.url) {
+      imageGroup.push(block);
+      continue;
+    }
+    flushImages();
     output.push({ key: `${message.id}:block:${block.id}`, kind: "block", block });
   }
+  flushImages();
   return output;
 }

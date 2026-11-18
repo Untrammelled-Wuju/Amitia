@@ -216,3 +216,23 @@ func TestNewPermissionSnapshot_WithValidPerms(t *testing.T) {
 		t.Fatal("expected non-nil ExpiresAt")
 	}
 }
+
+func TestMessageInterruptPermissionRegistered(t *testing.T) {
+	registry := permission.NewPermissionDefinitionRegistry()
+	definition, ok := registry.Get("message.interrupt")
+	if !ok {
+		t.Fatal("message.interrupt permission is not registered")
+	}
+	if !containsScope(definition.AllowedScopes, permission.ScopeExtension) {
+		t.Fatalf("message.interrupt extension scope is unavailable: %v", definition.AllowedScopes)
+	}
+}
+
+func containsScope(scopes []permission.ScopeType, target permission.ScopeType) bool {
+	for _, scope := range scopes {
+		if scope == target {
+			return true
+		}
+	}
+	return false
+}

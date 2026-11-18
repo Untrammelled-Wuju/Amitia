@@ -43,13 +43,39 @@ SPDX-License-Identifier: AGPL-3.0-only
         aria-label="个人空间选项"
         @click.stop
       >
+        <ExtensionSlot
+          slot-id="settings.shell.launcher.notifications"
+          :context="settingsContext"
+          fallback="none"
+          layout="stack"
+          surface-role="main"
+          bare
+        />
         <button type="button" role="menuitem" class="profile-menu__item" data-amitia-ui="app.sidebar.item" @click="openArchivedConversations">
           <el-icon><Box /></el-icon>
           <span>归档对话</span>
         </button>
         <button type="button" role="menuitem" class="profile-menu__item" data-amitia-ui="app.sidebar.item" @click="openSettings">
-          <el-icon><Setting /></el-icon>
-          <span>设置</span>
+          <ExtensionSlot
+            slot-id="settings.shell.launcher"
+            :context="settingsContext"
+            fallback="default"
+            layout="inline"
+            surface-role="sidebar"
+            bare
+          >
+            <el-icon><Setting /></el-icon>
+            <ExtensionSlot
+              slot-id="settings.shell.trigger"
+              :context="settingsContext"
+              fallback="default"
+              layout="inline"
+              surface-role="sidebar"
+              bare
+            >
+              <span>设置</span>
+            </ExtensionSlot>
+          </ExtensionSlot>
         </button>
         <button type="button" role="menuitem" class="profile-menu__item" data-amitia-ui="app.sidebar.item" @click="openMySpace">
           <el-icon><UserFilled /></el-icon>
@@ -110,6 +136,7 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { Box, Moon, Setting, Sunny, UserFilled } from "@element-plus/icons-vue";
 import { useExtensionUIStore } from "@/stores/extensionUI";
+import ExtensionSlot from "@/components/extension/ExtensionSlot.vue";
 import { useBrandLogo } from "@/composables/useBrandLogo";
 import {
   isUINavigationItemActive,
@@ -149,6 +176,11 @@ const activeIndex = computed(() => {
   const active = primaryNavigationItems.value.find((item) => isUINavigationItemActive(route.path, item));
   return active?.route ?? route.path;
 });
+const settingsContext = computed(() => ({
+  route: route.fullPath,
+  routeName: String(route.name ?? ""),
+  section: "settings",
+}));
 
 function openMySpace() {
   profileMenuOpen.value = false;

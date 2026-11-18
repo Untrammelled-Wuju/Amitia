@@ -6,6 +6,7 @@ import ExtensionContributionRenderer from "./ExtensionContributionRenderer.vue";
 import { browserClientPluginRuntime, type ClientSlotContribution } from "@/ui-runtime/clientPluginRuntime";
 import ExtensionErrorBoundary from "./ExtensionErrorBoundary.vue";
 import ClientSlotContributionHost from "./ClientSlotContributionHost.vue";
+import HocSlotLayers from "./HocSlotLayers.vue";
 import { buildUnifiedSlotItems, type UnifiedSlotItem } from "@/ui-runtime/slotLedger";
 
 const props = withDefaults(
@@ -223,6 +224,17 @@ defineExpose({ rootEl, focus, setText, clear });
       <div v-else-if="resolvedFallback === 'default'" class="extension-slot__default">
         <slot name="default"></slot>
       </div>
+    </template>
+
+    <template v-else-if="slotKind === 'hoc'">
+      <HocSlotLayers
+        :items="visibleItems"
+        :slot-id="slotId"
+        :context="renderContext"
+        :hook-context="hookContext"
+      >
+        <slot name="default"></slot>
+      </HocSlotLayers>
     </template>
 
     <template v-else>

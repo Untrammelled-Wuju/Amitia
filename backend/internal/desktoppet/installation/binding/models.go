@@ -13,10 +13,10 @@ var (
 )
 
 type DeviceActiveInstallationBinding struct {
-	SpaceID  string
-	DeviceID string
+	SpaceID  string `gorm:"uniqueIndex:idx_pet_active_binding"`
+	DeviceID string `gorm:"uniqueIndex:idx_pet_active_binding"`
 
-	InstallationID string
+	InstallationID string `gorm:"uniqueIndex:idx_pet_active_binding"`
 	PetID          string
 	ReleaseID      string
 

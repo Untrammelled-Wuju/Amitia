@@ -1,0 +1,1938 @@
+{
+  "schemaVersion": 1,
+  "catalogVersion": "v1",
+  "targetDshVersion": "0.2.2-rc.2",
+  "targetClientUiPrimitivesVersion": "0.2.2-rc.2",
+  "sourcePackages": [
+    {
+      "spec": "@deepseek-ai/dsh@0.2.2-rc.2",
+      "packageJsonSha256": "sha256-9d6c0e15213b8d2b463de2a820e1ff5722641944bb561715f53e2ce7f0781adc"
+    },
+    {
+      "spec": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2",
+      "packageJsonSha256": "sha256-e5ff1b4e163bb6e6b8baafe73b3a0e8d1026f935c4666e670d1d1de36c57545e"
+    }
+  ],
+  "slots": [
+    {
+      "id": "DSH-UI-SLOT-001",
+      "key": "contextMenu.content",
+      "kind": "keyed",
+      "scope": "root",
+      "declaredBy": "an entry in 'shell.overlay' (client-ui-context-menu), so it exists while that entry is mounted",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "Optional React rows for existing extension positions; data contributions need no renderer.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "desktop.context_menu.content"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-context-menu/src/client/index.ts:42"
+    },
+    {
+      "id": "DSH-UI-SLOT-002",
+      "key": "contextMenu.icon",
+      "kind": "keyed",
+      "scope": "root",
+      "declaredBy": "an entry in 'shell.overlay' (client-ui-context-menu), so it exists while that entry is mounted",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "Business-owned glyph or image selected by the action's icon key.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "desktop.context_menu.icon"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-context-menu/src/client/index.ts:40"
+    },
+    {
+      "id": "DSH-UI-SLOT-003",
+      "key": "conversation.approval.detail",
+      "kind": "single",
+      "scope": "session",
+      "declaredBy": "factory 'conversation.approval.card' (client-ui-approval), so it exists while that definition is registered",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "Optional detail for the Tool call correlated with an approval request.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.approval.detail"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-approval/src/client/contract/slots.ts:47"
+    },
+    {
+      "id": "DSH-UI-SLOT-004",
+      "key": "conversation.chat.assistant-actions",
+      "kind": "list",
+      "scope": "session",
+      "declaredBy": "an entry in 'conversation.chat.node' (client-ui-chat), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "Ordered actions for one finalized assistant message.",
+      "status": "direct",
+      "phase": "P10",
+      "targets": [
+        "chat.message.action"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-chat/src/client/contract/slots.ts:498"
+    },
+    {
+      "id": "DSH-UI-SLOT-005",
+      "key": "conversation.chat.commandview",
+      "kind": "keyed",
+      "scope": "session",
+      "declaredBy": "an entry in 'conversation.chat.node' (client-ui-chat), so it exists while that entry is mounted",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "Command row keyed by the command name.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.message.command"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-chat/src/client/contract/slots.ts:480"
+    },
+    {
+      "id": "DSH-UI-SLOT-006",
+      "key": "conversation.chat.flow",
+      "kind": "single",
+      "scope": "session",
+      "declaredBy": "an entry in 'conversation.view' (client-ui-chat), so it exists while that entry is mounted",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "Ordered Chat rows and local echoes with viewport-bound visibility hooks.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.conversation.flow"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-chat/src/client/contract/slots.ts:436"
+    },
+    {
+      "id": "DSH-UI-SLOT-007",
+      "key": "conversation.chat.markdown.fence",
+      "kind": "hoc",
+      "scope": "session",
+      "declaredBy": "an entry in 'conversation.view' (client-ui-chat), so it exists while that entry is mounted",
+      "replaceRisk": "wraps-owner-content",
+      "summary": "Language-keyed layers around one Markdown fence in the Chat flow; the content is the plain code block.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.message.markdown.fence"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-chat/src/client/contract/slots.ts:433"
+    },
+    {
+      "id": "DSH-UI-SLOT-008",
+      "key": "conversation.chat.message.images",
+      "kind": "single",
+      "scope": "session",
+      "declaredBy": "an entry in 'conversation.chat.node' (client-ui-chat), so it exists while that entry is mounted",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "Renderer for one consecutive group of durable message images.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.message.images"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-chat/src/client/contract/slots.ts:472"
+    },
+    {
+      "id": "DSH-UI-SLOT-009",
+      "key": "conversation.chat.node",
+      "kind": "keyed",
+      "scope": "session",
+      "declaredBy": "an entry in 'conversation.chat.flow' (client-ui-chat), so it exists while that entry is mounted",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "Final Chat node renderer, keyed by `ChatNodeKind`.",
+      "status": "direct",
+      "phase": "P10",
+      "targets": [
+        "chat.conversation.node"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-chat/src/client/contract/slots.ts:448"
+    },
+    {
+      "id": "DSH-UI-SLOT-010",
+      "key": "conversation.chat.reasoning.body",
+      "kind": "single",
+      "scope": "session",
+      "declaredBy": "an entry in 'conversation.chat.node' (client-ui-chat), so it exists while that entry is mounted",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "Expanded reasoning body with raw and display-ready text.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.message.reasoning.body"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-chat/src/client/contract/slots.ts:486"
+    },
+    {
+      "id": "DSH-UI-SLOT-011",
+      "key": "conversation.chat.text-interaction",
+      "kind": "keyed",
+      "scope": "session",
+      "declaredBy": "an entry in 'conversation.view' (client-ui-chat), so it exists while that entry is mounted",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "Area-local text gestures and surfaces; each consumer registers its own synchronous admission.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.message.text.interaction"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-chat/src/client/contract/slots.ts:431"
+    },
+    {
+      "id": "DSH-UI-SLOT-012",
+      "key": "conversation.chat.turnTail",
+      "kind": "list",
+      "scope": "session",
+      "declaredBy": "an entry in 'conversation.chat.node' (client-ui-chat), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "Ordered feature contributions before a completed Turn's action row.",
+      "status": "direct",
+      "phase": "P10",
+      "targets": [
+        "chat.message.badge"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-chat/src/client/contract/slots.ts:492"
+    },
+    {
+      "id": "DSH-UI-SLOT-013",
+      "key": "conversation.chat.user.before",
+      "kind": "chain",
+      "scope": "session",
+      "declaredBy": "an entry in 'conversation.chat.node' (client-ui-chat), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "Message-source decoration owned and rendered by the user Node entry.",
+      "status": "direct",
+      "phase": "P10",
+      "targets": [
+        "chat.message.badge"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-chat/src/client/contract/slots.ts:462"
+    },
+    {
+      "id": "DSH-UI-SLOT-014",
+      "key": "conversation.chat.user.images",
+      "kind": "single",
+      "scope": "session",
+      "declaredBy": "factory 'conversation.chat.user.content' (client-ui-chat), so it exists while that definition is registered",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "User-message images, including pending and local-echo previews, independently replaceable from output images.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.message.user.images"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-chat/src/client/contract/slots.ts:474"
+    },
+    {
+      "id": "DSH-UI-SLOT-015",
+      "key": "conversation.composer",
+      "kind": "chain",
+      "scope": "session",
+      "declaredBy": "factory 'conversation.content' (client-ui-conversation), so it exists while that definition is registered",
+      "replaceRisk": "none",
+      "summary": "Selector-routed replacements for the current Session's resident composer; fixed overlays must portal to the document body because the docked composer contains them.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.composer.root"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-conversation/src/client/contract/slots.ts:290"
+    },
+    {
+      "id": "DSH-UI-SLOT-016",
+      "key": "conversation.composer.bar",
+      "kind": "single",
+      "scope": "session-maybe",
+      "declaredBy": "factory 'conversation.content' (client-ui-conversation), so it exists while that definition is registered",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "Resident composer body, including the no-Session inert state; fixed overlays must portal to the document body because the docked composer contains them.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.composer.bar"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-conversation/src/client/contract/slots.ts:336"
+    },
+    {
+      "id": "DSH-UI-SLOT-017",
+      "key": "conversation.composer.dock",
+      "kind": "list",
+      "scope": "session",
+      "declaredBy": "an entry in 'conversation.composer.bar' (client-ui-conversation), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "Ambient entries below the composer card; fixed overlays must portal to the document body because the docked composer contains them.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.composer.dock.bottom"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-conversation/src/client/contract/slots.ts:315"
+    },
+    {
+      "id": "DSH-UI-SLOT-018",
+      "key": "conversation.header",
+      "kind": "single",
+      "scope": "session-maybe",
+      "declaredBy": "an entry in 'main.conversation' (client-ui-conversation), so it exists while that entry is mounted",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "Resident navigation container, including when no Session is selected.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.conversation.header"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-conversation/src/client/contract/slots.ts:237"
+    },
+    {
+      "id": "DSH-UI-SLOT-019",
+      "key": "conversation.header.leading",
+      "kind": "single",
+      "scope": "root",
+      "declaredBy": "an entry in 'conversation.header' (client-ui-conversation), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "Global navigation before the Session title, available without a Session.",
+      "status": "direct",
+      "phase": "P12",
+      "targets": [
+        "chat.header.leading"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-conversation/src/client/contract/slots.ts:266"
+    },
+    {
+      "id": "DSH-UI-SLOT-020",
+      "key": "conversation.hero.agentPreset",
+      "kind": "single",
+      "scope": "session-maybe",
+      "declaredBy": "factory 'conversation.content' (client-ui-conversation), so it exists while that definition is registered",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "Agent-preset control staged for a New Session.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.empty.agent_preset"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-conversation/src/client/contract/slots.ts:298"
+    },
+    {
+      "id": "DSH-UI-SLOT-021",
+      "key": "conversation.hero.brand.mark",
+      "kind": "single",
+      "scope": "root",
+      "declaredBy": "factory 'conversation.content' (client-ui-conversation), so it exists while that definition is registered",
+      "replaceRisk": "none",
+      "summary": "Brand mark shown before the blank-session headline.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.empty.brand_mark"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-conversation/src/client/contract/slots.ts:296"
+    },
+    {
+      "id": "DSH-UI-SLOT-022",
+      "key": "conversation.hero.frame",
+      "kind": "hoc",
+      "scope": "root",
+      "declaredBy": "factory 'conversation.content' (client-ui-conversation), so it exists while that definition is registered",
+      "replaceRisk": "wraps-owner-content",
+      "summary": "Layers wrapping the Conversation scroll body; `hero` reports a blank, standalone home.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.empty.frame"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-conversation/src/client/contract/slots.ts:294"
+    },
+    {
+      "id": "DSH-UI-SLOT-023",
+      "key": "conversation.hero.options",
+      "kind": "list",
+      "scope": "session",
+      "declaredBy": "factory 'conversation.content' (client-ui-conversation), so it exists while that definition is registered",
+      "replaceRisk": "none",
+      "summary": "Compact options right-aligned in the New Session row after the workspace and preset controls; rendered only with a Session.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.empty.options"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-conversation/src/client/contract/slots.ts:300"
+    },
+    {
+      "id": "DSH-UI-SLOT-024",
+      "key": "conversation.hero.workspace",
+      "kind": "single",
+      "scope": "root",
+      "declaredBy": "factory 'conversation.content' (client-ui-conversation), so it exists while that definition is registered",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "Workspace picker shown by the blank-session Hero.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.empty.workspace"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-conversation/src/client/contract/slots.ts:292"
+    },
+    {
+      "id": "DSH-UI-SLOT-025",
+      "key": "conversation.hero.workspace.directoryFlow",
+      "kind": "single",
+      "scope": "root",
+      "declaredBy": "an entry in 'conversation.hero.workspace' (client-ui-workspace), so it exists while that entry is mounted",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "Directory-flow hole under the conversation empty-state picker (declared by the WorkspacePicker entry).",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.empty.workspace.directory_flow"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-workspace/src/client/contract/slots.ts:137"
+    },
+    {
+      "id": "DSH-UI-SLOT-026",
+      "key": "conversation.input.activity",
+      "kind": "single",
+      "scope": "session",
+      "declaredBy": "an entry in 'conversation.composer.bar' (client-ui-conversation), so it exists while that entry is mounted",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "Compact action after the model selector; it can expand across the toolbar while retaining the editor and submit action, and fixed overlays must portal to the document body because the docked composer contains them.",
+      "status": "direct",
+      "phase": "P10",
+      "targets": [
+        "chat.composer.action"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-conversation/src/client/contract/slots.ts:331"
+    },
+    {
+      "id": "DSH-UI-SLOT-027",
+      "key": "conversation.input.attachments",
+      "kind": "single",
+      "scope": "session-maybe",
+      "declaredBy": "an entry in 'conversation.composer.bar' (client-ui-conversation), so it exists while that entry is mounted",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "Optional draft-attachment rail and drop target; fixed overlays must portal to the document body because the docked composer contains them.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.composer.attachments"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-conversation/src/client/contract/slots.ts:341"
+    },
+    {
+      "id": "DSH-UI-SLOT-028",
+      "key": "conversation.input.dock",
+      "kind": "list",
+      "scope": "session",
+      "declaredBy": "factory 'conversation.content' (client-ui-conversation), so it exists while that definition is registered",
+      "replaceRisk": "none",
+      "summary": "Full-width entries above the composer card; fixed overlays must portal to the document body because the docked composer contains them.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.composer.dock.top"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-conversation/src/client/contract/slots.ts:305"
+    },
+    {
+      "id": "DSH-UI-SLOT-029",
+      "key": "conversation.input.left",
+      "kind": "list",
+      "scope": "session",
+      "declaredBy": "an entry in 'conversation.composer.bar' (client-ui-conversation), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "Compact controls at the left of the composer tool row; fixed overlays must portal to the document body because the docked composer contains them.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.composer.left"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-conversation/src/client/contract/slots.ts:320"
+    },
+    {
+      "id": "DSH-UI-SLOT-030",
+      "key": "conversation.input.model",
+      "kind": "single",
+      "scope": "session",
+      "declaredBy": "an entry in 'conversation.composer.bar' (client-ui-conversation), so it exists while that entry is mounted",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "Model selector inside the composer tool row.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.composer.model"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-conversation/src/client/contract/slots.ts:362"
+    },
+    {
+      "id": "DSH-UI-SLOT-031",
+      "key": "conversation.input.model.label",
+      "kind": "single",
+      "scope": "session",
+      "declaredBy": "an entry in 'conversation.input.model' (client-ui-model-selection), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "Non-interactive inline model label; selection controls remain owner-managed.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.composer.model.label"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-model-selection/src/client/slots.ts:50"
+    },
+    {
+      "id": "DSH-UI-SLOT-032",
+      "key": "conversation.input.model.options",
+      "kind": "list",
+      "scope": "session",
+      "declaredBy": "an entry in 'conversation.input.model' (client-ui-model-selection), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "Session options appended after model and reasoning controls in the root menu.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.composer.model.options"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-model-selection/src/client/slots.ts:23"
+    },
+    {
+      "id": "DSH-UI-SLOT-033",
+      "key": "conversation.input.overlay",
+      "kind": "list",
+      "scope": "session",
+      "declaredBy": "an entry in 'conversation.composer.bar' (client-ui-conversation), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "Floating entries rendered inside the resident composer card; fixed overlays must portal to the document body because the docked composer contains them.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.composer.overlay"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-conversation/src/client/contract/slots.ts:310"
+    },
+    {
+      "id": "DSH-UI-SLOT-034",
+      "key": "conversation.input.permission",
+      "kind": "single",
+      "scope": "session",
+      "declaredBy": "an entry in 'conversation.composer.bar' (client-ui-conversation), so it exists while that entry is mounted",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "Current-session permission control inside the composer tool row; fixed overlays must portal to the document body because the docked composer contains them.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.composer.permission"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-conversation/src/client/contract/slots.ts:355"
+    },
+    {
+      "id": "DSH-UI-SLOT-035",
+      "key": "conversation.input.plan",
+      "kind": "single",
+      "scope": "session",
+      "declaredBy": "an entry in 'conversation.composer.bar' (client-ui-conversation), so it exists while that entry is mounted",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "Plan control inside the composer tool row; fixed overlays must portal to the document body because the docked composer contains them.",
+      "status": "direct",
+      "phase": "P12",
+      "targets": [
+        "chat.composer.action"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-conversation/src/client/contract/slots.ts:350"
+    },
+    {
+      "id": "DSH-UI-SLOT-036",
+      "key": "conversation.input.right",
+      "kind": "list",
+      "scope": "session",
+      "declaredBy": "an entry in 'conversation.composer.bar' (client-ui-conversation), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "Compact controls before the composer submit action; fixed overlays must portal to the document body because the docked composer contains them.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.composer.right"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-conversation/src/client/contract/slots.ts:325"
+    },
+    {
+      "id": "DSH-UI-SLOT-037",
+      "key": "conversation.plan-review.actions",
+      "kind": "list",
+      "scope": "session",
+      "declaredBy": "an entry in 'conversation.composer' (client-ui-user-questions), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "Actions for the exact plan under review; approval remains with the question composer.",
+      "status": "direct",
+      "phase": "P10",
+      "targets": [
+        "chat.message.action"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-user-questions/src/client/contract/slots.ts:21"
+    },
+    {
+      "id": "DSH-UI-SLOT-038",
+      "key": "conversation.session",
+      "kind": "single",
+      "scope": "session",
+      "declaredBy": "factory 'conversation.content' (client-ui-conversation), so it exists while that definition is registered",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "Strict per-Session Conversation body.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.conversation.session"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-conversation/src/client/contract/slots.ts:231"
+    },
+    {
+      "id": "DSH-UI-SLOT-039",
+      "key": "conversation.session.header",
+      "kind": "single",
+      "scope": "session",
+      "declaredBy": "an entry in 'conversation.header' (client-ui-conversation), so it exists while that entry is mounted",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "Strict per-Session title, actions, and View navigation.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.conversation.session.header"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-conversation/src/client/contract/slots.ts:239"
+    },
+    {
+      "id": "DSH-UI-SLOT-040",
+      "key": "conversation.session.header.actions",
+      "kind": "list",
+      "scope": "session",
+      "declaredBy": "an entry in 'conversation.session.header' (client-ui-conversation), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "Title-adjacent Session actions in ascending order; overflow is clipped and faded before the utilities, so overlays must portal.",
+      "status": "direct",
+      "phase": "P10",
+      "targets": [
+        "chat.header.action"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-conversation/src/client/contract/slots.ts:254"
+    },
+    {
+      "id": "DSH-UI-SLOT-041",
+      "key": "conversation.session.header.actions.subagent.footer",
+      "kind": "list",
+      "scope": "session",
+      "declaredBy": "an entry in 'conversation.session.header.actions' (client-ui-subagent), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "Content below the root Session's subagent tree.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.conversation.subagent.footer"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-subagent/src/client/slots.ts:6"
+    },
+    {
+      "id": "DSH-UI-SLOT-042",
+      "key": "conversation.session.header.corner",
+      "kind": "single",
+      "scope": "session",
+      "declaredBy": "an entry in 'conversation.session.header' (client-ui-conversation), so it exists while that entry is mounted",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "The header's far-right corner, past the utilities' edge and into the header's own padding, for one control.",
+      "status": "direct",
+      "phase": "P12",
+      "targets": [
+        "chat.header.corner"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-conversation/src/client/contract/slots.ts:277"
+    },
+    {
+      "id": "DSH-UI-SLOT-043",
+      "key": "conversation.session.header.lineage",
+      "kind": "single",
+      "scope": "session",
+      "declaredBy": "an entry in 'conversation.session.header' (client-ui-conversation), so it exists while that entry is mounted",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "Optional replacement for one Session breadcrumb title; overlays must portal because the title area clips overflow.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.header.lineage"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-conversation/src/client/contract/slots.ts:248"
+    },
+    {
+      "id": "DSH-UI-SLOT-044",
+      "key": "conversation.session.header.utilities",
+      "kind": "list",
+      "scope": "session",
+      "declaredBy": "an entry in 'conversation.session.header' (client-ui-conversation), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "Right-aligned Session utilities in ascending order.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.header.action"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-conversation/src/client/contract/slots.ts:260"
+    },
+    {
+      "id": "DSH-UI-SLOT-045",
+      "key": "conversation.session.header.views.actions",
+      "kind": "list",
+      "scope": "root",
+      "declaredBy": "an entry in 'conversation.session.header' (client-ui-conversation), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "Rows of the View tab row's More menu; the header shows More only while this list has registrations.",
+      "status": "direct",
+      "phase": "P10",
+      "targets": [
+        "chat.header.action"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-conversation/src/client/contract/slots.ts:283"
+    },
+    {
+      "id": "DSH-UI-SLOT-046",
+      "key": "conversation.trajectory.images",
+      "kind": "single",
+      "scope": "session",
+      "declaredBy": "an entry in 'conversation.view' (client-ui-trajectory), so it exists while that entry is mounted",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "Renderer for one group of durable record images in the Trajectory ledger.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.message.trajectory.images"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-trajectory/src/client/trajectory-contract.ts:103"
+    },
+    {
+      "id": "DSH-UI-SLOT-047",
+      "key": "conversation.user.text.node",
+      "kind": "keyed",
+      "scope": "session",
+      "declaredBy": "factory 'conversation.user.text' (client-ui-conversation), so it exists while that definition is registered",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "One business-owned inline renderer for a pure JSON text node.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.message.user.text"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-conversation/src/client/contract/slots.ts:221"
+    },
+    {
+      "id": "DSH-UI-SLOT-048",
+      "key": "conversation.view",
+      "kind": "list",
+      "scope": "session",
+      "declaredBy": "an entry in 'conversation.session' (client-ui-conversation), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "Registered Conversation target Views, rendered one at a time.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.conversation.views"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-conversation/src/client/contract/slots.ts:285"
+    },
+    {
+      "id": "DSH-UI-SLOT-049",
+      "key": "deliverables.file.actions",
+      "kind": "list",
+      "scope": "session",
+      "declaredBy": "an entry in 'conversation.chat.turnTail' (client-ui-deliverables), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "Open one file through its authorized Session event coordinates.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "workbench.file.actions"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-deliverables/src/client/file-actions.ts:8"
+    },
+    {
+      "id": "DSH-UI-SLOT-050",
+      "key": "deliverables.review.file.actions",
+      "kind": "list",
+      "scope": "session",
+      "declaredBy": "an entry in 'sidebar.right.pane.tab' (client-ui-deliverables), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "The same file actions owned by a changed-file review tab.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "workbench.review.file.actions"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-deliverables/src/client/file-actions.ts:21"
+    },
+    {
+      "id": "DSH-UI-SLOT-051",
+      "key": "main",
+      "kind": "keyed",
+      "scope": "root",
+      "declaredBy": "an entry in 'root' (client-ui-layout), so it exists while that entry is mounted",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "Central panel selected by sidebar entry id.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "provider.page.provider"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-layout/src/client/index.ts:75"
+    },
+    {
+      "id": "DSH-UI-SLOT-052",
+      "key": "main.conversation",
+      "kind": "single",
+      "scope": "session-maybe",
+      "declaredBy": "an entry in 'main' (client-ui-conversation), so it exists while that entry is mounted",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "Conversation shell beneath its root-scoped main-panel entry.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.conversation.root"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-conversation/src/client/contract/slots.ts:229"
+    },
+    {
+      "id": "DSH-UI-SLOT-053",
+      "key": "plugins.add.actions",
+      "kind": "list",
+      "scope": "root",
+      "declaredBy": "an entry in 'main' (client-ui-plugin-manager), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "Additional MenuItemButton rows after installation: 72px high, with a title and a description capped at two lines.",
+      "status": "direct",
+      "phase": "P10",
+      "targets": [
+        "extension.center.header.action"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-plugin-manager/src/client/slot-contract.ts:135"
+    },
+    {
+      "id": "DSH-UI-SLOT-054",
+      "key": "plugins.bundle.activation",
+      "kind": "keyed",
+      "scope": "root",
+      "declaredBy": "an entry in 'main' (client-ui-plugin-manager), so it exists while that entry is mounted",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "Optional guidance after the user enables a bundle from the list, keyed by npm package name.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "extension.plugin.bundle.activation"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-plugin-manager/src/client/slot-contract.ts:143"
+    },
+    {
+      "id": "DSH-UI-SLOT-055",
+      "key": "plugins.bundle.config",
+      "kind": "keyed",
+      "scope": "root",
+      "declaredBy": "an entry in 'main' (client-ui-plugin-manager), so it exists while that entry is mounted",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "A bundle's own configuration, keyed by the bundle's package name and rendered on the bundle's page between its description and its rows (`view: 'page'` only).",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "extension.plugin.bundle.config"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-plugin-manager/src/client/slot-contract.ts:159"
+    },
+    {
+      "id": "DSH-UI-SLOT-056",
+      "key": "plugins.detail.actions",
+      "kind": "list",
+      "scope": "root",
+      "declaredBy": "an entry in 'main' (client-ui-plugin-manager), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "Controls at the head of a detail page, before the page's own switch and uninstall, rendered with the page's subject.",
+      "status": "direct",
+      "phase": "P10",
+      "targets": [
+        "extension.detail.action"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-plugin-manager/src/client/slot-contract.ts:173"
+    },
+    {
+      "id": "DSH-UI-SLOT-057",
+      "key": "plugins.detail.badge",
+      "kind": "list",
+      "scope": "root",
+      "declaredBy": "an entry in 'main' (client-ui-plugin-manager), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "Tags beside a detail page's title, after the version, beta, and problem tags the page draws itself, rendered with the page's subject.",
+      "status": "direct",
+      "phase": "P10",
+      "targets": [
+        "extension.center.card.badge"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-plugin-manager/src/client/slot-contract.ts:178"
+    },
+    {
+      "id": "DSH-UI-SLOT-058",
+      "key": "plugins.detail.section",
+      "kind": "list",
+      "scope": "root",
+      "declaredBy": "an entry in 'main' (client-ui-plugin-manager), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "Sections under a detail page's own content: after the source on a bundle's page, after the configuration on a row's or an official plugin's page.",
+      "status": "composite",
+      "phase": "P10",
+      "targets": [
+        "extension.detail.tab"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-plugin-manager/src/client/slot-contract.ts:185"
+    },
+    {
+      "id": "DSH-UI-SLOT-059",
+      "key": "plugins.item",
+      "kind": "list",
+      "scope": "root",
+      "declaredBy": "an entry in 'main' (client-ui-plugin-manager), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "One official plugin the Plugins page lists in its Official group after the official bundles: `label` is the card's title and `order` its place.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "extension.plugin.item"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-plugin-manager/src/client/slot-contract.ts:153"
+    },
+    {
+      "id": "DSH-UI-SLOT-060",
+      "key": "plugins.row.config",
+      "kind": "keyed",
+      "scope": "root",
+      "declaredBy": "an entry in 'main' (client-ui-plugin-manager), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "The configuration of one row a bundle declares, keyed by `<package name>#<row id>` with the row id as the bundle's patch declares it: the row on the bundle's page gains a configure control that opens the entry's page, headed by the plugin's display title and description.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "extension.plugin.row.config"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-plugin-manager/src/client/slot-contract.ts:167"
+    },
+    {
+      "id": "DSH-UI-SLOT-061",
+      "key": "plugins.tab",
+      "kind": "list",
+      "scope": "root",
+      "declaredBy": "an entry in 'main' (client-ui-plugin-manager), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "Tabs after the page's own Installed tab, such as Discover: `label` names the tab and `order` places it.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "extension.plugin.tab"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-plugin-manager/src/client/slot-contract.ts:141"
+    },
+    {
+      "id": "DSH-UI-SLOT-062",
+      "key": "rightbar",
+      "kind": "single",
+      "scope": "root",
+      "declaredBy": "an entry in 'root' (client-ui-layout), so it exists while that entry is mounted",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "The right column: a track the centre makes room for, or nothing.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "app.rightbar"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-layout/src/client/index.ts:89"
+    },
+    {
+      "id": "DSH-UI-SLOT-063",
+      "key": "rightbar.session",
+      "kind": "single",
+      "scope": "session",
+      "declaredBy": "an entry in 'rightbar' (client-ui-sidebar-right), so it exists while that entry is mounted",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "Session content selected by the root-scoped right Sidebar controller.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "app.rightbar.session"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-sidebar-right/src/client/contract/slots.ts:43"
+    },
+    {
+      "id": "DSH-UI-SLOT-064",
+      "key": "root",
+      "kind": "single",
+      "scope": "root",
+      "declaredBy": "the runtime itself (built in; always present)",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "The built-in render-tree root hole (seeded by SlotCore): the one slot the shell itself renders, and the ancestor of every other seat.",
+      "status": "direct",
+      "phase": "P10",
+      "targets": [
+        "root"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-renderer/src/client/registry.ts:44"
+    },
+    {
+      "id": "DSH-UI-SLOT-065",
+      "key": "settings.action",
+      "kind": "list",
+      "scope": "root",
+      "declaredBy": "an entry in 'sidebar.settings' (client-ui-settings-general), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "Optional actions rendered in the content-column header before Close.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "settings.shell.action"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-settings/src/client/contract/slots.ts:39"
+    },
+    {
+      "id": "DSH-UI-SLOT-066",
+      "key": "settings.close",
+      "kind": "single",
+      "scope": "root",
+      "declaredBy": "an entry in 'sidebar.settings' (client-ui-settings-general), so it exists while that entry is mounted",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "The close button's visually-hidden label text (the button itself — icon, geometry, focus — is shell chrome).",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "settings.shell.close"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-settings/src/client/contract/slots.ts:45"
+    },
+    {
+      "id": "DSH-UI-SLOT-067",
+      "key": "settings.general.item",
+      "kind": "list",
+      "scope": "root",
+      "declaredBy": "an entry in 'settings.section' (client-ui-settings-general), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "One preference row inside the General section — the additive seat for a single setting that needs no page of its own (a whole page is `settings.section`), contributed by the feature plugin that owns the preference (locale → Language, ui-theme → Appearance, ui-conversation → Composer Enter).",
+      "status": "composite",
+      "phase": "P10",
+      "targets": [
+        "system.settings.section"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-settings/src/client/contract/slots.ts:100"
+    },
+    {
+      "id": "DSH-UI-SLOT-068",
+      "key": "settings.header",
+      "kind": "single",
+      "scope": "root",
+      "declaredBy": "an entry in 'sidebar.settings' (client-ui-settings-general), so it exists while that entry is mounted",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "The panel title text seat.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "settings.shell.header"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-settings/src/client/contract/slots.ts:33"
+    },
+    {
+      "id": "DSH-UI-SLOT-069",
+      "key": "settings.launcher",
+      "kind": "single",
+      "scope": "root",
+      "declaredBy": "an entry in 'sidebar.settings' (client-ui-settings-general), so it exists while that entry is mounted",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "Optional sidebar account launcher; opens the shell-owned settings panel.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "settings.shell.launcher"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-settings/src/client/contract/slots.ts:17"
+    },
+    {
+      "id": "DSH-UI-SLOT-070",
+      "key": "settings.launcher.notifications",
+      "kind": "single",
+      "scope": "root",
+      "declaredBy": "an entry in 'settings.launcher' (client-ui-settings-account), so it exists while that entry is mounted",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "Notifications anchored at the account menu; the contribution owns its markup and lifecycle.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "settings.shell.launcher.notifications"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-settings-account/src/client/account-ui.ts:47"
+    },
+    {
+      "id": "DSH-UI-SLOT-071",
+      "key": "settings.models.footer",
+      "kind": "list",
+      "scope": "root",
+      "declaredBy": "an entry in 'settings.section' (client-ui-settings-models), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "Ordered extension area after the provider rows and the add controls.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "settings.model.footer"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-settings-models/src/client/slot-contract.ts:40"
+    },
+    {
+      "id": "DSH-UI-SLOT-072",
+      "key": "settings.models.provider-card",
+      "kind": "keyed",
+      "scope": "root",
+      "declaredBy": "an entry in 'settings.section' (client-ui-settings-models), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "One provider card's adapter extension area, dispatched with `entryKey = settingsNs` on every card that renders a directory row: a saved row's card (its first-run setup posture included) and the add-provider draft card.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "settings.model.provider"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-settings-models/src/client/slot-contract.ts:33"
+    },
+    {
+      "id": "DSH-UI-SLOT-073",
+      "key": "settings.models.sign-in",
+      "kind": "single",
+      "scope": "root",
+      "declaredBy": "an entry in 'settings.onboarding' (client-ui-settings-models), so it exists while that entry is mounted",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "Optional account login choice before the credential editor.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "settings.model.sign-in"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-settings-models/src/client/slot-contract.ts:35"
+    },
+    {
+      "id": "DSH-UI-SLOT-074",
+      "key": "settings.onboarding",
+      "kind": "list",
+      "scope": "root",
+      "declaredBy": "an entry in 'sidebar.settings' (client-ui-settings-general), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "Root-scoped onboarding steps contributed by settings features.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "settings.onboarding"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-settings/src/client/contract/slots.ts:85"
+    },
+    {
+      "id": "DSH-UI-SLOT-075",
+      "key": "settings.plugins.tab",
+      "kind": "list",
+      "scope": "root",
+      "declaredBy": "an entry in 'settings.section' (client-ui-settings-plugins), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "One page inside the Plugins settings section.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "extension.settings.tab"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-settings/src/client/contract/slots.ts:74"
+    },
+    {
+      "id": "DSH-UI-SLOT-076",
+      "key": "settings.section",
+      "kind": "list",
+      "scope": "root",
+      "declaredBy": "an entry in 'sidebar.settings' (client-ui-settings-general), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "One settings page per list entry.",
+      "status": "direct",
+      "phase": "P10",
+      "targets": [
+        "extension.settings.section"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-settings/src/client/contract/slots.ts:57"
+    },
+    {
+      "id": "DSH-UI-SLOT-077",
+      "key": "settings.section.icon",
+      "kind": "list",
+      "scope": "root",
+      "declaredBy": "an entry in 'sidebar.settings' (client-ui-settings-general), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "Optional navigation icons addressed by the matching settings.section id.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "settings.section.icon"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-settings/src/client/contract/slots.ts:65"
+    },
+    {
+      "id": "DSH-UI-SLOT-078",
+      "key": "settings.trigger",
+      "kind": "single",
+      "scope": "root",
+      "declaredBy": "an entry in 'sidebar.settings' (client-ui-settings-general), so it exists while that entry is mounted",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "The sidebar-foot trigger row content: icon + label, supplied as slot content (the accessible name comes from the content — rail state renders the label visually hidden).",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "settings.shell.trigger"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-settings/src/client/contract/slots.ts:27"
+    },
+    {
+      "id": "DSH-UI-SLOT-079",
+      "key": "shell.bottom",
+      "kind": "single",
+      "scope": "root",
+      "declaredBy": "an entry in 'root' (client-ui-layout), so it exists while that entry is mounted",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "Full-width bottom content below all three columns.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "app.shell.bottom"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-layout/src/client/index.ts:96"
+    },
+    {
+      "id": "DSH-UI-SLOT-080",
+      "key": "shell.leading",
+      "kind": "single",
+      "scope": "root",
+      "declaredBy": "an entry in 'root' (client-ui-layout), so it exists while that entry is mounted",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "Window-chrome seat at the frame's top-left, over every main panel.",
+      "status": "composite",
+      "phase": "P10",
+      "targets": [
+        "chat.header.action"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-layout/src/client/index.ts:121"
+    },
+    {
+      "id": "DSH-UI-SLOT-081",
+      "key": "shell.overlay",
+      "kind": "list",
+      "scope": "root",
+      "declaredBy": "an entry in 'root' (client-ui-layout), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "Frame-wide floating layer, above every column and outside their scroll containers.",
+      "status": "direct",
+      "phase": "P10",
+      "targets": [
+        "ui.portal.overlay"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-layout/src/client/index.ts:107"
+    },
+    {
+      "id": "DSH-UI-SLOT-082",
+      "key": "shell.quota-notice",
+      "kind": "chain",
+      "scope": "root",
+      "declaredBy": "an entry in 'shell.overlay' (client-ui-chat), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "Frame-wide quota notice chain.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "app.shell.quota_notice"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-chat/src/client/contract/slots.ts:506"
+    },
+    {
+      "id": "DSH-UI-SLOT-083",
+      "key": "sidebar",
+      "kind": "single",
+      "scope": "root",
+      "declaredBy": "an entry in 'root' (client-ui-layout), so it exists while that entry is mounted",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "The whole left column.",
+      "status": "composite",
+      "phase": "P10",
+      "targets": [
+        "provider.app.workspace.sidebar"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-layout/src/client/index.ts:70"
+    },
+    {
+      "id": "DSH-UI-SLOT-084",
+      "key": "sidebar.brand.mark",
+      "kind": "single",
+      "scope": "root",
+      "declaredBy": "an entry in 'sidebar' (client-ui-sidebar), so it exists while that entry is mounted",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "Brand mark rendered in the expanded brand row and collapsed rail.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "provider.app.workspace.sidebar"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-sidebar/src/client/contract/slots.ts:37"
+    },
+    {
+      "id": "DSH-UI-SLOT-085",
+      "key": "sidebar.brand.name",
+      "kind": "single",
+      "scope": "root",
+      "declaredBy": "an entry in 'sidebar' (client-ui-sidebar), so it exists while that entry is mounted",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "Brand name rendered beside the expanded mark.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "provider.app.workspace.sidebar"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-sidebar/src/client/contract/slots.ts:42"
+    },
+    {
+      "id": "DSH-UI-SLOT-086",
+      "key": "sidebar.chat.conversation",
+      "kind": "single",
+      "scope": "session",
+      "declaredBy": "an entry in 'sidebar.right.pane.tab' (client-ui-subagent), so it exists while that entry is mounted",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "Session-scoped Conversation occurrence hosted by one Sidebar chat tab.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "provider.app.workspace.sidebar"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-subagent/src/client/sidebar-chat/index.tsx:42"
+    },
+    {
+      "id": "DSH-UI-SLOT-087",
+      "key": "sidebar.footer.action",
+      "kind": "list",
+      "scope": "root",
+      "declaredBy": "an entry in 'sidebar' (client-ui-sidebar), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "Optional actions beside Settings at the sidebar foot.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "provider.app.workspace.sidebar"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-sidebar/src/client/contract/slots.ts:75"
+    },
+    {
+      "id": "DSH-UI-SLOT-088",
+      "key": "sidebar.panellist",
+      "kind": "list",
+      "scope": "root",
+      "declaredBy": "factory 'sidebar.panel.icon' (client-ui-sidebar), so it exists while that definition is registered",
+      "replaceRisk": "none",
+      "summary": "Global panel icons.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.sidebar.panel"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-sidebar/src/client/contract/slots.ts:47"
+    },
+    {
+      "id": "DSH-UI-SLOT-089",
+      "key": "sidebar.panellist.actions",
+      "kind": "list",
+      "scope": "root",
+      "declaredBy": "an entry in 'sidebar' (client-ui-sidebar), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "Rows of the panel list's More menu; the sidebar shows More only while this list has registrations.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.sidebar.panel"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-sidebar/src/client/contract/slots.ts:49"
+    },
+    {
+      "id": "DSH-UI-SLOT-090",
+      "key": "sidebar.right.pane.tab",
+      "kind": "keyed",
+      "scope": "session",
+      "declaredBy": "an entry in 'rightbar.session' (client-ui-sidebar-right), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "One tab's body, dispatched with the `id` of the type in force for `tab.kind`.",
+      "status": "direct",
+      "phase": "P10",
+      "targets": [
+        "ui.sidebar.right.pane.tab"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-sidebar-right/src/client/contract/slots.ts:59"
+    },
+    {
+      "id": "DSH-UI-SLOT-091",
+      "key": "sidebar.right.pane.tab.title",
+      "kind": "keyed",
+      "scope": "session",
+      "declaredBy": "an entry in 'rightbar.session' (client-ui-sidebar-right), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "A tab's title as its chip (and a floating panel's header) shows it, dispatched with the same key and information hook as the body.",
+      "status": "direct",
+      "phase": "P10",
+      "targets": [
+        "ui.sidebar.right.pane.tab.title"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-sidebar-right/src/client/contract/slots.ts:73"
+    },
+    {
+      "id": "DSH-UI-SLOT-092",
+      "key": "sidebar.right.tab.document",
+      "kind": "keyed",
+      "scope": "session",
+      "declaredBy": "an entry in 'sidebar.right.pane.tab' (client-ui-sidebar-documentpreview), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "Document body selected by a registered implementation id.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "ui.sidebar.right.pane.document"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-sidebar-documentpreview/src/client/document/contract.ts:51"
+    },
+    {
+      "id": "DSH-UI-SLOT-093",
+      "key": "sidebar.right.tab.document.action",
+      "kind": "keyed",
+      "scope": "session",
+      "declaredBy": "an entry in 'sidebar.right.pane.tab' (client-ui-sidebar-documentpreview), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "Renderer-specific controls before the document toolbar's reload button.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "ui.sidebar.right.pane.document.action"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-sidebar-documentpreview/src/client/document/contract.ts:87"
+    },
+    {
+      "id": "DSH-UI-SLOT-094",
+      "key": "sidebar.right.tab.document.actions",
+      "kind": "list",
+      "scope": "session",
+      "declaredBy": "an entry in 'sidebar.right.pane.tab' (client-ui-sidebar-documentpreview), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "Header toolbar contributions acting on the previewed file, rendered after the preview's own controls once the file's Host path is known.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "ui.sidebar.right.pane.document.actions"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-sidebar-documentpreview/src/client/document/contract.ts:66"
+    },
+    {
+      "id": "DSH-UI-SLOT-095",
+      "key": "sidebar.right.tab.document.office.pdf",
+      "kind": "keyed",
+      "scope": "session",
+      "declaredBy": "an entry in 'sidebar.right.tab.document' (client-ui-sidebar-documentpreview), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "PDF presentation supplied with Office-owned converted bytes.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "ui.sidebar.right.pane.document.pdf"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-sidebar-documentpreview/src/client/office/OfficeBody.tsx:19"
+    },
+    {
+      "id": "DSH-UI-SLOT-096",
+      "key": "sidebar.right.tab.document.unpreviewable",
+      "kind": "list",
+      "scope": "session",
+      "declaredBy": "an entry in 'sidebar.right.pane.tab' (client-ui-sidebar-documentpreview), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "Empty-state contributions for a file this preview cannot render, offered where Retry would stand once the file's Host path is known.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "ui.sidebar.right.pane.document.unpreviewable"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-sidebar-documentpreview/src/client/document/contract.ts:78"
+    },
+    {
+      "id": "DSH-UI-SLOT-097",
+      "key": "sidebar.right.tab.files.actions",
+      "kind": "list",
+      "scope": "session",
+      "declaredBy": "an entry in 'sidebar.right.pane.tab' (client-ui-sidebar-files), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "Workspace directory actions after the `files` page's reload control.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "ui.sidebar.right.pane.files.actions"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-sidebar-files/src/client/index.ts:46"
+    },
+    {
+      "id": "DSH-UI-SLOT-098",
+      "key": "sidebar.right.tab.guide",
+      "kind": "chain",
+      "scope": "session",
+      "declaredBy": "an entry in 'sidebar.right.pane.tab' (client-ui-sidebar-right), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "The guide tab's body.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "ui.sidebar.right.pane.guide"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-sidebar-right/src/client/contract/slots.ts:84"
+    },
+    {
+      "id": "DSH-UI-SLOT-099",
+      "key": "sidebar.right.tab.guide.actions",
+      "kind": "list",
+      "scope": "root",
+      "declaredBy": "an entry in 'sidebar.right.pane.tab' (client-ui-sidebar-right), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "Rows of the guide's More menu; the guide shows More only while this list has registrations.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "ui.sidebar.right.pane.guide.actions"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-sidebar-right/src/client/contract/slots.ts:91"
+    },
+    {
+      "id": "DSH-UI-SLOT-100",
+      "key": "sidebar.right.tab.guide.entry",
+      "kind": "keyed",
+      "scope": "session",
+      "declaredBy": "an entry in 'sidebar.right.pane.tab' (client-ui-sidebar-right), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "One provider's guide card, with the standard card as the owner's fallback.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "ui.sidebar.right.pane.guide.entry"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-sidebar-right/src/client/contract/slots.ts:93"
+    },
+    {
+      "id": "DSH-UI-SLOT-101",
+      "key": "sidebar.right.tab.menu.item",
+      "kind": "list",
+      "scope": "session",
+      "declaredBy": "an entry in 'contextMenu.content' (client-ui-sidebar-right), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "Extra items at the end of one tab's actions menu, in registration order.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "ui.sidebar.right.pane.tab.menu.item"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-sidebar-right/src/client/contract/slots.ts:105"
+    },
+    {
+      "id": "DSH-UI-SLOT-102",
+      "key": "sidebar.session.row.hover",
+      "kind": "list",
+      "scope": "root",
+      "declaredBy": "an entry in 'sidebar.workspaces' (client-ui-workspace), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "Section of the Session row's hover card between its relative time and its trailing status line.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.sidebar.panel"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-workspace/src/client/contract/slots.ts:163"
+    },
+    {
+      "id": "DSH-UI-SLOT-103",
+      "key": "sidebar.session.row.leading",
+      "kind": "list",
+      "scope": "root",
+      "declaredBy": "an entry in 'sidebar.workspaces' (client-ui-workspace), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "Leading decoration of one Session row, in the 16px cell before the title that the row's own state dot otherwise occupies.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.sidebar.panel"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-workspace/src/client/contract/slots.ts:149"
+    },
+    {
+      "id": "DSH-UI-SLOT-104",
+      "key": "sidebar.session.row.trailing",
+      "kind": "list",
+      "scope": "root",
+      "declaredBy": "an entry in 'sidebar.workspaces' (client-ui-workspace), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "Non-interactive icons after the row's time label, before its pin marker, in ascending `order`.",
+      "status": "composite",
+      "phase": "P10",
+      "targets": [
+        "chat.sidebar.panel"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-workspace/src/client/contract/slots.ts:158"
+    },
+    {
+      "id": "DSH-UI-SLOT-105",
+      "key": "sidebar.settings",
+      "kind": "single",
+      "scope": "root",
+      "declaredBy": "an entry in 'sidebar' (client-ui-sidebar), so it exists while that entry is mounted",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "The settings seat at the sidebar foot.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "settings.shell.trigger"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-sidebar/src/client/contract/slots.ts:70"
+    },
+    {
+      "id": "DSH-UI-SLOT-106",
+      "key": "sidebar.toggle.badge",
+      "kind": "single",
+      "scope": "root",
+      "declaredBy": "an entry in 'sidebar' (client-ui-sidebar), so it exists while that entry is mounted",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "Non-interactive notification inside the collapsed sidebar expand button.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.header.action"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-sidebar/src/client/contract/slots.ts:31"
+    },
+    {
+      "id": "DSH-UI-SLOT-107",
+      "key": "sidebar.workspaces",
+      "kind": "single",
+      "scope": "root",
+      "declaredBy": "an entry in 'sidebar' (client-ui-sidebar), so it exists while that entry is mounted",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "The workspace/session browsing region: section header, search, the grouped/flat session list, and every workspace dialog.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "provider.app.workspace.sidebar"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-sidebar/src/client/contract/slots.ts:58"
+    },
+    {
+      "id": "DSH-UI-SLOT-108",
+      "key": "sidebar.workspaces.directoryFlow",
+      "kind": "single",
+      "scope": "root",
+      "declaredBy": "an entry in 'sidebar.workspaces' (client-ui-workspace), so it exists while that entry is mounted",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "Directory-flow hole under the sidebar browsing region (declared by the WorkspaceBrowser entry).",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "provider.app.workspace.sidebar"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-workspace/src/client/contract/slots.ts:139"
+    },
+    {
+      "id": "DSH-UI-SLOT-109",
+      "key": "sidebar.workspaces.session.menu.item",
+      "kind": "list",
+      "scope": "root",
+      "declaredBy": "an entry in 'contextMenu.content' (client-ui-workspace), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "Legacy external Session menu rows, in ascending `order`, rendered together before the built-in Archive action.",
+      "status": "composite",
+      "phase": "P10",
+      "targets": [
+        "chat.header.action"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-workspace/src/client/contract/slots.ts:193"
+    },
+    {
+      "id": "DSH-UI-SLOT-110",
+      "key": "sidebar.workspaces.session.row.action",
+      "kind": "list",
+      "scope": "root",
+      "declaredBy": "an entry in 'sidebar.workspaces' (client-ui-workspace), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "The hover buttons at the end of one Session row, in ascending `order`, after the \"...\" menu trigger.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.header.action"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-workspace/src/client/contract/slots.ts:212"
+    },
+    {
+      "id": "DSH-UI-SLOT-111",
+      "key": "tool.call.images",
+      "kind": "single",
+      "scope": "session",
+      "declaredBy": "an entry in 'tool.call.toolview' (client-ui-tool), so it exists while that entry is mounted",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "Durable images of a settled image-bearing Tool call, rendered through the attachment presentation plugin.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.message.tool.images"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-tool/src/client/contract/slots.ts:41"
+    },
+    {
+      "id": "DSH-UI-SLOT-112",
+      "key": "tool.call.toolview",
+      "kind": "keyed",
+      "scope": "session",
+      "declaredBy": "an entry in 'conversation.chat.node' (client-ui-tool), so it exists while that entry is mounted",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "Keyed Tool view dispatched by wire name, including custom tools.",
+      "status": "direct",
+      "phase": "P10",
+      "targets": [
+        "chat.message.custom_renderer"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-tool/src/client/contract/slots.ts:23"
+    },
+    {
+      "id": "DSH-UI-SLOT-113",
+      "key": "tool.view.cordis",
+      "kind": "keyed",
+      "scope": "session",
+      "declaredBy": "an entry in 'tool.call.toolview' (client-ui-cordis), so it exists while that entry is mounted",
+      "replaceRisk": "none",
+      "summary": "Interactive Package-owned region rendered inside the latest eligible `cordis_run` card in the conversation flow.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.message.tool.cordis"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/extensions/ui-cordis/src/client/slots.ts:31"
+    },
+    {
+      "id": "DSH-UI-SLOT-114",
+      "key": "workspace.toast",
+      "kind": "keyed",
+      "scope": "root",
+      "declaredBy": "an entry in 'shell.overlay' (client-ui-workspace), so it exists while that entry is mounted",
+      "replaceRisk": "shadows-shipped-ui",
+      "summary": "Workspace notices selected by their existing business discriminator.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "app.workspace.toast"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2:packages/client/ui-workspace/src/client/contract/toast.ts:53"
+    },
+    {
+      "id": "DSH-UI-SLOT-115",
+      "key": "conversation.chat.reasoning.content",
+      "kind": "factory",
+      "scope": "session",
+      "declaredBy": "client-ui-chat",
+      "replaceRisk": "none",
+      "summary": "Official DSH Slot Factory conversation.chat.reasoning.content.",
+      "status": "composite",
+      "phase": "P10",
+      "targets": [
+        "chat.message.renderer"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh@0.2.2-rc.2:docs/subsystems/slots.md"
+    },
+    {
+      "id": "DSH-UI-SLOT-116",
+      "key": "conversation.chat.user.content",
+      "kind": "factory",
+      "scope": "session",
+      "declaredBy": "client-ui-chat",
+      "replaceRisk": "none",
+      "summary": "Official DSH Slot Factory conversation.chat.user.content.",
+      "status": "composite",
+      "phase": "P10",
+      "targets": [
+        "chat.message.renderer"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh@0.2.2-rc.2:docs/subsystems/slots.md"
+    },
+    {
+      "id": "DSH-UI-SLOT-117",
+      "key": "conversation.content",
+      "kind": "factory",
+      "scope": "session-maybe",
+      "declaredBy": "client-ui-conversation",
+      "replaceRisk": "none",
+      "summary": "Official DSH Slot Factory conversation.content.",
+      "status": "composite",
+      "phase": "P10",
+      "targets": [
+        "provider.conversation.messages"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh@0.2.2-rc.2:docs/subsystems/slots.md"
+    },
+    {
+      "id": "DSH-UI-SLOT-118",
+      "key": "conversation.images.content",
+      "kind": "factory",
+      "scope": "session",
+      "declaredBy": "client-ui-chat",
+      "replaceRisk": "none",
+      "summary": "Official DSH Slot Factory conversation.images.content.",
+      "status": "composite",
+      "phase": "P10",
+      "targets": [
+        "chat.message.attachment_renderer"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh@0.2.2-rc.2:docs/subsystems/slots.md"
+    },
+    {
+      "id": "DSH-UI-SLOT-119",
+      "key": "conversation.user.text",
+      "kind": "factory",
+      "scope": "session",
+      "declaredBy": "client-ui-chat",
+      "replaceRisk": "none",
+      "summary": "Official DSH Slot Factory conversation.user.text.",
+      "status": "composite",
+      "phase": "P10",
+      "targets": [
+        "chat.message.renderer"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh@0.2.2-rc.2:docs/subsystems/slots.md"
+    },
+    {
+      "id": "DSH-UI-SLOT-120",
+      "key": "sidebar.panel.icon",
+      "kind": "factory",
+      "scope": "root",
+      "declaredBy": "client-ui-sidebar",
+      "replaceRisk": "none",
+      "summary": "Official DSH Slot Factory sidebar.panel.icon.",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.sidebar.panel"
+      ],
+      "reason": "",
+      "source": "@deepseek-ai/dsh@0.2.2-rc.2:docs/subsystems/slots.md"
+    }
+  ]
+}

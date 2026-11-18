@@ -554,13 +554,6 @@ class OnboardingService {
         const <String, dynamic>{};
   }
 
-  Future<Map<String, dynamic>> onboardingStatus() async {
-    return await _api.get<Map<String, dynamic>>(
-          '/api/public/onboarding/status',
-        ) ??
-        const <String, dynamic>{};
-  }
-
   Future<List<Map<String, dynamic>>> detectModels({
     required String baseUrl,
     required String apiKey,
@@ -580,13 +573,6 @@ class OnboardingService {
         .whereType<Map>()
         .map((item) => Map<String, dynamic>.from(item))
         .toList(growable: false);
-  }
-
-  Future<void> complete({required String deployMode}) async {
-    await _api.post<Map<String, dynamic>>(
-      '/api/onboarding/complete',
-      data: <String, dynamic>{'deployMode': deployMode, 'webChatEnabled': true},
-    );
   }
 }
 

@@ -1,0 +1,1987 @@
+{
+  "schemaVersion": 1,
+  "catalogVersion": "v1",
+  "targetDshVersion": "0.2.2-rc.2",
+  "targetClientUiPrimitivesVersion": "0.2.2-rc.2",
+  "sourcePackages": [
+    {
+      "spec": "@deepseek-ai/dsh@0.2.2-rc.2",
+      "packageJsonSha256": "sha256-9d6c0e15213b8d2b463de2a820e1ff5722641944bb561715f53e2ce7f0781adc"
+    },
+    {
+      "spec": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2",
+      "packageJsonSha256": "sha256-e5ff1b4e163bb6e6b8baafe73b3a0e8d1026f935c4666e670d1d1de36c57545e"
+    }
+  ],
+  "summary": {
+    "targetDshVersion": "0.2.2-rc.2",
+    "hostServiceCount": 69,
+    "hostEventCount": 74,
+    "hostToolCount": 77,
+    "hostConfigurationCount": 163,
+    "lifecycleEventCount": 63,
+    "clientServiceCount": 8,
+    "clientEventCount": 4,
+    "uiSlotCount": 120,
+    "uiSlotMappedCount": 120,
+    "uiSlotPendingCount": 0,
+    "hostServiceDelegatedCount": 27,
+    "hostServiceImplementedCount": 21,
+    "hostServicePartialCount": 7,
+    "hostServiceProviderPendingCount": 1,
+    "hostServiceUnavailableCount": 13,
+    "officialReferencePackageCount": 416
+  },
+  "hostServices": [
+    {
+      "id": "DSH-HOST-SERVICE-001",
+      "capability": "agentDefaultModel",
+      "status": "delegated",
+      "phase": "P11",
+      "mapping": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "reason": "由官方包 @deepseek-ai/dsh-agent-default-model 提供，插件声明 inject 并自带该依赖后经真实 cordis 原生托管"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-002",
+      "capability": "agentLoop",
+      "status": "delegated",
+      "phase": "P11",
+      "mapping": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "reason": "由官方 bundle @deepseek-ai/dsh-agent-loop 提供，容器不复制 agent 驱动"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-003",
+      "capability": "agentPresets",
+      "status": "delegated",
+      "phase": "P11",
+      "mapping": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "reason": "由官方 @deepseek-ai/dsh-agent-preset 提供注册表；mount/recompose 动态子组合由 cordis 原生托管"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-004",
+      "capability": "agents",
+      "status": "partial",
+      "phase": "P11",
+      "mapping": "composite",
+      "route": "amitia-service",
+      "provider": "container",
+      "reason": "会话创建与 turnBoundary 投影已接；setFactory 缺 host.agent.factory，announce 缺 session-start 事件语义"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-005",
+      "capability": "approval",
+      "status": "implemented",
+      "phase": "P11",
+      "mapping": "host",
+      "route": "amitia-service",
+      "provider": "container",
+      "reason": "request 走 host.approval.request，把 {approved:true|false} 映射为 allowed-once/rejected，非法结果抛原始错误；setPolicy/overrideOf 为本地策略表"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-006",
+      "capability": "authorization",
+      "status": "delegated",
+      "phase": "P11",
+      "mapping": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "reason": "由官方 @deepseek-ai/dsh-authorization 提供凭据流程注册表，记录写入复用已实现的 credentials"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-007",
+      "capability": "clientModules",
+      "status": "delegated",
+      "phase": "P11",
+      "mapping": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "reason": "由官方 @deepseek-ai/dsh-client-modules 提供 Web 插件表，桌面端不消费"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-008",
+      "capability": "commands",
+      "status": "implemented",
+      "phase": "P11",
+      "mapping": "composite",
+      "route": "amitia-service",
+      "provider": "container",
+      "reason": ""
+    },
+    {
+      "id": "DSH-HOST-SERVICE-009",
+      "capability": "compaction",
+      "status": "delegated",
+      "phase": "P11",
+      "mapping": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "reason": "由官方 @deepseek-ai/dsh-compaction seam 提供，具体 provider 为官方 compaction-basic"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-010",
+      "capability": "connection",
+      "status": "delegated",
+      "phase": "P11",
+      "mapping": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "reason": "由官方 client 连接包提供，桌面端仅需服务可见性"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-011",
+      "capability": "credentials",
+      "status": "implemented",
+      "phase": "P11",
+      "mapping": "composite",
+      "route": "amitia-service",
+      "provider": "container",
+      "reason": ""
+    },
+    {
+      "id": "DSH-HOST-SERVICE-012",
+      "capability": "credentialsController",
+      "status": "delegated",
+      "phase": "P11",
+      "mapping": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "reason": "由官方 @deepseek-ai/dsh-api-settings-controller 提供，底层 credentials 已由容器实现"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-013",
+      "capability": "deepseekAccount",
+      "status": "unavailable",
+      "phase": "P11",
+      "mapping": "unavailable",
+      "route": "official-package",
+      "provider": "unavailable",
+      "reason": "seam 由官方 @deepseek-ai/dsh-deepseek-account 提供，登录需要 DeepSeek 账号网络通道，容器不代理第三方账号，保持官方失败态"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-014",
+      "capability": "deepseekLlmApiExtensions",
+      "status": "delegated",
+      "phase": "P11",
+      "mapping": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "reason": "由官方 @deepseek-ai/dsh-deepseek-llm-api-extensions 提供请求字段注册表，纯内存"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-015",
+      "capability": "directoryPicker",
+      "status": "partial",
+      "phase": "P11",
+      "mapping": "pending",
+      "route": "official-package",
+      "provider": "amitia",
+      "reason": "list/createDirectory 走 host.directory.list/create（已实测）；pick 依赖渲染进程 window.amitiaDesktop.selectDirectory 原生对话框，宿主侧无对应方法"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-016",
+      "capability": "directoryPickerController",
+      "status": "partial",
+      "phase": "P11",
+      "mapping": "pending",
+      "route": "official-package",
+      "provider": "amitia",
+      "reason": "控制器复用具同一 source；pick 依赖原生对话框 IPC，非桌面端无该桥"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-017",
+      "capability": "fileReferences",
+      "status": "implemented",
+      "phase": "P11",
+      "mapping": "host.workspace.read",
+      "route": "official-package",
+      "provider": "amitia",
+      "reason": "已接 host.workspace.read 的 search/stat/read/read_bytes，按当前工作区枚举文件引用"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-018",
+      "capability": "fs",
+      "status": "implemented",
+      "phase": "P11",
+      "mapping": "host",
+      "route": "amitia-service",
+      "provider": "container",
+      "reason": "读、写、rename/move/copy/delete 走 host.workspace.read/write；watch 为 file_stat 轮询；editText 走 read+字面量替换+write；patchText 按 PatchHunk 定位替换后写回"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-019",
+      "capability": "goals",
+      "status": "delegated",
+      "phase": "P11",
+      "mapping": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "reason": "由官方 @deepseek-ai/dsh-goal 提供，以会话日志为唯一来源"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-020",
+      "capability": "jobController",
+      "status": "delegated",
+      "phase": "P11",
+      "mapping": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "reason": "官方 @deepseek-ai/dsh-api-job-controller 实测在严格注入检查下直接激活（根入口 ./lib/index.js 为唯一 Host 入口，typert 与 jobs 均满足，激活后注册 jobController 并提供 1 个 client 入口）。typert 来自官方 @deepseek-ai/dsh-typert-registry；jobs 来自 Amitia host-services 已实现的作业运行时，官方 jobs-local 与之冲突（DSH_HOST_SERVICE_CONFLICT service \"jobs\" has been registered），二者不共存，容器不安装 jobs-local"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-021",
+      "capability": "jobs",
+      "status": "implemented",
+      "phase": "P11",
+      "mapping": "composite",
+      "route": "amitia-service",
+      "provider": "container",
+      "reason": ""
+    },
+    {
+      "id": "DSH-HOST-SERVICE-022",
+      "capability": "llm",
+      "status": "partial",
+      "phase": "P11",
+      "mapping": "composite",
+      "route": "amitia-service",
+      "provider": "container",
+      "reason": "适配器注册与 host.model.invoke 出帧已接；resolveCallConfig 走 host.model.defaults（当前启用模型温度/最大 token/上下文窗口）；fileRequestText 仍缺附件引用文本"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-023",
+      "capability": "lsp",
+      "status": "unavailable",
+      "phase": "P11",
+      "mapping": "unavailable",
+      "route": "official-package",
+      "provider": "unavailable",
+      "reason": "seam 包 @deepseek-ai/dsh-lsp@0.2.2-rc.2 已发布，但不在 @deepseek-ai/dsh@0.2.2-rc.2 依赖闭包内（416 个官方包实测无定义点），需显式安装；provider lsp-stdio 需真实子进程与语言服务器二进制，容器不提供，保持官方 LSP_UNAVAILABLE"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-024",
+      "capability": "permissionPresets",
+      "status": "unavailable",
+      "phase": "P11",
+      "mapping": "unavailable",
+      "route": "official-package",
+      "provider": "unavailable",
+      "reason": "由官方 @deepseek-ai/dsh-permission-presets 提供，依赖 ctx.shell 执行器，容器不提供真实进程执行"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-025",
+      "capability": "planMode",
+      "status": "delegated",
+      "phase": "P11",
+      "mapping": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "reason": "由官方 @deepseek-ai/dsh-plan-mode 提供，状态写入会话日志"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-026",
+      "capability": "ptcRuntime",
+      "status": "unavailable",
+      "phase": "P11",
+      "mapping": "unavailable",
+      "route": "official-package",
+      "provider": "unavailable",
+      "reason": "seam 由官方 @deepseek-ai/dsh-ptc-runtime 提供；provider 需隔离执行程序，容器 Node 权限不变时保持官方失败态"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-027",
+      "capability": "remoteAccess",
+      "status": "delegated",
+      "phase": "P11",
+      "mapping": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "reason": "由官方 @deepseek-ai/dsh-api-remote-access 提供访问策略注册表，纯内存"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-028",
+      "capability": "sandbox",
+      "status": "unavailable",
+      "phase": "P11",
+      "mapping": "unavailable",
+      "route": "official-package",
+      "provider": "unavailable",
+      "reason": "seam 由官方 @deepseek-ai/dsh-sandbox 提供；confining 实现需宿主提供真实隔离，容器不放开即失败关闭"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-029",
+      "capability": "sandboxPolicy",
+      "status": "delegated",
+      "phase": "P11",
+      "mapping": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "reason": "由官方 @deepseek-ai/dsh-sandbox-policy 提供策略服务，执行侧才需要 sandbox provider"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-030",
+      "capability": "schedule",
+      "status": "implemented",
+      "phase": "P11",
+      "mapping": "host",
+      "route": "amitia-service",
+      "provider": "container",
+      "reason": "create/list/cancel/run/view/history/edit/deleteInactive 全部走 host.schedule.*；list 返回 {items,shown,total,limit,offset} 并按 active 过滤；create 后回读目录确认条目"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-031",
+      "capability": "sessionController",
+      "status": "delegated",
+      "phase": "P11",
+      "mapping": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "reason": "由官方 @deepseek-ai/dsh-api-session-controller 提供，依赖会话持久化与标题服务"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-032",
+      "capability": "sessionFileReferences",
+      "status": "implemented",
+      "phase": "P11",
+      "mapping": "host.workspace.read",
+      "route": "official-package",
+      "provider": "amitia",
+      "reason": "按会话作用域复用 host.workspace.read 生成会话文件引用"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-033",
+      "capability": "sessionLogDeepSeek",
+      "status": "delegated",
+      "phase": "P11",
+      "mapping": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "reason": "由官方 @deepseek-ai/dsh-session-log-deepseek 提供日志贡献者，纯内存过滤规则"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-034",
+      "capability": "sessionPersistence",
+      "status": "implemented",
+      "phase": "P11",
+      "mapping": "implemented",
+      "route": "official-package",
+      "provider": "amitia-landed",
+      "reason": "seam 由官方 @deepseek-ai/dsh-session-persistence 提供，jsonl 后端已接线到插件数据目录 dsh-data/sessions；0.1.104 真实运行中经官方 agents.create 写出 sessions/<cwd>/<sessionId>/session.v4.jsonl.zstd（208 字节，zstd 解压后为 session 头事件）"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-035",
+      "capability": "sessionProjectionCache",
+      "status": "implemented",
+      "phase": "P11",
+      "mapping": "implemented",
+      "route": "official-package",
+      "provider": "amitia-landed",
+      "reason": "官方 @deepseek-ai/dsh-session-projection-cache 已安装并 active，容器按官方 README 注入必填 writeEveryEvents=200 与 writeIntervalMs=5000，打开 session_projcache 存储域；0.1.104 真实运行中会话创建即写出 storage/session_projcache/sessions/<sessionId>.json，含 turnBoundary/modelSelection/inbox 三行投影"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-036",
+      "capability": "sessionProjections",
+      "status": "implemented",
+      "phase": "P11",
+      "mapping": "implemented",
+      "route": "official-package",
+      "provider": "amitia-landed",
+      "reason": "seam 由官方 @deepseek-ai/dsh-session-projection 提供（0.1.104 安装并 active），容器注册表改名 amitiaSessionProjections 让出官方服务名；官方 agent-loop 已在该注册表登记 turnBoundary/modelSelection/inbox 三行投影"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-037",
+      "capability": "sessionQuery",
+      "status": "partial",
+      "phase": "P11",
+      "mapping": "composite",
+      "route": "amitia-service",
+      "provider": "container",
+      "reason": "listSessions、readSession、listEvents、readSurface、readTitle、readTitleSnapshot、readTitleSnapshots 已接入 Amitia 会话目录与持久化事件；observeSession、inspectSession、searchSessions、searchEvents、filterSessions、filterEvents、traceSession、traceEvent、readEvent 缺少对应的 Amitia 通用能力"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-038",
+      "capability": "sessionReferenceResolver",
+      "status": "delegated",
+      "phase": "P11",
+      "mapping": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "reason": "由官方 @deepseek-ai/dsh-session-reference 提供，读取会话日志精确内容"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-039",
+      "capability": "sessions",
+      "status": "partial",
+      "phase": "P11",
+      "mapping": "composite",
+      "route": "amitia-service",
+      "provider": "container",
+      "reason": "list/binding/prompt/create 走宿主；fork 已接 host.conversation.fork（mesh 层复制会话与消息，实测 messageCount=9 并可删除）；prepare 仍缺 host.conversation.prepare（Amitia 创建即写入会话目录，无预分配语义）"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-040",
+      "capability": "sessionSkillCatalog",
+      "status": "implemented",
+      "phase": "P11",
+      "mapping": "pending",
+      "route": "official-package",
+      "provider": "amitia",
+      "reason": "host.skill.list 已实现，ctx.skills 目录改由宿主技能目录派生"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-041",
+      "capability": "sessionTelemetry",
+      "status": "unavailable",
+      "phase": "P11",
+      "mapping": "unavailable",
+      "route": "official-package",
+      "provider": "unavailable",
+      "reason": "seam 由官方 @deepseek-ai/dsh-session-telemetry 提供；Amitia 无遥测上报通道，provider 保持官方失败态"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-042",
+      "capability": "sessionTitle",
+      "status": "delegated",
+      "phase": "P11",
+      "mapping": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "reason": "由官方 @deepseek-ai/dsh-session-title 提供，标题以会话日志折叠为准"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-043",
+      "capability": "settings",
+      "status": "delegated",
+      "phase": "P11",
+      "mapping": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "reason": "由官方 @deepseek-ai/dsh-settings 提供 Config 投影，纯内存"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-044",
+      "capability": "settingsController",
+      "status": "delegated",
+      "phase": "P11",
+      "mapping": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "reason": "由官方 @deepseek-ai/dsh-api-settings-controller 提供，底层 settings 由官方包提供"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-045",
+      "capability": "shell",
+      "status": "unavailable",
+      "phase": "P11",
+      "mapping": "unavailable",
+      "route": "official-package",
+      "provider": "unavailable",
+      "reason": "seam 由官方 @deepseek-ai/dsh-shell 提供（实测可加载）；provider 需真实进程，容器 Node 权限不变时不放开"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-046",
+      "capability": "shellEnv",
+      "status": "delegated",
+      "phase": "P11",
+      "mapping": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "reason": "由官方 @deepseek-ai/dsh-shell-env 提供（实测 register/list/collect/release 全通）"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-047",
+      "capability": "skills",
+      "status": "implemented",
+      "phase": "P11",
+      "mapping": "host",
+      "route": "official-package",
+      "provider": "amitia",
+      "reason": "list/snapshot 合并宿主 host.skill.list 与本地注册表；register/registerProvider/get 为本地注册表；refresh 拉取失败时原始错误进 snapshot().error"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-048",
+      "capability": "spillStore",
+      "status": "implemented",
+      "phase": "P11",
+      "mapping": "implemented",
+      "route": "official-package",
+      "provider": "amitia-landed",
+      "reason": "seam 由官方 @deepseek-ai/dsh-spill 提供，本地 provider 已接线到插件数据目录 dsh-data/spill；0.1.104 真实运行中 saveText 写出 spill/session-0588e96b2117/685d18d77a52-probe.txt（1728 字节，0600，内容逐字节比对一致）"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-049",
+      "capability": "storage",
+      "status": "implemented",
+      "phase": "P11",
+      "mapping": "implemented",
+      "route": "official-package",
+      "provider": "amitia-landed",
+      "reason": "seam 由官方 @deepseek-ai/dsh-storage 提供，JSON 后端已实测落盘 dsh-data/storage/workspace.json（0.1.99 真实运行）"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-050",
+      "capability": "storageDomain",
+      "status": "implemented",
+      "phase": "P11",
+      "mapping": "implemented",
+      "route": "official-package",
+      "provider": "amitia-landed",
+      "reason": "由官方 @deepseek-ai/dsh-storage-domain 提供，域数据已实测经 storage provider 落盘（0.1.99 真实运行）"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-051",
+      "capability": "subagentModelSelection",
+      "status": "delegated",
+      "phase": "P11",
+      "mapping": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "reason": "由官方 @deepseek-ai/dsh-tool-subagent 提供 settings 贡献项，纯内存记录"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-052",
+      "capability": "subagents",
+      "status": "partial",
+      "phase": "P11",
+      "mapping": "composite",
+      "route": "amitia-service",
+      "provider": "container",
+      "reason": "子代理发送与命名部分接入；命名表缺 host.session.subagent.names，派生缺 host.conversation.fork"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-053",
+      "capability": "subprocess",
+      "status": "unavailable",
+      "phase": "P11",
+      "mapping": "unavailable",
+      "route": "official-package",
+      "provider": "unavailable",
+      "reason": "seam 由官方 @deepseek-ai/dsh-subprocess 提供；provider 需真实子进程，容器 Node 权限不变时保持官方失败态"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-054",
+      "capability": "systemPrompt",
+      "status": "implemented",
+      "phase": "P9",
+      "mapping": "composite",
+      "route": "amitia-service",
+      "provider": "container",
+      "reason": ""
+    },
+    {
+      "id": "DSH-HOST-SERVICE-055",
+      "capability": "terminalController",
+      "status": "unavailable",
+      "phase": "P11",
+      "mapping": "unavailable",
+      "route": "official-package",
+      "provider": "unavailable",
+      "reason": "由官方 @deepseek-ai/dsh-api-terminal-controller 提供，依赖 terminals 与真实 PTY"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-056",
+      "capability": "terminals",
+      "status": "unavailable",
+      "phase": "P11",
+      "mapping": "unavailable",
+      "route": "official-package",
+      "provider": "unavailable",
+      "reason": "seam 由官方 @deepseek-ai/dsh-terminal 提供；PTY 后端需子进程，容器不放开"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-057",
+      "capability": "tokenMeter",
+      "status": "delegated",
+      "phase": "P11",
+      "mapping": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "reason": "由官方 @deepseek-ai/dsh-token-meter 提供，用于本地估算与 usage 折叠"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-058",
+      "capability": "toolResultPruner",
+      "status": "delegated",
+      "phase": "P11",
+      "mapping": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "reason": "由官方 @deepseek-ai/dsh-compaction-tool-result-pruner 提供确定性裁剪，纯计算"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-059",
+      "capability": "tools",
+      "status": "implemented",
+      "phase": "P9",
+      "mapping": "composite",
+      "route": "amitia-service",
+      "provider": "container",
+      "reason": ""
+    },
+    {
+      "id": "DSH-HOST-SERVICE-060",
+      "capability": "typert",
+      "status": "delegated",
+      "phase": "P11",
+      "mapping": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "reason": "由官方 @deepseek-ai/dsh-typert-registry 提供 schema 注册表，纯内存"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-061",
+      "capability": "typertGateway",
+      "status": "delegated",
+      "phase": "P11",
+      "mapping": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "reason": "由官方 @deepseek-ai/dsh-api-gateway 提供，活跃客户端通道就绪后可用"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-062",
+      "capability": "userQuestions",
+      "status": "implemented",
+      "phase": "P11",
+      "mapping": "host",
+      "route": "amitia-service",
+      "provider": "container",
+      "reason": "ask/askTimed 走 host.ui.dialog（message + options + dialogId），返回选中项；空结果抛原始错误；超时返回 timed-out 状态"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-063",
+      "capability": "web",
+      "status": "unavailable",
+      "phase": "P11",
+      "mapping": "unavailable",
+      "route": "official-package",
+      "provider": "unavailable",
+      "reason": "seam 由官方 @deepseek-ai/dsh-web 提供；搜索与抓取 provider 需外部网络与凭据，容器不代理"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-064",
+      "capability": "webApp",
+      "status": "delegated",
+      "phase": "P11",
+      "mapping": "delegated",
+      "route": "official-package",
+      "provider": "none",
+      "reason": "由官方 @deepseek-ai/dsh-web-app 提供，属 Web 端专用，桌面端不安装不加载"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-065",
+      "capability": "webServer",
+      "status": "unavailable",
+      "phase": "P11",
+      "mapping": "unavailable",
+      "route": "official-package",
+      "provider": "unavailable",
+      "reason": "seam 由官方 @deepseek-ai/dsh-host-webserver 提供；HTTP 服务端端口与路由须由宿主提供，容器不开放监听"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-066",
+      "capability": "workflowEngine",
+      "status": "unavailable",
+      "phase": "P11",
+      "mapping": "unavailable",
+      "route": "official-package",
+      "provider": "unavailable",
+      "reason": "seam 由官方 @deepseek-ai/dsh-workflow 提供；provider workflow-ptc 需隔离执行，容器不放开"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-067",
+      "capability": "workspaceController",
+      "status": "pending",
+      "phase": "P11",
+      "mapping": "pending",
+      "route": "official-package",
+      "provider": "amitia",
+      "reason": "官方 @deepseek-ai/dsh-api-workspace-controller 注入 remoteAccess / typert / workspaceRegistry 三个宿主服务；Amitia 扩展运行时没有 typert remote 栈与 dsh-workspace 存储层，需要先实现 compat 存储与 remote 服务端"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-068",
+      "capability": "workspaceFiles",
+      "status": "implemented",
+      "phase": "P11",
+      "mapping": "host.workspace.read",
+      "route": "official-package",
+      "provider": "amitia",
+      "reason": "已接 host.workspace.read 的 file_list/search/stat/read/read_bytes"
+    },
+    {
+      "id": "DSH-HOST-SERVICE-069",
+      "capability": "workspaceRegistry",
+      "status": "implemented",
+      "phase": "P11",
+      "mapping": "implemented",
+      "route": "official-package",
+      "provider": "amitia-landed",
+      "reason": "由官方 @deepseek-ai/dsh-workspace 提供，0.1.99 已激活并完成默认工作区初始化落盘"
+    }
+  ],
+  "clientServices": [
+    {
+      "id": "DSH-CLIENT-SERVICE-001",
+      "capability": "layout",
+      "status": "partial",
+      "phase": "P13",
+      "mapping": "composite"
+    },
+    {
+      "id": "DSH-CLIENT-SERVICE-002",
+      "capability": "locale",
+      "status": "implemented",
+      "phase": "P10",
+      "mapping": "direct"
+    },
+    {
+      "id": "DSH-CLIENT-SERVICE-003",
+      "capability": "sessions",
+      "status": "partial",
+      "phase": "P13",
+      "mapping": "composite"
+    },
+    {
+      "id": "DSH-CLIENT-SERVICE-004",
+      "capability": "slots",
+      "status": "implemented",
+      "phase": "P10",
+      "mapping": "direct"
+    },
+    {
+      "id": "DSH-CLIENT-SERVICE-005",
+      "capability": "theme",
+      "status": "implemented",
+      "phase": "P13",
+      "mapping": "direct"
+    },
+    {
+      "id": "DSH-CLIENT-SERVICE-006",
+      "capability": "timer",
+      "status": "implemented",
+      "phase": "P13",
+      "mapping": "direct"
+    },
+    {
+      "id": "DSH-CLIENT-SERVICE-007",
+      "capability": "uiWorkspace",
+      "status": "partial",
+      "phase": "P13",
+      "mapping": "composite"
+    },
+    {
+      "id": "DSH-CLIENT-SERVICE-008",
+      "capability": "workspaces",
+      "status": "partial",
+      "phase": "P13",
+      "mapping": "composite"
+    }
+  ],
+  "uiSlots": [
+    {
+      "id": "DSH-UI-SLOT-001",
+      "capability": "contextMenu.content",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "desktop.context_menu.content"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-002",
+      "capability": "contextMenu.icon",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "desktop.context_menu.icon"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-003",
+      "capability": "conversation.approval.detail",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.approval.detail"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-004",
+      "capability": "conversation.chat.assistant-actions",
+      "status": "direct",
+      "phase": "P10",
+      "targets": [
+        "chat.message.action"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-005",
+      "capability": "conversation.chat.commandview",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.message.command"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-006",
+      "capability": "conversation.chat.flow",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.conversation.flow"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-007",
+      "capability": "conversation.chat.markdown.fence",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.message.markdown.fence"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-008",
+      "capability": "conversation.chat.message.images",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.message.images"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-009",
+      "capability": "conversation.chat.node",
+      "status": "direct",
+      "phase": "P10",
+      "targets": [
+        "chat.conversation.node"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-010",
+      "capability": "conversation.chat.reasoning.body",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.message.reasoning.body"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-011",
+      "capability": "conversation.chat.text-interaction",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.message.text.interaction"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-012",
+      "capability": "conversation.chat.turnTail",
+      "status": "direct",
+      "phase": "P10",
+      "targets": [
+        "chat.message.badge"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-013",
+      "capability": "conversation.chat.user.before",
+      "status": "direct",
+      "phase": "P10",
+      "targets": [
+        "chat.message.badge"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-014",
+      "capability": "conversation.chat.user.images",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.message.user.images"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-015",
+      "capability": "conversation.composer",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.composer.root"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-016",
+      "capability": "conversation.composer.bar",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.composer.bar"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-017",
+      "capability": "conversation.composer.dock",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.composer.dock.bottom"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-018",
+      "capability": "conversation.header",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.conversation.header"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-019",
+      "capability": "conversation.header.leading",
+      "status": "direct",
+      "phase": "P12",
+      "targets": [
+        "chat.header.leading"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-020",
+      "capability": "conversation.hero.agentPreset",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.empty.agent_preset"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-021",
+      "capability": "conversation.hero.brand.mark",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.empty.brand_mark"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-022",
+      "capability": "conversation.hero.frame",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.empty.frame"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-023",
+      "capability": "conversation.hero.options",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.empty.options"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-024",
+      "capability": "conversation.hero.workspace",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.empty.workspace"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-025",
+      "capability": "conversation.hero.workspace.directoryFlow",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.empty.workspace.directory_flow"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-026",
+      "capability": "conversation.input.activity",
+      "status": "direct",
+      "phase": "P10",
+      "targets": [
+        "chat.composer.action"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-027",
+      "capability": "conversation.input.attachments",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.composer.attachments"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-028",
+      "capability": "conversation.input.dock",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.composer.dock.top"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-029",
+      "capability": "conversation.input.left",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.composer.left"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-030",
+      "capability": "conversation.input.model",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.composer.model"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-031",
+      "capability": "conversation.input.model.label",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.composer.model.label"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-032",
+      "capability": "conversation.input.model.options",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.composer.model.options"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-033",
+      "capability": "conversation.input.overlay",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.composer.overlay"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-034",
+      "capability": "conversation.input.permission",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.composer.permission"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-035",
+      "capability": "conversation.input.plan",
+      "status": "direct",
+      "phase": "P12",
+      "targets": [
+        "chat.composer.action"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-036",
+      "capability": "conversation.input.right",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.composer.right"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-037",
+      "capability": "conversation.plan-review.actions",
+      "status": "direct",
+      "phase": "P10",
+      "targets": [
+        "chat.message.action"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-038",
+      "capability": "conversation.session",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.conversation.session"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-039",
+      "capability": "conversation.session.header",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.conversation.session.header"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-040",
+      "capability": "conversation.session.header.actions",
+      "status": "direct",
+      "phase": "P10",
+      "targets": [
+        "chat.header.action"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-041",
+      "capability": "conversation.session.header.actions.subagent.footer",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.conversation.subagent.footer"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-042",
+      "capability": "conversation.session.header.corner",
+      "status": "direct",
+      "phase": "P12",
+      "targets": [
+        "chat.header.corner"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-043",
+      "capability": "conversation.session.header.lineage",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.header.lineage"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-044",
+      "capability": "conversation.session.header.utilities",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.header.action"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-045",
+      "capability": "conversation.session.header.views.actions",
+      "status": "direct",
+      "phase": "P10",
+      "targets": [
+        "chat.header.action"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-046",
+      "capability": "conversation.trajectory.images",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.message.trajectory.images"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-047",
+      "capability": "conversation.user.text.node",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.message.user.text"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-048",
+      "capability": "conversation.view",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.conversation.views"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-049",
+      "capability": "deliverables.file.actions",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "workbench.file.actions"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-050",
+      "capability": "deliverables.review.file.actions",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "workbench.review.file.actions"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-051",
+      "capability": "main",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "provider.page.provider"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-052",
+      "capability": "main.conversation",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.conversation.root"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-053",
+      "capability": "plugins.add.actions",
+      "status": "direct",
+      "phase": "P10",
+      "targets": [
+        "extension.center.header.action"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-054",
+      "capability": "plugins.bundle.activation",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "extension.plugin.bundle.activation"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-055",
+      "capability": "plugins.bundle.config",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "extension.plugin.bundle.config"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-056",
+      "capability": "plugins.detail.actions",
+      "status": "direct",
+      "phase": "P10",
+      "targets": [
+        "extension.detail.action"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-057",
+      "capability": "plugins.detail.badge",
+      "status": "direct",
+      "phase": "P10",
+      "targets": [
+        "extension.center.card.badge"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-058",
+      "capability": "plugins.detail.section",
+      "status": "composite",
+      "phase": "P10",
+      "targets": [
+        "extension.detail.tab"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-059",
+      "capability": "plugins.item",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "extension.plugin.item"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-060",
+      "capability": "plugins.row.config",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "extension.plugin.row.config"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-061",
+      "capability": "plugins.tab",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "extension.plugin.tab"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-062",
+      "capability": "rightbar",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "app.rightbar"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-063",
+      "capability": "rightbar.session",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "app.rightbar.session"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-064",
+      "capability": "root",
+      "status": "direct",
+      "phase": "P10",
+      "targets": [
+        "root"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-065",
+      "capability": "settings.action",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "settings.shell.action"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-066",
+      "capability": "settings.close",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "settings.shell.close"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-067",
+      "capability": "settings.general.item",
+      "status": "composite",
+      "phase": "P10",
+      "targets": [
+        "system.settings.section"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-068",
+      "capability": "settings.header",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "settings.shell.header"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-069",
+      "capability": "settings.launcher",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "settings.shell.launcher"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-070",
+      "capability": "settings.launcher.notifications",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "settings.shell.launcher.notifications"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-071",
+      "capability": "settings.models.footer",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "settings.model.footer"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-072",
+      "capability": "settings.models.provider-card",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "settings.model.provider"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-073",
+      "capability": "settings.models.sign-in",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "settings.model.sign-in"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-074",
+      "capability": "settings.onboarding",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "settings.onboarding"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-075",
+      "capability": "settings.plugins.tab",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "extension.settings.tab"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-076",
+      "capability": "settings.section",
+      "status": "direct",
+      "phase": "P10",
+      "targets": [
+        "extension.settings.section"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-077",
+      "capability": "settings.section.icon",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "settings.section.icon"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-078",
+      "capability": "settings.trigger",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "settings.shell.trigger"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-079",
+      "capability": "shell.bottom",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "app.shell.bottom"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-080",
+      "capability": "shell.leading",
+      "status": "composite",
+      "phase": "P10",
+      "targets": [
+        "chat.header.action"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-081",
+      "capability": "shell.overlay",
+      "status": "direct",
+      "phase": "P10",
+      "targets": [
+        "ui.portal.overlay"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-082",
+      "capability": "shell.quota-notice",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "app.shell.quota_notice"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-083",
+      "capability": "sidebar",
+      "status": "composite",
+      "phase": "P10",
+      "targets": [
+        "provider.app.workspace.sidebar"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-084",
+      "capability": "sidebar.brand.mark",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "provider.app.workspace.sidebar"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-085",
+      "capability": "sidebar.brand.name",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "provider.app.workspace.sidebar"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-086",
+      "capability": "sidebar.chat.conversation",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "provider.app.workspace.sidebar"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-087",
+      "capability": "sidebar.footer.action",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "provider.app.workspace.sidebar"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-088",
+      "capability": "sidebar.panellist",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.sidebar.panel"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-089",
+      "capability": "sidebar.panellist.actions",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.sidebar.panel"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-090",
+      "capability": "sidebar.right.pane.tab",
+      "status": "direct",
+      "phase": "P10",
+      "targets": [
+        "ui.sidebar.right.pane.tab"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-091",
+      "capability": "sidebar.right.pane.tab.title",
+      "status": "direct",
+      "phase": "P10",
+      "targets": [
+        "ui.sidebar.right.pane.tab.title"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-092",
+      "capability": "sidebar.right.tab.document",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "ui.sidebar.right.pane.document"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-093",
+      "capability": "sidebar.right.tab.document.action",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "ui.sidebar.right.pane.document.action"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-094",
+      "capability": "sidebar.right.tab.document.actions",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "ui.sidebar.right.pane.document.actions"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-095",
+      "capability": "sidebar.right.tab.document.office.pdf",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "ui.sidebar.right.pane.document.pdf"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-096",
+      "capability": "sidebar.right.tab.document.unpreviewable",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "ui.sidebar.right.pane.document.unpreviewable"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-097",
+      "capability": "sidebar.right.tab.files.actions",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "ui.sidebar.right.pane.files.actions"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-098",
+      "capability": "sidebar.right.tab.guide",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "ui.sidebar.right.pane.guide"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-099",
+      "capability": "sidebar.right.tab.guide.actions",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "ui.sidebar.right.pane.guide.actions"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-100",
+      "capability": "sidebar.right.tab.guide.entry",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "ui.sidebar.right.pane.guide.entry"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-101",
+      "capability": "sidebar.right.tab.menu.item",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "ui.sidebar.right.pane.tab.menu.item"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-102",
+      "capability": "sidebar.session.row.hover",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.sidebar.panel"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-103",
+      "capability": "sidebar.session.row.leading",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.sidebar.panel"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-104",
+      "capability": "sidebar.session.row.trailing",
+      "status": "composite",
+      "phase": "P10",
+      "targets": [
+        "chat.sidebar.panel"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-105",
+      "capability": "sidebar.settings",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "settings.shell.trigger"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-106",
+      "capability": "sidebar.toggle.badge",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.header.action"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-107",
+      "capability": "sidebar.workspaces",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "provider.app.workspace.sidebar"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-108",
+      "capability": "sidebar.workspaces.directoryFlow",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "provider.app.workspace.sidebar"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-109",
+      "capability": "sidebar.workspaces.session.menu.item",
+      "status": "composite",
+      "phase": "P10",
+      "targets": [
+        "chat.header.action"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-110",
+      "capability": "sidebar.workspaces.session.row.action",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.header.action"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-111",
+      "capability": "tool.call.images",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.message.tool.images"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-112",
+      "capability": "tool.call.toolview",
+      "status": "direct",
+      "phase": "P10",
+      "targets": [
+        "chat.message.custom_renderer"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-113",
+      "capability": "tool.view.cordis",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.message.tool.cordis"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-114",
+      "capability": "workspace.toast",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "app.workspace.toast"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-115",
+      "capability": "conversation.chat.reasoning.content",
+      "status": "composite",
+      "phase": "P10",
+      "targets": [
+        "chat.message.renderer"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-116",
+      "capability": "conversation.chat.user.content",
+      "status": "composite",
+      "phase": "P10",
+      "targets": [
+        "chat.message.renderer"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-117",
+      "capability": "conversation.content",
+      "status": "composite",
+      "phase": "P10",
+      "targets": [
+        "provider.conversation.messages"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-118",
+      "capability": "conversation.images.content",
+      "status": "composite",
+      "phase": "P10",
+      "targets": [
+        "chat.message.attachment_renderer"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-119",
+      "capability": "conversation.user.text",
+      "status": "composite",
+      "phase": "P10",
+      "targets": [
+        "chat.message.renderer"
+      ],
+      "reason": ""
+    },
+    {
+      "id": "DSH-UI-SLOT-120",
+      "capability": "sidebar.panel.icon",
+      "status": "composite",
+      "phase": "P12",
+      "targets": [
+        "chat.sidebar.panel"
+      ],
+      "reason": ""
+    }
+  ]
+}

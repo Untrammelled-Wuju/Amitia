@@ -4,8 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'ui_provider.dart';
 import 'ui_runtime_controller.dart';
 import 'mobile_host_runtime_registry.dart';
+import 'mobile_ui_host_actions.dart';
 import 'renderers/schema_provider_host.dart';
 import 'renderers/sandbox_web_provider_host.dart';
+import 'renderers/mobile_web_runtime_provider_host.dart';
 import 'renderers/external_web_ui_provider_host.dart';
 import '../../app/theme/design_tokens.dart';
 import '../../app/theme/app_text_scaler.dart';
@@ -71,6 +73,7 @@ class _UIProviderHostState extends ConsumerState<UIProviderHost> {
     UIProviderEntry entry,
     Map<String, dynamic> renderContext,
     UIContributionSnapshotEntry? contribution,
+    Map<String, FutureOr<dynamic> Function(dynamic)> actions,
   ) {
     final hostRuntime = resolveMobileHostRuntime(contribution?.runtimeId ?? '');
     if (hostRuntime != null) {
@@ -82,7 +85,7 @@ class _UIProviderHostState extends ConsumerState<UIProviderHost> {
           provider: provider,
           entry: entry,
           context: renderContext,
-          actions: widget.actions,
+          actions: actions,
           onFailure: _advanceFallback,
         );
       case UIProviderEntryType.webRestricted:
@@ -91,7 +94,15 @@ class _UIProviderHostState extends ConsumerState<UIProviderHost> {
           provider: provider,
           entry: entry,
           context: renderContext,
-          actions: widget.actions,
+          actions: actions,
+          onFailure: _advanceFallback,
+        );
+      case UIProviderEntryType.mobileWebRuntime:
+        return MobileWebRuntimeProviderHost(
+          provider: provider,
+          entry: entry,
+          context: renderContext,
+          actions: actions,
           onFailure: _advanceFallback,
         );
       case UIProviderEntryType.externalWebUi:
@@ -233,11 +244,17 @@ class _UIProviderHostState extends ConsumerState<UIProviderHost> {
       ...widget.context,
     };
     final contribution = snapshot?.contributionById(entry.contributionId ?? '');
+    final actions = buildMobileUIHostActions(
+      context: context,
+      ref: ref,
+      actions: widget.actions,
+    );
     final external = _externalRenderer(
       provider,
       entry,
       renderContext,
       contribution,
+      actions,
     );
 
     switch (provider.mode) {

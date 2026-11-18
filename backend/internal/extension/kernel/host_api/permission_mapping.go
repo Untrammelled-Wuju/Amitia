@@ -31,6 +31,9 @@ func DefaultPermissionMapping() map[Method][]PermissionMappingEntry {
 		MethodScheduleCreate:               {{PermissionID: "schedule.create", Resource: "schedule"}},
 		MethodScheduleCancel:               {{PermissionID: "schedule.manage", Resource: "schedule"}},
 		MethodScheduleList:                 {{PermissionID: "schedule.create", Resource: "schedule"}},
+		MethodScheduleRun:                  {{PermissionID: "schedule.manage", Resource: "schedule"}},
+		MethodScheduleUpdate:               {{PermissionID: "schedule.manage", Resource: "schedule"}},
+		MethodScheduleHistory:              {{PermissionID: "schedule.create", Resource: "schedule"}},
 		MethodToolExecute:                  {{PermissionID: "tool.invoke", Resource: "tool"}},
 		MethodPluginPreview:                {{PermissionID: "extensions.install", Resource: "extension", Scope: permission.ScopeGlobal}},
 		MethodPluginInstall:                {{PermissionID: "extensions.install", Resource: "extension", Scope: permission.ScopeGlobal}},
@@ -46,11 +49,31 @@ func DefaultPermissionMapping() map[Method][]PermissionMappingEntry {
 		MethodPluginAdapterCancel:          {{PermissionID: "plugin.compose", Resource: "plugin_adapter"}},
 		MethodCharacterRead:                {{PermissionID: "character.read", Resource: "character"}},
 		MethodCharacterList:                {{PermissionID: "character.read", Resource: "character"}},
+		MethodConversationList:             {{PermissionID: "conversation.read", Resource: "conversation"}},
 		MethodConversationRead:             {{PermissionID: "conversation.read", Resource: "conversation"}},
+		MethodConversationSearch:           {{PermissionID: "conversation.read", Resource: "conversation"}},
+		MethodConversationScope:            {{PermissionID: "conversation.read", Resource: "conversation"}},
+		MethodConversationCreate:           {{PermissionID: "conversation.manage", Resource: "conversation"}},
+		MethodConversationDelete:           {{PermissionID: "conversation.manage", Resource: "conversation"}},
 		MethodConversationMessageSend:      {{PermissionID: "message.send", Resource: "conversation"}},
 		MethodConversationMessageAppend:    {{PermissionID: "message.append", Resource: "conversation"}},
+		MethodConversationTurnInterrupt:    {{PermissionID: "message.interrupt", Resource: "conversation"}},
+		MethodConversationTurnAwait:        {{PermissionID: "conversation.read", Resource: "conversation"}},
+		MethodConversationArchive:          {{PermissionID: "conversation.manage", Resource: "conversation"}},
+		MethodConversationPin:              {{PermissionID: "conversation.manage", Resource: "conversation"}},
+		MethodConversationFork:             {{PermissionID: "conversation.manage", Resource: "conversation"}},
+		MethodDirectoryList:                {{PermissionID: "workspace.read", Resource: "workspace"}},
+		MethodDirectoryCreate:              {{PermissionID: "workspace.write", Resource: "workspace"}},
+		MethodSkillList:                    {{PermissionID: "conversation.read", Resource: "conversation"}},
+		MethodProjectList:                  {{PermissionID: "project.read", Resource: "project"}},
+		MethodProjectCreate:                {{PermissionID: "project.manage", Resource: "project"}},
+		MethodProjectUpdate:                {{PermissionID: "project.manage", Resource: "project"}},
+		MethodProjectDelete:                {{PermissionID: "project.manage", Resource: "project"}},
 		MethodMemoryQuery:                  {{PermissionID: "memory.read", Resource: "memory"}},
 		MethodProviderInvoke:               {{PermissionID: "provider.invoke", Resource: "provider"}},
+		MethodModelInvoke:                  {{PermissionID: "provider.invoke", Resource: "provider"}},
+		MethodModelDefaults:                {{PermissionID: "provider.invoke", Resource: "provider"}},
+		MethodApprovalRequest:              {{PermissionID: "approval.request", Resource: "approval"}},
 		MethodExtensionDataRead:            {{PermissionID: "extension.data.read", Resource: "extension_data"}},
 		MethodVectorUpsert:                 {{PermissionID: "vector.write", Resource: "vector"}},
 		MethodVectorSearch:                 {{PermissionID: "vector.read", Resource: "vector"}},
@@ -128,15 +151,23 @@ func RouteScopeForMethod(method Method) ScopePolicy {
 		return ScopePolicy{RequireRoles: []string{"character"}}
 	case MethodCharacterList:
 		return ScopePolicy{Namespaced: true}
-	case MethodConversationRead:
+	case MethodConversationRead, MethodConversationSearch, MethodApprovalRequest:
 		return ScopePolicy{RequireRoles: []string{"conversation"}}
-	case MethodConversationMessageSend, MethodConversationMessageAppend:
+	case MethodConversationList:
+		return ScopePolicy{Namespaced: true}
+	case MethodConversationCreate, MethodConversationDelete, MethodConversationScope:
+		return ScopePolicy{Namespaced: true}
+	case MethodConversationMessageSend, MethodConversationMessageAppend, MethodConversationTurnInterrupt, MethodConversationTurnAwait:
+		return ScopePolicy{Namespaced: true}
+	case MethodConversationArchive, MethodConversationPin, MethodConversationFork, MethodProjectList, MethodProjectCreate, MethodProjectUpdate, MethodProjectDelete:
 		return ScopePolicy{Namespaced: true}
 	case MethodMemoryQuery:
 		return ScopePolicy{RequireRoles: []string{"character", "conversation"}, AllowNarrowing: true}
 	case MethodEventEmit, MethodEventSubscribe, MethodEventUnsubscribe:
 		return ScopePolicy{}
-	case MethodScheduleCreate, MethodScheduleCancel, MethodScheduleList:
+	case MethodDirectoryList, MethodDirectoryCreate:
+		return ScopePolicy{}
+	case MethodScheduleCreate, MethodScheduleCancel, MethodScheduleList, MethodScheduleRun, MethodScheduleUpdate, MethodScheduleHistory:
 		return ScopePolicy{Namespaced: true}
 	case MethodToolExecute:
 		return ScopePolicy{RequireRoles: []string{"invocation"}}
@@ -174,7 +205,8 @@ func IsDataRouteMethod(method Method) bool {
 	switch method {
 	case MethodStateGet, MethodStateCAS, MethodStateDelete, MethodStateList,
 		MethodResourceOpen, MethodResourceRead, MethodResourceWrite, MethodResourceClose, MethodResourceStat, MethodResourceLink, MethodResourceDelete,
-		MethodCharacterRead, MethodCharacterList, MethodConversationRead, MethodMemoryQuery, MethodRuntimeHealth, MethodWorkspaceRead, MethodWorkspaceWrite, MethodImportExecute, MethodStorageCleanup, MethodStorageBackup, MethodStorageRestore, MethodConversationLogsRead, MethodConversationLogsManage, MethodConversationLogsExport, MethodExtensionDataRead,
+		MethodCharacterRead, MethodCharacterList, MethodConversationList, MethodConversationRead, MethodConversationSearch, MethodConversationCreate, MethodConversationDelete, MethodConversationScope, MethodMemoryQuery, MethodRuntimeHealth, MethodWorkspaceRead, MethodWorkspaceWrite, MethodImportExecute, MethodStorageCleanup, MethodStorageBackup, MethodStorageRestore, MethodConversationLogsRead, MethodConversationLogsManage, MethodConversationLogsExport, MethodExtensionDataRead,
+		MethodConversationArchive, MethodConversationPin, MethodConversationFork, MethodProjectList, MethodProjectCreate, MethodProjectUpdate, MethodProjectDelete,
 		MethodVectorUpsert, MethodVectorSearch, MethodVectorDelete:
 		return true
 	default:
@@ -204,7 +236,11 @@ func RouteRiskForMethod(method Method) RiskLevel {
 		return RiskHigh
 	case MethodConversationLogsExport:
 		return RiskMedium
-	case MethodScheduleCreate, MethodScheduleCancel:
+	case MethodScheduleCreate, MethodScheduleCancel, MethodScheduleRun, MethodScheduleUpdate:
+		return RiskMedium
+	case MethodDirectoryCreate:
+		return RiskMedium
+	case MethodApprovalRequest:
 		return RiskMedium
 	case MethodUIDialog:
 		return RiskMedium
@@ -212,7 +248,9 @@ func RouteRiskForMethod(method Method) RiskLevel {
 		MethodPluginContributionRegister, MethodPluginContributionUnregister,
 		MethodPluginServiceProvide, MethodPluginServiceUnprovide, MethodPluginServiceRequire, MethodPluginServiceRelease,
 		MethodPluginAdapterInvoke, MethodPluginAdapterCancel,
-		MethodConversationMessageSend, MethodConversationMessageAppend:
+		MethodConversationCreate, MethodConversationDelete, MethodConversationMessageSend, MethodConversationMessageAppend, MethodConversationTurnInterrupt:
+		return RiskHigh
+	case MethodConversationArchive, MethodConversationPin, MethodConversationFork, MethodProjectCreate, MethodProjectUpdate, MethodProjectDelete:
 		return RiskHigh
 	case MethodExtensionDataRead:
 		return RiskMedium
@@ -241,15 +279,17 @@ func RouteSideEffectForMethod(method Method) SideEffectLevel {
 	}
 	switch method {
 	case MethodStateGet, MethodStateList, MethodResourceOpen, MethodResourceRead, MethodResourceStat,
-		MethodResourceLink, MethodCharacterRead, MethodCharacterList, MethodConversationRead, MethodMemoryQuery, MethodScheduleList, MethodExtensionDataRead, MethodPluginList, MethodVectorSearch:
+		MethodResourceLink, MethodCharacterRead, MethodCharacterList, MethodConversationList, MethodConversationRead, MethodConversationSearch, MethodConversationTurnAwait, MethodConversationScope, MethodMemoryQuery, MethodScheduleList, MethodScheduleHistory, MethodExtensionDataRead, MethodPluginList, MethodVectorSearch, MethodProjectList:
 		return SideEffectReadOnly
-	case MethodStateCAS, MethodStateDelete, MethodResourceWrite, MethodResourceDelete, MethodScheduleCreate, MethodScheduleCancel, MethodVectorUpsert, MethodVectorDelete:
+	case MethodStateCAS, MethodStateDelete, MethodResourceWrite, MethodResourceDelete, MethodScheduleCreate, MethodScheduleCancel, MethodScheduleRun, MethodScheduleUpdate, MethodVectorUpsert, MethodVectorDelete, MethodConversationCreate, MethodConversationDelete, MethodConversationTurnInterrupt:
+		return SideEffectWrite
+	case MethodConversationArchive, MethodConversationPin, MethodConversationFork, MethodProjectCreate, MethodProjectUpdate, MethodProjectDelete:
 		return SideEffectWrite
 	case MethodRuntimeMaintenanceUpdate, MethodRuntimeCleanupTemp, MethodRuntimeRotateLogs, MethodRuntimeCheckDBIntegrity:
 		return SideEffectWrite
-	case MethodWorkspaceRead:
+	case MethodWorkspaceRead, MethodDirectoryList:
 		return SideEffectReadOnly
-	case MethodWorkspaceWrite:
+	case MethodWorkspaceWrite, MethodDirectoryCreate:
 		return SideEffectWrite
 	case MethodImportExecute:
 		return SideEffectWrite
@@ -303,7 +343,9 @@ func RegisterPermissionDefinitions(registry *permission.PermissionDefinitionRegi
 		{ID: "memory.read", AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeCharacter, permission.ScopeConversation}},
 		{ID: "provider.invoke", Name: "Invoke Provider", Description: "Invoke an AI provider through the host provider boundary", Category: permission.CategoryProvider, RiskLevel: capability.RiskMedium, AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension}, PersistentGrantable: true, BackgroundAllowed: true, ChildInvocation: permission.ChildInherit, DefaultApproval: permission.ApprovalManual},
 		{ID: "message.append", Name: "Append Conversation Message", Description: "Append explicit text or media messages to a conversation through the host chat store", Category: permission.CategoryHostData, RiskLevel: capability.RiskHigh, AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeCharacter, permission.ScopeConversation}, PersistentGrantable: false, RequiresPerUse: true, BackgroundAllowed: true, ChildInvocation: permission.ChildReevaluate, DefaultApproval: permission.ApprovalManual},
+		{ID: "message.interrupt", Name: "Interrupt Conversation Turn", Description: "Interrupt the active turn in the current conversation through the host runtime", Category: permission.CategoryHostData, RiskLevel: capability.RiskHigh, AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeCharacter, permission.ScopeConversation, permission.ScopeExtension, permission.ScopeModule}, PersistentGrantable: false, RequiresPerUse: true, BackgroundAllowed: true, ChildInvocation: permission.ChildReevaluate, DefaultApproval: permission.ApprovalManual},
 		{ID: "extension.data.read", Name: "Read Extension Data Source", Description: "Read a host-registered extension data source for migration or synchronization", Category: permission.CategoryHostData, RiskLevel: capability.RiskMedium, AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension, permission.ScopeModule}, PersistentGrantable: true, BackgroundAllowed: true, ChildInvocation: permission.ChildDeny, TrustedOnly: true, DefaultApproval: permission.ApprovalAuto},
+		{ID: "approval.request", Name: "Request User Approval", Description: "Ask the active conversation owner to approve one tool call through the host approval broker", Category: permission.CategoryHostData, RiskLevel: capability.RiskMedium, AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension, permission.ScopeModule, permission.ScopeCharacter, permission.ScopeConversation}, PersistentGrantable: false, BackgroundAllowed: false, ChildInvocation: permission.ChildDeny, DefaultApproval: permission.ApprovalAuto},
 		{ID: "vector.read", Name: "Search Extension Vectors", Description: "Search vectors in the current extension namespace", Category: permission.CategoryHostData, RiskLevel: capability.RiskLow, AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension, permission.ScopeModule}, PersistentGrantable: true, BackgroundAllowed: true, ChildInvocation: permission.ChildInherit, DefaultApproval: permission.ApprovalAuto},
 		{ID: "vector.write", Name: "Write Extension Vectors", Description: "Create or delete vectors in the current extension namespace", Category: permission.CategoryHostData, RiskLevel: capability.RiskMedium, AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension, permission.ScopeModule}, PersistentGrantable: true, BackgroundAllowed: true, ChildInvocation: permission.ChildReevaluate, DefaultApproval: permission.ApprovalManual},
 		{ID: "ui.notify", Name: "Show Notification", Description: "Display a host notification in the active user session", Category: permission.CategoryDesktop, RiskLevel: capability.RiskLow, AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeSession}, PersistentGrantable: true, BackgroundAllowed: true, ChildInvocation: permission.ChildInherit, DefaultApproval: permission.ApprovalAuto},

@@ -75,6 +75,23 @@ func TestLifeContextLoaderUnavailableWithoutContributors(t *testing.T) {
 	}
 }
 
+func TestPromptExtensionContextLoaderOrdersContributions(t *testing.T) {
+	loader := NewPromptExtensionContextLoader(fakeLifeContextProvider{
+		raw: json.RawMessage(`{"slot":"chat.realtime.prompt","contributions":[{"source":"plugin-a","data":{"sections":[{"id":"low","content":"low","priority":10},{"id":"high","content":"high","priority":90}],"contexts":[{"id":"workspace","content":"workspace","priority":60}]}},{"source":"plugin-b","data":{"id":"single","content":"single","priority":50}}]}`),
+	})
+	state, err := loader.Load(context.Background(), InteractionScope{SpaceID: "u", CharacterID: "c", ConversationID: "conv"}, "v-test")
+	if err != nil {
+		t.Fatalf("load prompt extensions: %v", err)
+	}
+	if state.Status != LoadStatusReady {
+		t.Fatalf("expected prompt extensions ready, got %s", state.Status)
+	}
+	set := state.Value.(PromptExtensionSet)
+	if set.Count != 4 || set.Sections[0].ID != "high" || set.Sections[1].ID != "context:workspace" || set.Sections[2].ID != "single" || set.Sections[3].ID != "low" {
+		t.Fatalf("unexpected prompt extension order: %#v", set)
+	}
+}
+
 func TestRuntimeBudgetIncludesNewRuntimeInputs(t *testing.T) {
 	snapshot := ContextSnapshot{
 		RuntimeProfile:    FieldReady(RuntimeProfile{CharacterID: "char-runtime"}, "runtimeProfile", "v1"),

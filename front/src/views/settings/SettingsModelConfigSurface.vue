@@ -11,6 +11,13 @@
       <el-tab-pane label="生图模型" name="imagegen" />
     </el-tabs>
 
+    <ExtensionSlot
+      slot-id="settings.model.sign-in"
+      :context="{ route: route.fullPath, modelTab: activeTab }"
+      fallback="none"
+      layout="stack"
+      surface-role="main"
+    />
     <div v-if="checking" v-loading="true" class="access-loading" />
     <component :is="activeModelView" v-else-if="canConfigure" />
   </div>
@@ -21,6 +28,7 @@ import { computed, defineAsyncComponent, onMounted, type Component } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useCoreConfigurationAccess } from "@/composables/useCoreConfigurationAccess";
 import { originalErrorText } from "@/runtime/original-error";
+import ExtensionSlot from "@/components/extension/ExtensionSlot.vue";
 
 const route = useRoute();
 const router = useRouter();

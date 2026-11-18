@@ -65,6 +65,38 @@ func TestOwnedAuthorizationSnapshotSurvivesRestartAndRejectsScopeReplacement(t *
 	}
 }
 
+func TestPlainScopeSnapshotPersistsSpaceOwner(t *testing.T) {
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "scope.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(1)
+	t.Cleanup(func() { _ = db.Close() })
+	if err := kernelsqlite.Migrate(t.Context(), db); err != nil {
+		t.Fatal(err)
+	}
+	store := scope.NewSQLiteScopeStore(db)
+	snapshot := scope.CreateSnapshotWithOwner("ui-session", []scope.ScopeRef{
+		scope.NewExtensionScope("extension"),
+		scope.NewModuleScope("extension", "module"),
+		scope.NewCharacterScope("role"),
+		scope.NewConversationScope("conversation"),
+	}, "space", "role", "conversation", "extension", "module", 1)
+	if err := store.SaveSnapshot(t.Context(), snapshot); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := store.GetSnapshot(t.Context(), snapshot.SnapshotID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.SpaceID != "space" || loaded.CharacterID != "role" || loaded.ConversationID != "conversation" {
+		t.Fatalf("plain scope owner was not preserved: %+v", loaded)
+	}
+	if len(loaded.OwnedExecutionScope) != 0 {
+		t.Fatalf("absent owned execution scope must remain nil: %q", loaded.OwnedExecutionScope)
+	}
+}
+
 func TestMemoryOwnedSnapshotsCannotBeMutatedThroughReadOrWriteSlices(t *testing.T) {
 	store := scope.NewMemoryScopeStore()
 	snapshot := scope.CreateSnapshot("invocation", []scope.ScopeRef{scope.NewCharacterScope("role")}, "role", "conversation", "extension", "module")

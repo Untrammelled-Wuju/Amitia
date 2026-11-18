@@ -15,8 +15,7 @@ class MobileDynamicRuntime {
           (active.definition['contributions'] as List?) ?? const <dynamic>[];
       for (final rawContribution in contributions.whereType<Map>()) {
         final contribution = rawContribution.cast<String, dynamic>();
-        final parentSlotId =
-            (contribution['slotId'] ?? '').toString().trim();
+        final parentSlotId = (contribution['slotId'] ?? '').toString().trim();
         final children =
             (contribution['children'] as List?) ?? const <dynamic>[];
         for (final rawChild in children.whereType<Map>()) {
@@ -25,18 +24,13 @@ class MobileDynamicRuntime {
           if (childId != id) continue;
           return UISlotSnapshotEntry(
             slotId: childId,
-            contractVersion:
-                _int(child['contractVersion']) ?? 1,
+            contractVersion: _int(child['contractVersion']) ?? 1,
             supportedKinds: _strings(child['supportedKinds']),
             kind: _requiredText(child['kind'], 'kind'),
             layout: (child['layout'] ?? 'stack').toString(),
-            fallbackPolicy:
-                (child['fallbackPolicy'] ?? 'empty')
-                    .toString(),
+            fallbackPolicy: (child['fallbackPolicy'] ?? 'empty').toString(),
             ownerExtension: 'client-runtime:${active.packageId}',
-            parentSlotId:
-                (child['parentSlotId'] ?? parentSlotId)
-                    .toString(),
+            parentSlotId: (child['parentSlotId'] ?? parentSlotId).toString(),
             declarationEpoch: revision,
             scope: (child['scope'] ?? 'session').toString(),
             dynamicSlot: true,
@@ -66,10 +60,12 @@ class MobileDynamicRuntime {
         final row = raw.cast<String, dynamic>();
         final targetSlot = (row['slotId'] ?? '').toString().trim();
         if (targetSlot != slotId) continue;
-        final sourceExtensionId =
-            (row['sourceExtensionId'] ?? '').toString().trim();
-        final sourceContributionId =
-            (row['sourceContributionId'] ?? '').toString().trim();
+        final sourceExtensionId = (row['sourceExtensionId'] ?? '')
+            .toString()
+            .trim();
+        final sourceContributionId = (row['sourceContributionId'] ?? '')
+            .toString()
+            .trim();
         final key = (row['key'] ?? sourceContributionId).toString().trim();
         if (sourceExtensionId.isEmpty ||
             sourceContributionId.isEmpty ||
@@ -106,6 +102,7 @@ class MobileDynamicRuntime {
             ordering: _int(row['ordering']) ?? source?.ordering ?? 0,
             priority: _int(row['priority']) ?? source?.priority ?? 0,
             entryKey: entryKey,
+            entryKeyExplicit: _text(row['entryKey']) != null,
             cellId: cellId,
             matched: row['matched'],
             matchRules: _mapList(row['match']),
@@ -133,10 +130,12 @@ class MobileDynamicRuntime {
           const <dynamic>[];
       for (final raw in rows.whereType<Map>()) {
         final row = raw.cast<String, dynamic>();
-        final sourceExtensionId =
-            (row['sourceExtensionId'] ?? '').toString().trim();
-        final sourceContributionId =
-            (row['sourceContributionId'] ?? '').toString().trim();
+        final sourceExtensionId = (row['sourceExtensionId'] ?? '')
+            .toString()
+            .trim();
+        final sourceContributionId = (row['sourceContributionId'] ?? '')
+            .toString()
+            .trim();
         final key = (row['key'] ?? sourceContributionId).toString().trim();
         final projection = (row['projection'] as Map?)?.cast<String, dynamic>();
         if (sourceExtensionId.isEmpty ||
@@ -182,6 +181,7 @@ class MobileDynamicRuntime {
             ordering: _int(row['ordering']) ?? source?.ordering ?? 0,
             priority: _int(row['priority']) ?? source?.priority ?? 0,
             entryKey: key,
+            entryKeyExplicit: _text(row['entryKey']) != null,
             cellId: key,
             runtimePackageId: packageId,
             runtimePackageVersion: version,
@@ -225,6 +225,8 @@ class MobileDynamicRuntime {
         return _dispatchKeyed(merged, dispatchKey);
       case 'chain':
         return _dispatchChain(merged, owner);
+      case 'hoc':
+        return _dispatchHoc(merged, dispatchKey);
       default:
         return const <UIContributionSnapshotEntry>[];
     }
@@ -277,6 +279,22 @@ class MobileDynamicRuntime {
     if (matched.isEmpty) return const <UIContributionSnapshotEntry>[];
     matched.sort(_compareChain);
     return <UIContributionSnapshotEntry>[matched.first];
+  }
+
+  static List<UIContributionSnapshotEntry> _dispatchHoc(
+    List<UIContributionSnapshotEntry> items,
+    String? dispatchKey,
+  ) {
+    final key = dispatchKey?.trim() ?? '';
+    final selected = items
+        .where(
+          (item) =>
+              !item.entryKeyExplicit ||
+              (key.isNotEmpty && item.entryKey == key),
+        )
+        .toList(growable: false);
+    selected.sort(_compareHoc);
+    return selected;
   }
 
   static List<UIContributionSnapshotEntry> _pickShadowWinner(
@@ -337,10 +355,8 @@ class MobileDynamicRuntime {
           .toString()
           .trim()
           .toLowerCase();
-      final targetVersion =
-          (package['targetVersion'] ?? '').toString().trim();
-      final currentVersion =
-          (package['activeVersion'] ?? '').toString().trim();
+      final targetVersion = (package['targetVersion'] ?? '').toString().trim();
+      final currentVersion = (package['activeVersion'] ?? '').toString().trim();
       final activeVersion =
           (transition == 'starting' || transition == 'awaiting_client') &&
               targetVersion.isNotEmpty
@@ -474,6 +490,13 @@ int _compareChain(
   UIContributionSnapshotEntry a,
   UIContributionSnapshotEntry b,
 ) {
+  final priority = a.priority.compareTo(b.priority);
+  return priority != 0 ? priority : _compareAssembly(a, b);
+}
+
+int _compareHoc(UIContributionSnapshotEntry a, UIContributionSnapshotEntry b) {
+  final ordering = a.ordering.compareTo(b.ordering);
+  if (ordering != 0) return ordering;
   final priority = a.priority.compareTo(b.priority);
   return priority != 0 ? priority : _compareAssembly(a, b);
 }

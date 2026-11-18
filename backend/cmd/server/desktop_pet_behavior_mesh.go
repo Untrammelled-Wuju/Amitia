@@ -875,7 +875,24 @@ func resolveDeviceActivePet(ctx context.Context, services *AppServices, cloudSpa
 		DeviceID:     deviceID,
 		CharacterID:  characterID,
 	}
-	bindingEntry, err := services.InstallationRepo.GetActiveBindingForSpaceDeviceTx(services.DB.WithContext(ctx), localOwnerID, deviceID)
+	if installationHint == "" {
+		installations, listErr := services.InstallationRepo.ListInstallationsForSpaceDevice(localOwnerID, deviceID)
+		if listErr != nil {
+			return nil, listErr
+		}
+		for _, candidate := range installations {
+			if candidate != nil && candidate.IsActive == 1 && candidate.DesiredState == installation.DesiredEnabled {
+				if installationHint != "" {
+					return nil, errors.New("multiple active desktop pets require installationId")
+				}
+				installationHint = candidate.ID
+			}
+		}
+		if installationHint == "" {
+			return active, nil
+		}
+	}
+	bindingEntry, err := services.InstallationRepo.GetActiveBindingForSpaceDeviceTx(services.DB.WithContext(ctx), localOwnerID, deviceID, installationHint)
 	if err != nil {
 		if errors.Is(err, installation.ErrBindingNotFound) || errors.Is(err, gorm.ErrRecordNotFound) {
 			return active, nil

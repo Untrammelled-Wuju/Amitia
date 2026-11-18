@@ -43,6 +43,25 @@ func TestOwnedChatActionsCreateRenameAndDeleteWithoutLegacyWrites(t *testing.T) 
 	if err != nil || resource == nil || !resource.Deleted {
 		t.Fatalf("delete not applied: %+v %v", resource, err)
 	}
+	reservedRequest := coordination.ChatManagementRequest{
+		Operation:           "conversation/create",
+		ConversationID:      "dsh-session-reserved",
+		ConversationOwnerID: p.ownerID,
+		RequestID:           "create-reserved",
+		Title:               "Reserved conversation",
+		Channel:             "extension",
+	}
+	reserved, err := p.ManageChat(t.Context(), scope, reservedRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reserved["id"] != "dsh-session-reserved" {
+		t.Fatalf("expected reserved conversation id, got %v", reserved)
+	}
+	reservedDuplicate, err := p.ManageChat(t.Context(), scope, reservedRequest)
+	if err != nil || reservedDuplicate["id"] != "dsh-session-reserved" {
+		t.Fatalf("reserved creation not idempotent: %v %v", reservedDuplicate, err)
+	}
 }
 
 func TestOwnedChatFeedbackKeepsOwnerAndRolePartitions(t *testing.T) {

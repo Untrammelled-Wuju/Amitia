@@ -156,6 +156,16 @@ export function registerIpcHandlers(
     return { rootName: path.basename(root), files };
   });
 
+  ipcMain.handle(IPC_CHANNELS.selectDirectory, async (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender);
+    const options = { properties: ["openDirectory", "createDirectory"] as Array<"openDirectory" | "createDirectory"> };
+    const result = window
+      ? await dialog.showOpenDialog(window, options)
+      : await dialog.showOpenDialog(options);
+    if (result.canceled || !result.filePaths[0]) return null;
+    return result.filePaths[0];
+  });
+
   ipcMain.handle(IPC_CHANNELS.selectMCPRoot, async (event) => {
     const window = BrowserWindow.fromWebContents(event.sender);
     const options = { properties: ["openDirectory"] as Array<"openDirectory"> };
@@ -223,6 +233,78 @@ export function registerIpcHandlers(
       throw new Error("只能选择真实本地目录作为聊天工作目录");
     }
     return { path: selected, name: path.basename(selected) || selected };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.listWorkspaceDirectory, async (_event, requestedPath?: string) => {
+    const home = await fs.realpath(path.resolve(app.getPath("home")));
+    const target = requestedPath === undefined || requestedPath === ""
+      ? home
+      : path.resolve(requestedPath);
+    if (!path.isAbsolute(target) || target.length > 4096) {
+      throw new Error("目录浏览路径无效");
+    }
+    const canonical = await fs.realpath(target);
+    const stat = await fs.stat(canonical);
+    if (!stat.isDirectory()) throw new Error(`目录浏览目标不是目录: ${canonical}`);
+    const children = await fs.readdir(canonical, { withFileTypes: true });
+    const entries: Array<{ name: string; path: string; hidden: boolean }> = [];
+    for (const child of children) {
+      const childPath = path.join(canonical, child.name);
+      let directory = child.isDirectory();
+      if (child.isSymbolicLink()) {
+        try {
+          directory = (await fs.stat(childPath)).isDirectory();
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+          directory = false;
+        }
+      }
+      if (!directory) continue;
+      entries.push({
+        name: child.name,
+        path: childPath,
+        hidden: child.name.startsWith("."),
+      });
+    }
+    entries.sort((left, right) => left.name.localeCompare(right.name));
+    const limited = entries.slice(0, 2000);
+    const crumbs: Array<{ name: string; path: string; hidden: boolean }> = [];
+    const root = path.parse(canonical).root;
+    let cursor = canonical;
+    while (true) {
+      crumbs.unshift({
+        name: path.basename(cursor) || cursor,
+        path: cursor,
+        hidden: false,
+      });
+      if (cursor === root) break;
+      const parent = path.dirname(cursor);
+      if (parent === cursor) break;
+      cursor = parent;
+    }
+    return {
+      path: canonical,
+      home,
+      crumbs,
+      entries: limited,
+      truncated: entries.length > limited.length,
+    };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.createWorkspaceDirectory, async (_event, requestedPath: string, name: string) => {
+    if (typeof requestedPath !== "string" || !path.isAbsolute(requestedPath) || requestedPath.length > 4096) {
+      throw new Error("目录创建父路径无效");
+    }
+    const leaf = typeof name === "string" ? name.trim() : "";
+    if (!leaf || leaf === "." || leaf === ".." || leaf.length > 255 || /[/\\\0]/.test(leaf)) {
+      throw new Error("目录名称必须是单个非空路径段");
+    }
+    const parent = await fs.realpath(path.resolve(requestedPath));
+    const parentStat = await fs.stat(parent);
+    if (!parentStat.isDirectory()) throw new Error(`目录创建父路径不是目录: ${parent}`);
+    const target = path.join(parent, leaf);
+    await fs.mkdir(target);
+    return await fs.realpath(target);
   });
 
   ipcMain.handle(IPC_CHANNELS.openPath, async (_event, targetPath: string) => {

@@ -1258,6 +1258,12 @@ func (r *Runtime) ExecutePackageUninstall(ctx context.Context, req ExecutePackag
 	if err != nil {
 		return op, r.failPackageUninstallAfterGenerationQuarantine(ctx, op, quarantinedCurrent, currentPointer, preview, uninstallGuard, err)
 	}
+	if dataPolicy.Uninstall == "delete" || dataPolicy.Uninstall == "export" {
+		if cleanupErr := r.deleteExtensionPluginData(extensionID); cleanupErr != nil {
+			persistErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "failed", "cleanup_plugin_data", "PACKAGE_PLUGIN_DATA_CLEANUP_FAILED", cleanupErr.Error(), true, uninstallGuard)
+			return op, errors.Join(cleanupErr, persistErr)
+		}
+	}
 	if err := r.completeSimplePackageStep(ctx, op.OperationID, "cleanup_kernel_repositories", 3, uninstallGuard); err != nil {
 		persistErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "requires_recovery", "cleanup_kernel_repositories", "PACKAGE_RECOVERY_REQUIRED", err.Error(), false, uninstallGuard)
 		return op, errors.Join(err, persistErr)

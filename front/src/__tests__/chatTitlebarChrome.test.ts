@@ -1,5 +1,6 @@
 import { mount } from "@vue/test-utils";
 import ElementPlus from "element-plus";
+import { createPinia } from "pinia";
 import { describe, expect, it } from "vitest";
 import ChatHeaderBar from "../components/ChatHeaderBar.vue";
 import webChatSource from "../views/web-chat/BuiltinWebChatView.vue?raw";
@@ -18,7 +19,7 @@ function mountHeader(charAvatar = "") {
       showMemInject: false,
       callActive: false,
     },
-    global: { plugins: [ElementPlus] },
+    global: { plugins: [createPinia(), ElementPlus] },
   });
 }
 

@@ -21,8 +21,33 @@ SPDX-License-Identifier: AGPL-3.0-only
       <span>{{ pullText }}</span>
     </div>
 
-    <div v-if="visibleMessages.length === 0 && !sending" class="empty-chat">
-      <div class="empty-icon"><el-icon :size="48"><ChatDotRound /></el-icon></div>
+    <ExtensionSlot
+      v-if="visibleMessages.length === 0 && !sending"
+      slot-id="chat.empty.frame"
+      :context="extensionContext || {}"
+      fallback="default"
+      layout="stack"
+      surface-role="main"
+    >
+    <div class="empty-chat">
+      <ExtensionSlot
+        slot-id="chat.empty.brand_mark"
+        :context="extensionContext || {}"
+        fallback="default"
+        layout="inline"
+        surface-role="status"
+        bare
+      >
+        <div class="empty-icon"><el-icon :size="48"><ChatDotRound /></el-icon></div>
+      </ExtensionSlot>
+      <ExtensionSlot
+        slot-id="chat.empty.workspace"
+        :context="{ ...(extensionContext || {}), workspaceName }"
+        fallback="default"
+        layout="stack"
+        surface-role="main"
+        bare
+      >
       <template v-if="workspaceName">
         <p class="empty-text empty-text--project">你好，我是 {{ charName || "Amitia" }}</p>
         <p class="empty-hint">你想在 {{ workspaceName }} 中构建什么？</p>
@@ -35,9 +60,43 @@ SPDX-License-Identifier: AGPL-3.0-only
         <p class="empty-text">你好，我是 {{ charName || "AI 陪伴角色" }}</p>
         <p class="empty-hint">随时可以和我聊聊天，或者做你想做的事。</p>
       </template>
+      </ExtensionSlot>
+      <ExtensionSlot
+        slot-id="chat.empty.workspace.directory_flow"
+        :context="{ ...(extensionContext || {}), workspaceName }"
+        fallback="none"
+        layout="stack"
+        surface-role="main"
+      />
+      <ExtensionSlot
+        slot-id="chat.empty.agent_preset"
+        :context="extensionContext || {}"
+        fallback="none"
+        layout="inline"
+        surface-role="main"
+        render-fallback-while-scope-pending
+      />
+      <ExtensionSlot
+        slot-id="chat.empty.options"
+        :context="extensionContext || {}"
+        fallback="none"
+        layout="inline"
+        surface-role="main"
+        render-fallback-while-scope-pending
+      />
       <ChatEmptyStateExtensionHost :context="extensionContext || {}" />
     </div>
+    </ExtensionSlot>
 
+    <ExtensionSlot
+      slot-id="chat.conversation.flow"
+      :context="extensionContext || {}"
+      fallback="default"
+      layout="stack"
+      surface-role="main"
+      bare
+    >
+    <div class="conversation-flow-content">
     <template v-for="item in flowItems" :key="item.key">
       <div
         v-if="item.kind === 'message'"
@@ -77,6 +136,7 @@ SPDX-License-Identifier: AGPL-3.0-only
           :show-avatar="item.showAssistantIdentity !== false"
           :show-header="item.showAssistantIdentity !== false"
           :compact-bottom="item.compactAfter === true"
+          :extension-context="extensionContext || {}"
           @retry="$emit('retry', $event)"
           @reply="$emit('reply', $event)"
           @edit="$emit('edit', $event)"
@@ -138,6 +198,8 @@ SPDX-License-Identifier: AGPL-3.0-only
         </button>
       </div>
     </template>
+    </div>
+    </ExtensionSlot>
 
     <ConversationDividerLine
       v-if="pendingRoleSwitchName"
@@ -740,6 +802,10 @@ defineExpose({ rootEl });
   overscroll-behavior-y: contain;
   padding: calc(var(--chat-header-h, 0px) + 24px) 32px calc(var(--chat-composer-h, 0px) + 32px);
   position: relative;
+}
+
+.conversation-flow-content {
+  display: contents;
 }
 
 .empty-chat {

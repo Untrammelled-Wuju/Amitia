@@ -23,11 +23,10 @@
             @mouseenter="handleRootItemEnter(item, index, $event)"
             @mouseleave="scheduleCloseSubmenu(item)"
           >
-            <button
-              type="button"
+            <div
               class="context-menu-item"
-              :class="{ 'is-danger': item.danger, 'has-children': item.children?.length, 'is-active': activeRootIndex === index }"
-              :disabled="item.disabled"
+              :class="{ 'is-danger': item.danger, 'has-children': item.children?.length, 'is-active': activeRootIndex === index, 'is-disabled': item.disabled }"
+              :aria-disabled="item.disabled || undefined"
               :tabindex="activeLevel === 'root' && activeRootIndex === index ? 0 : -1"
               :data-context-root-index="index"
               :aria-haspopup="item.children?.length ? 'menu' : undefined"
@@ -36,27 +35,46 @@
               role="menuitem"
               @click="activateItem(item)"
             >
-              <component :is="item.icon" v-if="item.icon" class="context-menu-icon" />
-              <span class="context-menu-label">{{ item.label }}</span>
-              <span class="context-menu-meta" aria-hidden="true">
-                <span v-if="item.shortcut" class="context-menu-shortcut">{{ displayShortcut(item.shortcut) }}</span>
-                <kbd v-if="item.accessKey" class="context-menu-access-key">{{ item.accessKey }}</kbd>
-                <span v-if="item.children?.length" class="context-menu-chevron">›</span>
-              </span>
-            </button>
+              <ExtensionSlot
+                slot-id="desktop.context_menu.content"
+                :context="contextMenuSlotContext(item, 'root')"
+                :dispatch-key="item.id"
+                fallback="default"
+                layout="inline"
+                surface-role="main"
+                bare
+              >
+                <ExtensionSlot
+                  slot-id="desktop.context_menu.icon"
+                  :context="contextMenuSlotContext(item, 'root')"
+                  :dispatch-key="item.iconKey || item.id"
+                  fallback="default"
+                  layout="inline"
+                  surface-role="main"
+                  bare
+                >
+                  <component :is="item.icon" v-if="item.icon" class="context-menu-icon" />
+                </ExtensionSlot>
+                <span class="context-menu-label">{{ item.label }}</span>
+                <span class="context-menu-meta" aria-hidden="true">
+                  <span v-if="item.shortcut" class="context-menu-shortcut">{{ displayShortcut(item.shortcut) }}</span>
+                  <kbd v-if="item.accessKey" class="context-menu-access-key">{{ item.accessKey }}</kbd>
+                  <span v-if="item.children?.length" class="context-menu-chevron">›</span>
+                </span>
+              </ExtensionSlot>
+            </div>
             <div
               v-if="item.children?.length && activeSubmenu === item.id"
               class="context-submenu"
               :style="{ maxHeight: `${submenuMaxHeight}px` }"
               role="menu"
             >
-              <button
+              <div
                 v-for="(child, childIndex) in item.children"
                 :key="child.id"
-                type="button"
                 class="context-menu-item"
-                :class="{ 'is-danger': child.danger, 'is-active': activeLevel === 'submenu' && activeChildIndex === childIndex }"
-                :disabled="child.disabled"
+                :class="{ 'is-danger': child.danger, 'is-active': activeLevel === 'submenu' && activeChildIndex === childIndex, 'is-disabled': child.disabled }"
+                :aria-disabled="child.disabled || undefined"
                 :tabindex="activeLevel === 'submenu' && activeChildIndex === childIndex ? 0 : -1"
                 :data-context-child-index="childIndex"
                 :aria-keyshortcuts="menuItemAriaShortcuts(child)"
@@ -64,13 +82,33 @@
                 @mouseenter="handleChildItemEnter(childIndex)"
                 @click="activateChildItem(child)"
               >
-                <component :is="child.icon" v-if="child.icon" class="context-menu-icon" />
-                <span class="context-menu-label">{{ child.label }}</span>
-                <span class="context-menu-meta" aria-hidden="true">
-                  <span v-if="child.shortcut" class="context-menu-shortcut">{{ displayShortcut(child.shortcut) }}</span>
-                  <kbd v-if="child.accessKey" class="context-menu-access-key">{{ child.accessKey }}</kbd>
-                </span>
-              </button>
+                <ExtensionSlot
+                  slot-id="desktop.context_menu.content"
+                  :context="contextMenuSlotContext(child, 'submenu')"
+                  :dispatch-key="child.id"
+                  fallback="default"
+                  layout="inline"
+                  surface-role="main"
+                  bare
+                >
+                  <ExtensionSlot
+                    slot-id="desktop.context_menu.icon"
+                    :context="contextMenuSlotContext(child, 'submenu')"
+                    :dispatch-key="child.iconKey || child.id"
+                    fallback="default"
+                    layout="inline"
+                    surface-role="main"
+                    bare
+                  >
+                    <component :is="child.icon" v-if="child.icon" class="context-menu-icon" />
+                  </ExtensionSlot>
+                  <span class="context-menu-label">{{ child.label }}</span>
+                  <span class="context-menu-meta" aria-hidden="true">
+                    <span v-if="child.shortcut" class="context-menu-shortcut">{{ displayShortcut(child.shortcut) }}</span>
+                    <kbd v-if="child.accessKey" class="context-menu-access-key">{{ child.accessKey }}</kbd>
+                  </span>
+                </ExtensionSlot>
+              </div>
             </div>
           </div>
         </template>
@@ -93,6 +131,7 @@ import {
 } from "@element-plus/icons-vue";
 import { isDesktopShell } from "@/runtime/runtime-capabilities";
 import { useTheme } from "@/composables/useTheme";
+import ExtensionSlot from "@/components/extension/ExtensionSlot.vue";
 import {
   closeContextMenu,
   contextMenuState,
@@ -128,6 +167,24 @@ function displayShortcut(shortcut: string) {
 function menuItemAriaShortcuts(item: ContextMenuAction) {
   const shortcut = item.shortcut?.replace(/\bCtrl\+/g, "Control+");
   return [item.accessKey, shortcut].filter(Boolean).join(" ") || undefined;
+}
+
+function contextMenuSlotContext(
+  item: ContextMenuAction,
+  level: "root" | "submenu",
+) {
+  return {
+    actionId: item.id,
+    ownerKey: item.id,
+    iconKey: item.iconKey || item.id,
+    label: item.label,
+    shortcut: item.shortcut || "",
+    accessKey: item.accessKey || "",
+    disabled: item.disabled === true,
+    danger: item.danger === true,
+    level,
+    menuTitle: contextMenuState.title,
+  };
 }
 
 function isEditable(target: Element | null): target is HTMLElement {
@@ -370,11 +427,11 @@ function activateChildItem(item: ContextMenuAction) {
 }
 
 function rootButton(index: number) {
-  return menuRef.value?.querySelector<HTMLButtonElement>(`[data-context-root-index="${index}"]`) || null;
+  return menuRef.value?.querySelector<HTMLElement>(`[data-context-root-index="${index}"]`) || null;
 }
 
 function childButton(index: number) {
-  return menuRef.value?.querySelector<HTMLButtonElement>(`[data-context-child-index="${index}"]`) || null;
+  return menuRef.value?.querySelector<HTMLElement>(`[data-context-child-index="${index}"]`) || null;
 }
 
 function focusRootItem(index: number) {
@@ -647,7 +704,7 @@ onUnmounted(() => {
   color: var(--text-primary);
   outline: none;
 }
-.context-menu-item:disabled {
+.context-menu-item.is-disabled {
   opacity: 0.38;
   cursor: default;
 }

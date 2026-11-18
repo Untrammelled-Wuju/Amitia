@@ -438,79 +438,82 @@ class AmitiaExtensionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: context.borderSecondary, width: 0.5),
-        ),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: AmitiaIcon.adaptive(
-              icon,
-              size: 20,
-              color: context.textSecondary,
-            ),
+    return Padding(
+      padding: EdgeInsets.only(bottom: AppSpacing.sm),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(color: context.borderSecondary, width: 0.5),
           ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name,
-                  style: AppTypography.cardTitle(context),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  [
-                    if (typeLabel.trim().isNotEmpty) typeLabel,
-                    if (isRecommended) '推荐',
-                  ].join(' · '),
-                  style: AppTypography.caption(context),
-                ),
-                if (description.trim().isNotEmpty) ...[
-                  const SizedBox(height: 4),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: AmitiaIcon.adaptive(
+                icon,
+                size: 20,
+                color: context.textSecondary,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Text(
-                    description,
-                    style: AppTypography.caption(context),
+                    name,
+                    style: AppTypography.cardTitle(context),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-                ],
-                const SizedBox(height: 4),
-                MobileExtensionSlot(
-                  slotId: 'extension.center.card.badge',
-                  context: {
-                    'extensionId': extensionId,
-                    'extension': {
-                      'id': extensionId,
-                      'name': name,
-                      'status': typeLabel,
-                      'installed': isInstalled,
-                      'enabled': isEnabled,
+                  const SizedBox(height: 3),
+                  Text(
+                    [
+                      if (typeLabel.trim().isNotEmpty) typeLabel,
+                      if (isRecommended) '推荐',
+                    ].join(' · '),
+                    style: AppTypography.caption(context),
+                  ),
+                  if (description.trim().isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      description,
+                      style: AppTypography.caption(context),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                  const SizedBox(height: 4),
+                  MobileExtensionSlot(
+                    slotId: 'extension.center.card.badge',
+                    context: {
+                      'extensionId': extensionId,
+                      'extension': {
+                        'id': extensionId,
+                        'name': name,
+                        'status': typeLabel,
+                        'installed': isInstalled,
+                        'enabled': isEnabled,
+                      },
                     },
-                  },
-                ),
-              ],
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(width: 8),
-          if (isInstalled)
-            Switch(
-              value: isEnabled,
-              onChanged: onToggle,
-              materialTapTargetSize: MaterialTapTargetSize.padded,
-            )
-          else
-            TextButton(onPressed: onAction, child: Text(actionLabel)),
-        ],
+            const SizedBox(width: 8),
+            if (isInstalled)
+              Switch(
+                value: isEnabled,
+                onChanged: onToggle,
+                materialTapTargetSize: MaterialTapTargetSize.padded,
+              )
+            else
+              TextButton(onPressed: onAction, child: Text(actionLabel)),
+          ],
+        ),
       ),
     );
   }

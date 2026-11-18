@@ -2,8 +2,10 @@ package kernel
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
+	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/plugincontract"
 )
@@ -13,6 +15,7 @@ type installerContributionRegistration struct {
 	adapter      domain.ContributionAdapter
 	contribution domain.ContributionDefinition
 	operation    installOp
+	providerID   capability.ProviderID
 }
 
 func (r *installerContributionRegistration) ID() string {
@@ -83,10 +86,18 @@ func (h *installerContributionHandler) Activate(ctx context.Context, registratio
 	if err != nil {
 		return err
 	}
-	if r.operation.doInstall == nil {
-		return nil
+	if r.operation.doInstall != nil {
+		if err := r.operation.doInstall(ctx); err != nil {
+			return err
+		}
 	}
-	return r.operation.doInstall(ctx)
+	if r.adapter == domain.ContributionAdapterTool {
+		if err := h.installer.activateTool(ctx, r.contribution); err != nil {
+			return err
+		}
+		return h.registerToolProvider(ctx, r)
+	}
+	return nil
 }
 
 func (h *installerContributionHandler) Deactivate(ctx context.Context, registration plugincontract.ContributionRegistration) error {
@@ -109,10 +120,73 @@ func (h *installerContributionHandler) Discard(ctx context.Context, registration
 	if err != nil {
 		return err
 	}
-	if r.operation.doRollback == nil {
+	var providerErr error
+	if r.providerID != "" {
+		c := h.installer.container
+		if c.ProviderLifecycle != nil {
+			_, providerErr = c.ProviderLifecycle.UnregisterProvider(r.providerID)
+		} else {
+			_, providerErr = c.CapabilityProviders.DeregisterDefinitionCascade(r.providerID)
+		}
+	}
+	if r.operation.doRollback != nil {
+		r.operation.doRollback(ctx)
+	}
+	return providerErr
+}
+
+func (h *installerContributionHandler) registerToolProvider(ctx context.Context, r *installerContributionRegistration) error {
+	c := h.installer.container
+	if c.CapabilityProviders == nil {
 		return nil
 	}
-	r.operation.doRollback(ctx)
+	toolID, _ := r.contribution.Definition["toolId"].(string)
+	if toolID == "" {
+		toolID = r.id
+	}
+	tool, ok := c.ToolRegistry.Get(ctx, toolID)
+	if !ok || (tool.Runtime.RuntimeType != capability.RuntimeTypeJavaScript && tool.Runtime.RuntimeType != capability.RuntimeTypePluginJS) {
+		return nil
+	}
+	placement := capability.ProviderPlacementCore
+	modulePlacement, _ := tool.Runtime.Metadata["modulePlacement"].(string)
+	if modulePlacement == string(domain.ModulePlacementDevice) || (modulePlacement == "" && tool.Runtime.RuntimeType == capability.RuntimeTypePluginJS) {
+		placement = capability.ProviderPlacementDevice
+	}
+	id := capability.BuildManifestProviderID(r.contribution.ExtensionID, r.contribution.ModuleID, &domain.ProviderMetadata{ID: "dynamic:" + r.id}, tool.CapabilityID)
+	def := capability.CapabilityProviderDefinition{
+		ID: id, CapabilityID: tool.CapabilityID, Kind: capability.ProviderKindExtension, Placement: placement,
+		ExtensionID: tool.ExtensionID, ModuleID: tool.ModuleID, Runtime: tool.Runtime,
+	}
+	instance := capability.CapabilityProviderInstance{
+		ID: capability.ProviderInstanceID(id), ProviderID: id, CapabilityID: tool.CapabilityID, Placement: placement,
+		ExtensionID: tool.ExtensionID, ModuleID: tool.ModuleID, Health: capability.HealthReady, Availability: capability.ProviderAvailabilityAvailable,
+	}
+	if placement == capability.ProviderPlacementDevice {
+		instance.SpaceID, instance.DeviceID, instance.RuntimeID = c.RuntimeIdentity.SpaceID, c.RuntimeIdentity.DeviceID, c.RuntimeIdentity.RuntimeID
+	}
+	if err := instance.Validate(); err != nil {
+		return err
+	}
+	if c.ProviderLifecycle != nil {
+		if err := c.ProviderLifecycle.RegisterProvider(def); err != nil {
+			return err
+		}
+		r.providerID = id
+		if err := c.ProviderLifecycle.RegisterInstance(instance); err != nil {
+			_, cleanupErr := c.ProviderLifecycle.UnregisterProvider(id)
+			return errors.Join(err, cleanupErr)
+		}
+	} else {
+		if err := c.CapabilityProviders.RegisterDefinition(def); err != nil {
+			return err
+		}
+		r.providerID = id
+		if err := c.CapabilityProviders.RegisterInstance(instance); err != nil {
+			_, cleanupErr := c.CapabilityProviders.DeregisterDefinitionCascade(id)
+			return errors.Join(err, cleanupErr)
+		}
+	}
 	return nil
 }
 

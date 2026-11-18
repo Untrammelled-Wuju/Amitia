@@ -98,6 +98,7 @@ class AmitiaMessageBubble extends StatelessWidget {
   final VoidCallback? onPauseAgentTask;
   final VoidCallback? onResumeAgentTask;
   final String? agentTaskStatusLabel;
+  final Widget Function(Widget fallback)? extensionImages;
 
   const AmitiaMessageBubble({
     super.key,
@@ -128,6 +129,7 @@ class AmitiaMessageBubble extends StatelessWidget {
     this.onPauseAgentTask,
     this.onResumeAgentTask,
     this.agentTaskStatusLabel,
+    this.extensionImages,
   });
 
   @override
@@ -406,12 +408,13 @@ class AmitiaMessageBubble extends StatelessWidget {
 
     switch (message.type) {
       case MessageType.image:
-        return _ImageMessage(
+        final imageMessage = _ImageMessage(
           name: message.fileName ?? '图片',
           url: message.mediaUrl,
           isUser: isUser,
           material: isUser ? userMessageMaterial : UserMessageMaterial.solid,
         );
+        return extensionImages?.call(imageMessage) ?? imageMessage;
       case MessageType.video:
         return _VideoMessage(
           title: message.fileName ?? '视频',
@@ -1492,6 +1495,13 @@ class AmitiaChatInput extends StatefulWidget {
   final Widget? workspaceSelector;
   final Widget? extensionActions;
   final Widget? extensionAttachments;
+  final Widget? extensionLeading;
+  final Widget? extensionTrailing;
+  final Widget? extensionOverlay;
+  final Widget Function(Widget fallback)? extensionModel;
+  final Widget Function(Widget fallback)? extensionModelLabel;
+  final Widget? extensionModelOptions;
+  final Widget Function(Widget fallback)? extensionPermission;
   final FutureOr<void> Function()? onPickFile;
   final FutureOr<void> Function(bool camera)? onPickImage;
   final FutureOr<void> Function(bool camera)? onPickVideo;
@@ -1554,6 +1564,13 @@ class AmitiaChatInput extends StatefulWidget {
     this.workspaceSelector,
     this.extensionActions,
     this.extensionAttachments,
+    this.extensionLeading,
+    this.extensionTrailing,
+    this.extensionOverlay,
+    this.extensionModel,
+    this.extensionModelLabel,
+    this.extensionModelOptions,
+    this.extensionPermission,
     this.onPickFile,
     this.onPickImage,
     this.onPickVideo,
@@ -2430,6 +2447,60 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
           ).copyWith(color: placeholderColor, fontSize: _composerTextSize),
         )
         .copyWith(color: placeholderColor);
+    final defaultPermissionControl = Semantics(
+      button: true,
+      label: widget.permissionMode == 'full_access' ? '完全访问' : '请求批准',
+      child: _ComposerRoundButton(
+        key: const ValueKey('composer-permission-button'),
+        icon: widget.permissionMode == 'full_access'
+            ? Icons.lock_open_rounded
+            : Icons.lock_outline_rounded,
+        iconSize: 16,
+        tooltip: widget.permissionMode == 'full_access' ? '完全访问' : '请求批准',
+        onTap: _showPermissionPicker,
+        styleTarget: 'chat.composer.permission',
+      ),
+    );
+    final defaultModelLabel = Text(
+      _reasoningLabel(),
+      key: const ValueKey('composer-reasoning-label'),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: modelStyle.applyTextStyle(
+        AppTypography.label(
+          context,
+        ).copyWith(fontSize: 14, color: context.textSecondary),
+      ),
+    );
+    final defaultModelControl = MouseRegion(
+      onEnter: (_) => setState(() => _modelMenuTriggerHovered = true),
+      onExit: (_) => setState(() => _modelMenuTriggerHovered = false),
+      child: GestureDetector(
+        onTap: _showModelMenu,
+        child: AnimatedContainer(
+          key: const ValueKey('composer-model-trigger'),
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOut,
+          constraints: const BoxConstraints(minWidth: 44, maxWidth: 64),
+          height: 31,
+          padding: const EdgeInsets.symmetric(horizontal: 9),
+          decoration: modelStyle.applyBoxDecoration(
+            BoxDecoration(
+              border: Border.all(
+                color: _modelMenuTriggerHovered
+                    ? context.borderPrimary
+                    : Colors.transparent,
+              ),
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+          alignment: Alignment.center,
+          child:
+              widget.extensionModelLabel?.call(defaultModelLabel) ??
+              defaultModelLabel,
+        ),
+      ),
+    );
     return OverlayPortal(
       controller: _pickerOverlay,
       overlayChildBuilder: (context) => Align(
@@ -2484,349 +2555,313 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
                       ],
                     ),
                   ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                  child: Stack(
+                    clipBehavior: Clip.none,
                     children: [
-                      if ((widget.replyPreview ?? '').trim().isNotEmpty)
-                        Container(
-                          margin: const EdgeInsets.fromLTRB(12, 10, 12, 2),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 7,
-                          ),
-                          decoration: BoxDecoration(
-                            color: context.surfaceSecondary,
-                            borderRadius: AppRadius.brSmall,
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.format_quote_rounded,
-                                size: 16,
-                                color: context.accentPrimary,
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if ((widget.replyPreview ?? '').trim().isNotEmpty)
+                            Container(
+                              margin: const EdgeInsets.fromLTRB(12, 10, 12, 2),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 7,
                               ),
-                              const SizedBox(width: 7),
-                              Expanded(
-                                child: Text(
-                                  widget.replyPreview!,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: AppTypography.caption(context),
-                                ),
+                              decoration: BoxDecoration(
+                                color: context.surfaceSecondary,
+                                borderRadius: AppRadius.brSmall,
                               ),
-                              GestureDetector(
-                                onTap: widget.onCancelReply,
-                                child: Icon(
-                                  Icons.close,
-                                  size: 17,
-                                  color: context.textTertiary,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      if (_selectedSkillNames.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-                          child: Wrap(
-                            spacing: 6,
-                            runSpacing: 6,
-                            children: _selectedSkillNames
-                                .map(
-                                  (name) => InputChip(
-                                    visualDensity: VisualDensity.compact,
-                                    avatar: const Icon(
-                                      Icons.auto_awesome_outlined,
-                                      size: 14,
-                                    ),
-                                    label: Text('\$$name'),
-                                    onDeleted: () => setState(
-                                      () => _selectedSkillNames.remove(name),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.format_quote_rounded,
+                                    size: 16,
+                                    color: context.accentPrimary,
+                                  ),
+                                  const SizedBox(width: 7),
+                                  Expanded(
+                                    child: Text(
+                                      widget.replyPreview!,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: AppTypography.caption(context),
                                     ),
                                   ),
-                                )
-                                .toList(),
-                          ),
-                        ),
-                      if (_voiceMode)
-                        SizedBox(
-                          height: _composerInputHeight,
-                          child: _buildHoldToTalkButton(context),
-                        )
-                      else
-                        SizedBox(
-                          height: _composerInputHeight,
-                          child: Align(
-                            alignment: Alignment.center,
-                            child: SizedBox(
-                              width: double.infinity,
-                              child: TapRegion(
-                                groupId: 'chat-composer',
-                                onTapOutside: (_) {
-                                  _closeSlashMenu();
-                                  _inputFocusNode.unfocus();
-                                },
-                                child: TextField(
-                                  controller: _controller,
-                                  focusNode: _inputFocusNode,
-                                  minLines: 1,
-                                  maxLines: 2,
-                                  textAlignVertical: TextAlignVertical.center,
-                                  textCapitalization:
-                                      TextCapitalization.sentences,
-                                  keyboardType: TextInputType.multiline,
-                                  textInputAction: widget.sendOnEnter
-                                      ? TextInputAction.send
-                                      : TextInputAction.newline,
-                                  onSubmitted: (_) {
-                                    if (_slashMenuOpen) {
-                                      _selectActiveSlashSkill();
-                                      return;
-                                    }
-                                    if (widget.sendOnEnter &&
-                                        !widget.generating &&
-                                        _controller.value.composing.isCollapsed)
-                                      _send();
-                                  },
-                                  style: inputStyle.applyTextStyle(
-                                    AppTypography.bodySmall(
-                                      context,
-                                    ).copyWith(fontSize: _composerTextSize),
+                                  GestureDetector(
+                                    onTap: widget.onCancelReply,
+                                    child: Icon(
+                                      Icons.close,
+                                      size: 17,
+                                      color: context.textTertiary,
+                                    ),
                                   ),
-                                  decoration: InputDecoration(
-                                    hintText: recipient.isEmpty
-                                        ? '发消息…'
-                                        : '给 $recipient 发消息…',
-                                    hintStyle: hintStyle,
-                                    isDense: true,
-                                    contentPadding:
-                                        inputStyle.edgeInsets('padding') ??
-                                        const EdgeInsets.fromLTRB(
-                                          16,
-                                          10,
-                                          16,
-                                          10,
+                                ],
+                              ),
+                            ),
+                          if (_selectedSkillNames.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                              child: Wrap(
+                                spacing: 6,
+                                runSpacing: 6,
+                                children: _selectedSkillNames
+                                    .map(
+                                      (name) => InputChip(
+                                        visualDensity: VisualDensity.compact,
+                                        avatar: const Icon(
+                                          Icons.auto_awesome_outlined,
+                                          size: 14,
                                         ),
-                                    filled:
-                                        inputStyle.color('backgroundColor') !=
-                                        null,
-                                    border: _composerInputBorder(inputStyle),
-                                    enabledBorder: _composerInputBorder(
-                                      inputStyle,
+                                        label: Text('\$$name'),
+                                        onDeleted: () => setState(
+                                          () =>
+                                              _selectedSkillNames.remove(name),
+                                        ),
+                                      ),
+                                    )
+                                    .toList(),
+                              ),
+                            ),
+                          if (_voiceMode)
+                            SizedBox(
+                              height: _composerInputHeight,
+                              child: _buildHoldToTalkButton(context),
+                            )
+                          else
+                            SizedBox(
+                              height: _composerInputHeight,
+                              child: Align(
+                                alignment: Alignment.center,
+                                child: SizedBox(
+                                  width: double.infinity,
+                                  child: TapRegion(
+                                    groupId: 'chat-composer',
+                                    onTapOutside: (_) {
+                                      _closeSlashMenu();
+                                      _inputFocusNode.unfocus();
+                                    },
+                                    child: TextField(
+                                      controller: _controller,
+                                      focusNode: _inputFocusNode,
+                                      minLines: 1,
+                                      maxLines: 2,
+                                      textAlignVertical:
+                                          TextAlignVertical.center,
+                                      textCapitalization:
+                                          TextCapitalization.sentences,
+                                      keyboardType: TextInputType.multiline,
+                                      textInputAction: widget.sendOnEnter
+                                          ? TextInputAction.send
+                                          : TextInputAction.newline,
+                                      onSubmitted: (_) {
+                                        if (_slashMenuOpen) {
+                                          _selectActiveSlashSkill();
+                                          return;
+                                        }
+                                        if (widget.sendOnEnter &&
+                                            !widget.generating &&
+                                            _controller
+                                                .value
+                                                .composing
+                                                .isCollapsed)
+                                          _send();
+                                      },
+                                      style: inputStyle.applyTextStyle(
+                                        AppTypography.bodySmall(
+                                          context,
+                                        ).copyWith(fontSize: _composerTextSize),
+                                      ),
+                                      decoration: InputDecoration(
+                                        hintText: recipient.isEmpty
+                                            ? '发消息…'
+                                            : '给 $recipient 发消息…',
+                                        hintStyle: hintStyle,
+                                        isDense: true,
+                                        contentPadding:
+                                            inputStyle.edgeInsets('padding') ??
+                                            const EdgeInsets.fromLTRB(
+                                              16,
+                                              10,
+                                              16,
+                                              10,
+                                            ),
+                                        filled:
+                                            inputStyle.color(
+                                              'backgroundColor',
+                                            ) !=
+                                            null,
+                                        border: _composerInputBorder(
+                                          inputStyle,
+                                        ),
+                                        enabledBorder: _composerInputBorder(
+                                          inputStyle,
+                                        ),
+                                        focusedBorder: _composerInputBorder(
+                                          inputStyle,
+                                          focused: true,
+                                        ),
+                                        disabledBorder: _composerInputBorder(
+                                          inputStyle,
+                                        ),
+                                        errorBorder: _composerInputBorder(
+                                          inputStyle,
+                                        ),
+                                        focusedErrorBorder:
+                                            _composerInputBorder(
+                                              inputStyle,
+                                              focused: true,
+                                            ),
+                                        fillColor:
+                                            inputStyle.color(
+                                              'backgroundColor',
+                                            ) ??
+                                            Colors.transparent,
+                                        focusColor: Colors.transparent,
+                                        hoverColor: Colors.transparent,
+                                      ),
                                     ),
-                                    focusedBorder: _composerInputBorder(
-                                      inputStyle,
-                                      focused: true,
-                                    ),
-                                    disabledBorder: _composerInputBorder(
-                                      inputStyle,
-                                    ),
-                                    errorBorder: _composerInputBorder(
-                                      inputStyle,
-                                    ),
-                                    focusedErrorBorder: _composerInputBorder(
-                                      inputStyle,
-                                      focused: true,
-                                    ),
-                                    fillColor:
-                                        inputStyle.color('backgroundColor') ??
-                                        Colors.transparent,
-                                    focusColor: Colors.transparent,
-                                    hoverColor: Colors.transparent,
                                   ),
                                 ),
                               ),
                             ),
-                          ),
-                        ),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(10, 0, 10, 7),
-                        child: SizedBox(
-                          height: 44,
-                          child: Row(
-                            children: [
-                              if (widget.extensionActions != null) ...[
-                                widget.extensionActions!,
-                                const SizedBox(width: 4),
-                              ],
-                              _ComposerRoundButton(
-                                key: const ValueKey('composer-add-button'),
-                                icon: Icons.add_rounded,
-                                tooltip: '添加内容',
-                                onTap: _showComposerTools,
-                                styleTarget: 'chat.composer.add',
-                              ),
-                              if (widget.extensionAttachments != null) ...[
-                                const SizedBox(width: 4),
-                                widget.extensionAttachments!,
-                              ],
-                              const SizedBox(width: 4),
-                              Semantics(
-                                button: true,
-                                label: widget.permissionMode == 'full_access'
-                                    ? '完全访问'
-                                    : '请求批准',
-                                child: _ComposerRoundButton(
-                                  key: const ValueKey(
-                                    'composer-permission-button',
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(10, 0, 10, 7),
+                            child: SizedBox(
+                              height: 44,
+                              child: Row(
+                                children: [
+                                  if (widget.extensionLeading != null) ...[
+                                    widget.extensionLeading!,
+                                    const SizedBox(width: 4),
+                                  ],
+                                  if (widget.extensionActions != null) ...[
+                                    widget.extensionActions!,
+                                    const SizedBox(width: 4),
+                                  ],
+                                  _ComposerRoundButton(
+                                    key: const ValueKey('composer-add-button'),
+                                    icon: Icons.add_rounded,
+                                    tooltip: '添加内容',
+                                    onTap: _showComposerTools,
+                                    styleTarget: 'chat.composer.add',
                                   ),
-                                  icon: widget.permissionMode == 'full_access'
-                                      ? Icons.lock_open_rounded
-                                      : Icons.lock_outline_rounded,
-                                  iconSize: 16,
-                                  tooltip:
-                                      widget.permissionMode == 'full_access'
-                                      ? '完全访问'
-                                      : '请求批准',
-                                  onTap: _showPermissionPicker,
-                                  styleTarget: 'chat.composer.permission',
-                                ),
-                              ),
-                              if (widget.workspaceSelector != null) ...[
-                                const SizedBox(width: 4),
-                                Expanded(
-                                  child: Align(
-                                    key: const ValueKey(
-                                      'composer-workspace-selector',
-                                    ),
-                                    alignment: Alignment.centerLeft,
-                                    child: widget.workspaceSelector!,
-                                  ),
-                                ),
-                              ] else
-                                const Spacer(),
-                              MouseRegion(
-                                onEnter: (_) => setState(
-                                  () => _modelMenuTriggerHovered = true,
-                                ),
-                                onExit: (_) => setState(
-                                  () => _modelMenuTriggerHovered = false,
-                                ),
-                                child: GestureDetector(
-                                  onTap: _showModelMenu,
-                                  child: AnimatedContainer(
-                                    key: const ValueKey(
-                                      'composer-model-trigger',
-                                    ),
-                                    duration: const Duration(milliseconds: 160),
-                                    curve: Curves.easeOut,
-                                    constraints: const BoxConstraints(
-                                      minWidth: 44,
-                                      maxWidth: 64,
-                                    ),
-                                    height: 31,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 9,
-                                    ),
-                                    decoration: modelStyle.applyBoxDecoration(
-                                      BoxDecoration(
-                                        border: Border.all(
-                                          color: _modelMenuTriggerHovered
-                                              ? context.borderPrimary
-                                              : Colors.transparent,
+                                  if (widget.extensionAttachments != null) ...[
+                                    const SizedBox(width: 4),
+                                    widget.extensionAttachments!,
+                                  ],
+                                  const SizedBox(width: 4),
+                                  widget.extensionPermission?.call(
+                                        defaultPermissionControl,
+                                      ) ??
+                                      defaultPermissionControl,
+                                  if (widget.workspaceSelector != null) ...[
+                                    const SizedBox(width: 4),
+                                    Expanded(
+                                      child: Align(
+                                        key: const ValueKey(
+                                          'composer-workspace-selector',
                                         ),
-                                        borderRadius: BorderRadius.circular(8),
+                                        alignment: Alignment.centerLeft,
+                                        child: widget.workspaceSelector!,
                                       ),
                                     ),
-                                    alignment: Alignment.center,
-                                    child: Text(
-                                      _reasoningLabel(),
-                                      key: const ValueKey(
-                                        'composer-reasoning-label',
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: modelStyle.applyTextStyle(
-                                        AppTypography.label(context).copyWith(
-                                          fontSize: 14,
-                                          color: context.textSecondary,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-                              if (!_voiceMode &&
-                                  (_hasText || _selectedSkillNames.isNotEmpty))
-                                GestureDetector(
-                                  behavior: HitTestBehavior.opaque,
-                                  onTap: _send,
-                                  child: Tooltip(
-                                    message: '发送消息',
-                                    child: Container(
-                                      key: const ValueKey(
-                                        'composer-send-button',
-                                      ),
-                                      width: 31,
-                                      height: 31,
-                                      decoration: sendStyle.applyBoxDecoration(
-                                        BoxDecoration(
-                                          color: context.accentPrimary,
-                                          shape: BoxShape.circle,
-                                        ),
-                                      ),
-                                      alignment: Alignment.center,
-                                      child: AmitiaIcon(
-                                        AmitiaIconGlyph.send,
-                                        size: 18,
-                                        color:
-                                            sendStyle.color(
-                                              'foregroundColor',
-                                            ) ??
-                                            Theme.of(
-                                              context,
-                                            ).colorScheme.onPrimary,
-                                      ),
-                                    ),
-                                  ),
-                                )
-                              else if (widget.generating)
-                                GestureDetector(
-                                  behavior: HitTestBehavior.opaque,
-                                  onTap: () => widget.onStop?.call(),
-                                  child: Tooltip(
-                                    message: '停止生成',
-                                    child: Container(
-                                      key: const ValueKey(
-                                        'composer-stop-button',
-                                      ),
-                                      width: 31,
-                                      height: 31,
-                                      decoration: BoxDecoration(
-                                        color: context.error,
-                                        shape: BoxShape.circle,
-                                      ),
-                                      alignment: Alignment.center,
-                                      child: Container(
-                                        width: 11,
-                                        height: 11,
-                                        decoration: BoxDecoration(
-                                          color: context.surfacePrimary,
-                                          borderRadius: BorderRadius.circular(
-                                            2,
+                                  ] else
+                                    const Spacer(),
+                                  widget.extensionModel?.call(
+                                        defaultModelControl,
+                                      ) ??
+                                      defaultModelControl,
+                                  const SizedBox(width: 4),
+                                  if (widget.extensionTrailing != null) ...[
+                                    widget.extensionTrailing!,
+                                    const SizedBox(width: 4),
+                                  ],
+                                  if (!_voiceMode &&
+                                      (_hasText ||
+                                          _selectedSkillNames.isNotEmpty))
+                                    GestureDetector(
+                                      behavior: HitTestBehavior.opaque,
+                                      onTap: _send,
+                                      child: Tooltip(
+                                        message: '发送消息',
+                                        child: Container(
+                                          key: const ValueKey(
+                                            'composer-send-button',
+                                          ),
+                                          width: 31,
+                                          height: 31,
+                                          decoration: sendStyle
+                                              .applyBoxDecoration(
+                                                BoxDecoration(
+                                                  color: context.accentPrimary,
+                                                  shape: BoxShape.circle,
+                                                ),
+                                              ),
+                                          alignment: Alignment.center,
+                                          child: AmitiaIcon(
+                                            AmitiaIconGlyph.send,
+                                            size: 18,
+                                            color:
+                                                sendStyle.color(
+                                                  'foregroundColor',
+                                                ) ??
+                                                Theme.of(
+                                                  context,
+                                                ).colorScheme.onPrimary,
                                           ),
                                         ),
                                       ),
+                                    )
+                                  else if (widget.generating)
+                                    GestureDetector(
+                                      behavior: HitTestBehavior.opaque,
+                                      onTap: () => widget.onStop?.call(),
+                                      child: Tooltip(
+                                        message: '停止生成',
+                                        child: Container(
+                                          key: const ValueKey(
+                                            'composer-stop-button',
+                                          ),
+                                          width: 31,
+                                          height: 31,
+                                          decoration: BoxDecoration(
+                                            color: context.error,
+                                            shape: BoxShape.circle,
+                                          ),
+                                          alignment: Alignment.center,
+                                          child: Container(
+                                            width: 11,
+                                            height: 11,
+                                            decoration: BoxDecoration(
+                                              color: context.surfacePrimary,
+                                              borderRadius:
+                                                  BorderRadius.circular(2),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    )
+                                  else
+                                    _ComposerRoundButton(
+                                      key: const ValueKey(
+                                        'composer-trailing-button',
+                                      ),
+                                      icon: _voiceMode
+                                          ? Icons.keyboard_outlined
+                                          : Icons.mic_none_outlined,
+                                      tooltip: _voiceMode ? '切换到键盘输入' : '按住说话',
+                                      onTap: _toggleVoiceMode,
                                     ),
-                                  ),
-                                )
-                              else
-                                _ComposerRoundButton(
-                                  key: const ValueKey(
-                                    'composer-trailing-button',
-                                  ),
-                                  icon: _voiceMode
-                                      ? Icons.keyboard_outlined
-                                      : Icons.mic_none_outlined,
-                                  tooltip: _voiceMode ? '切换到键盘输入' : '按住说话',
-                                  onTap: _toggleVoiceMode,
-                                ),
-                            ],
+                                ],
+                              ),
+                            ),
                           ),
-                        ),
+                        ],
                       ),
+                      if (widget.extensionOverlay != null)
+                        Positioned.fill(child: widget.extensionOverlay!),
                     ],
                   ),
                 ),
@@ -3177,6 +3212,11 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
             ],
           ),
         ),
+        if (widget.extensionModelOptions != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
+            child: widget.extensionModelOptions!,
+          ),
       ],
     );
   }

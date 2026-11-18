@@ -13,6 +13,14 @@
         <el-tag v-if="statusCount !== undefined" type="info" size="large">
           已安装 {{ statusCount }}
         </el-tag>
+        <ExtensionSlot
+          slot-id="extension.center.header.action"
+          :context="{ route: route.fullPath, source: 'plugin-manager', activeTab: tab }"
+          fallback="none"
+          layout="inline"
+          surface-role="header"
+          bare
+        />
       </template>
     </ExtensionPageHeader>
 
@@ -34,6 +42,14 @@
         :class="{ active: tab === item.key }"
         @click="switchTab(item.key)"
       >{{ item.label }}</h3>
+      <ExtensionSlot
+        slot-id="extension.plugin.tab"
+        :context="{ activeTab: tab, activateTab: switchTab, source: 'plugin-manager' }"
+        fallback="none"
+        layout="inline"
+        surface-role="header"
+        bare
+      />
     </div>
 
     <section v-show="tab === 'install'" class="panel">
@@ -87,7 +103,20 @@
         empty-text="暂无已安装扩展包"
       >
         <el-table-column label="名称" min-width="160" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.name || '-' }}</template>
+          <template #default="{ row }">
+            <div class="plugin-title-cell">
+              <span>{{ row.name || '-' }}</span>
+              <ExtensionSlot
+                slot-id="extension.center.card.badge"
+                :context="{ view: 'card', extension: row }"
+                :dispatch-key="row.extensionId"
+                fallback="none"
+                layout="inline"
+                surface-role="status"
+                bare
+              />
+            </div>
+          </template>
         </el-table-column>
         <el-table-column prop="extensionId" label="扩展ID" min-width="200" show-overflow-tooltip />
         <el-table-column prop="version" label="版本" width="100" />
@@ -136,6 +165,15 @@
                 type="primary"
                 @click="openDetail(row)"
               >详情</el-button>
+                <ExtensionSlot
+                  slot-id="extension.plugin.bundle.activation"
+                  :context="{ view: row.enablement === 'enabled' ? 'activation' : 'summary', extension: row, enabled: row.enablement === 'enabled', enable: (value: boolean) => toggleEnable(row, value) }"
+                  :dispatch-key="row.extensionId"
+                  fallback="none"
+                  layout="inline"
+                  surface-role="main"
+                  bare
+                />
               <el-dropdown
                 trigger="click"
                 @command="(command: string | number | object) => handleRowCommand(row, String(command))"
@@ -166,6 +204,21 @@
           </template>
         </el-table-column>
       </el-table>
+      <section class="plugin-item-section">
+        <div class="section-heading">
+          <div>
+            <h2>官方插件</h2>
+            <p>由插件提供方追加到扩展包列表的官方条目。</p>
+          </div>
+        </div>
+        <ExtensionSlot
+          slot-id="extension.plugin.item"
+          :context="{ view: 'summary', openPlugin: (extensionId: string) => openDetailById(extensionId), activeTab: tab }"
+          fallback="none"
+          layout="grid"
+          surface-role="main"
+        />
+      </section>
     </section>
 
     <section v-show="!['install', 'installed'].includes(tab)" class="panel kernel-view-panel">
@@ -350,6 +403,18 @@
 
     <el-dialog v-model="detailVisible" title="扩展详情" width="820px">
       <div v-if="detail">
+        <div class="detail-toolbar">
+          <strong>{{ detail.displayName || detail.extensionId }}</strong>
+          <ExtensionSlot
+            slot-id="extension.detail.action"
+            :context="{ view: 'detail', extension: detail, enabled: detail.enabled }"
+            :dispatch-key="detail.extensionId"
+            fallback="none"
+            layout="inline"
+            surface-role="header"
+            bare
+          />
+        </div>
         <el-descriptions :column="2" border>
           <el-descriptions-item label="名称">{{ detail.displayName || '-' }}</el-descriptions-item>
           <el-descriptions-item label="扩展ID">{{ detail.extensionId }}</el-descriptions-item>
@@ -374,6 +439,15 @@
           <el-descriptions-item label="最新版本">{{ detail.latestVersion || detail.version }}</el-descriptions-item>
           <el-descriptions-item label="更新错误" :span="2">{{ detail.updateError || '-' }}</el-descriptions-item>
         </el-descriptions>
+
+        <ExtensionSlot
+          slot-id="extension.plugin.bundle.config"
+          :context="{ view: 'page', extension: detail, enabled: detail.enabled }"
+          :dispatch-key="detail.extensionId"
+          fallback="none"
+          layout="stack"
+          surface-role="main"
+        />
 
         <div v-if="detail.permissions && detail.permissions.length > 0" class="detail-section">
           <h4>权限列表</h4>
@@ -407,6 +481,19 @@
             <el-table-column prop="runtime" label="运行时" width="100" />
             <el-table-column prop="entry" label="入口" show-overflow-tooltip />
             <el-table-column prop="status" label="状态" width="100" />
+            <el-table-column label="配置" width="140">
+              <template #default="{ row }">
+                <ExtensionSlot
+                  slot-id="extension.plugin.row.config"
+                  :context="{ view: 'row', extension: detail, row }"
+                  :dispatch-key="`${detail.extensionId}#${row.moduleId}`"
+                  fallback="none"
+                  layout="inline"
+                  surface-role="main"
+                  bare
+                />
+              </template>
+            </el-table-column>
           </el-table>
         </div>
 
@@ -430,6 +517,15 @@
             </el-table-column>
           </el-table>
         </div>
+
+        <ExtensionSlot
+          slot-id="extension.detail.tab"
+          :context="{ view: 'detail', extension: detail, enabled: detail.enabled }"
+          :dispatch-key="detail.extensionId"
+          fallback="none"
+          layout="tabs"
+          surface-role="main"
+        />
       </div>
     </el-dialog>
 
@@ -485,6 +581,7 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { UploadFilled, Loading, MoreFilled } from "@element-plus/icons-vue";
 import { apiClient } from "@/composables/useApi";
 import ExtensionPageHeader from "../components/ExtensionPageHeader.vue";
+import ExtensionSlot from "@/components/extension/ExtensionSlot.vue";
 import {
   getKernelStatus,
   enableExtension,
@@ -957,6 +1054,15 @@ async function openDetail(row: KernelExtension) {
   }
 }
 
+async function openDetailById(extensionId: string) {
+  try {
+    detail.value = await fetchExtensionCenterDetail(extensionId);
+    detailVisible.value = true;
+  } catch (e: any) {
+    ElMessage.error("加载详情失败: " + (e?.message || e));
+  }
+}
+
 async function openPermissionManager(row: KernelExtension) {
   permissionTarget.value = row;
   permissionRows.value = [];
@@ -1164,6 +1270,11 @@ onMounted(async () => {
   color: var(--el-color-primary);
   border-bottom-color: var(--el-color-primary);
 }
+.plugin-item-section {
+  display: grid;
+  gap: 12px;
+  margin-top: 20px;
+}
 .kernel-view-panel {
   padding: 0;
   overflow: hidden;
@@ -1240,6 +1351,23 @@ p {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  white-space: nowrap;
+}
+.plugin-title-cell,
+.detail-toolbar {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+}
+.detail-toolbar {
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.detail-toolbar strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 .permission-manager {

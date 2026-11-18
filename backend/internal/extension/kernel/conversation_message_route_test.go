@@ -45,14 +45,22 @@ func (s *recordingConversationMessageSender) SendConversationMessage(_ context.C
 	return s.result, s.err
 }
 
+type permissiveScopeChecker struct{}
+
+func (permissiveScopeChecker) Check(context.Context, runtime_supervisor.RuntimeIdentity, string, host_api.ScopePolicy) error {
+	return nil
+}
+
+func (permissiveScopeChecker) CheckTarget(context.Context, runtime_supervisor.RuntimeIdentity, host_api.CallRequest, host_api.ScopePolicy) error {
+	return nil
+}
+
 func newConversationMessageTestGateway() *host_api.DefaultGateway {
 	gateway := host_api.NewDefaultGateway()
 	gateway.SetPermissionChecker(host_api.PermissionCheckerFunc(func(context.Context, runtime_supervisor.RuntimeIdentity, []host_api.PermissionRequirement) error {
 		return nil
 	}))
-	gateway.SetScopeChecker(host_api.ScopeCheckerFunc(func(context.Context, runtime_supervisor.RuntimeIdentity, string, host_api.ScopePolicy) error {
-		return nil
-	}))
+	gateway.SetScopeChecker(permissiveScopeChecker{})
 	return gateway
 }
 

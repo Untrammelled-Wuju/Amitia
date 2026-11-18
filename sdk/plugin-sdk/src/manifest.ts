@@ -384,7 +384,7 @@ export type UIProviderCapability =
   | "ui.theme" | "ui.tokens" | "ui.icons" | "ui.components";
 
 export type UIProviderEntryType =
-  | "builtin_native" | "declarative" | "web_module" | "schema_renderer" | "external_web_ui";
+  | "builtin_native" | "declarative" | "web_module" | "mobile_web_runtime" | "schema_renderer" | "external_web_ui";
 
 export interface UIProviderEntry {
   contributionId?: string;
@@ -558,12 +558,13 @@ export interface UIContributionDefinition {
   entryKind: "schema_page" | "web_page" | "panel" | "card" | "action" | "menu_item";
   entryPath?: string;
   schemaPath?: string;
+  stylePath?: string;
   runtimeId?: string;
   permissions?: PermissionRequirement[];
   scopeRule?: ScopeRule;
   ordering?: number;
   group?: string;
-  sandbox?: "host_native" | "schema_renderer" | "client_module";
+  sandbox?: "host_native" | "schema_renderer" | "client_module" | "mobile_web_runtime";
 }
 
 export interface JSONSchema {

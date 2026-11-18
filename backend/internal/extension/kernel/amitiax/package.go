@@ -259,6 +259,15 @@ func validateStructure(pkg *Package) error {
 				return fmt.Errorf("%w: module %s entry point %s missing", ErrInvalidStructure, mod.ID, entry)
 			}
 		}
+		for _, contribution := range mod.Contributions {
+			if contribution.Kind != "petx" {
+				continue
+			}
+			resourceRef, _ := contribution.Spec["resourceRef"].(string)
+			if !strings.HasPrefix(resourceRef, AssetsDir) || path.Clean(resourceRef) != resourceRef || !files[resourceRef] {
+				return fmt.Errorf("%w: petx resource manifest %s missing or outside assets", ErrInvalidStructure, resourceRef)
+			}
+		}
 	}
 	if pkg.Layout.IntegrityFiles == "" {
 		return fmt.Errorf("%w: integrity/files.json missing", ErrIntegrityMissing)

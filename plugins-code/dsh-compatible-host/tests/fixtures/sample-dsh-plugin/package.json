@@ -1,0 +1,19 @@
+{
+  "name": "@amitia-test/dsh-fixture",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./index.js"
+    },
+    "./client": {
+      "import": "./client.js"
+    }
+  },
+  "dsh": {
+    "manifestVersion": 1,
+    "client": {
+      "platform": "web"
+    }
+  }
+}

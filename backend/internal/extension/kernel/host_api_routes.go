@@ -13,12 +13,16 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/auth"
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	coreexec "github.com/u-ai/backend/internal/execution"
+	"github.com/u-ai/backend/internal/extension/kernel/agent_skill"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/event"
 	"github.com/u-ai/backend/internal/extension/kernel/execution"
@@ -202,12 +206,49 @@ type CharacterReader interface {
 	ReadCharacter(ctx context.Context, characterID string) (json.RawMessage, bool, error)
 }
 
+type CharacterRevisionReader func(ctx context.Context, characterID string) (int64, error)
+
 type CharacterLister interface {
 	ListCharacters(ctx context.Context, spaceID string, includeDisabled bool) ([]json.RawMessage, error)
 }
 
 type ConversationReader interface {
 	ReadConversation(ctx context.Context, conversationID string, limit int, offset int) ([]json.RawMessage, bool, error)
+}
+
+type ConversationSearcher interface {
+	SearchConversations(ctx context.Context, query string, limit int) ([]json.RawMessage, bool, error)
+}
+
+type ConversationCreateRequest struct {
+	SpaceID        string
+	CharacterID    string
+	ConversationID string
+	RequestID      string
+	Title          string
+	ProjectID      string
+	Channel        string
+	PeerID         string
+	Draft          bool
+}
+
+type ConversationDeleteRequest struct {
+	SpaceID        string
+	CharacterID    string
+	ConversationID string
+	RequestID      string
+}
+
+type ConversationCreator interface {
+	CreateConversation(ctx context.Context, request ConversationCreateRequest) (json.RawMessage, error)
+}
+
+type ConversationLister interface {
+	ListConversations(ctx context.Context, limit int, offset int, archivedOnly bool) (any, error)
+}
+
+type ConversationDeleter interface {
+	DeleteConversation(ctx context.Context, request ConversationDeleteRequest) (json.RawMessage, error)
 }
 
 type MemoryQueryService interface {
@@ -273,6 +314,159 @@ type ConversationMessageAppender interface {
 	AppendConversationMessages(ctx context.Context, request ConversationMessageAppendRequest) (ConversationMessageAppendResult, error)
 }
 
+var ErrConversationTurnUnavailable = errors.New("conversation turn is unavailable")
+
+type ConversationTurnInterruptRequest struct {
+	SpaceID        string
+	CharacterID    string
+	ConversationID string
+	TurnID         string
+}
+
+type ConversationTurnInterruptResult struct {
+	Interrupted bool   `json:"interrupted"`
+	TurnID      string `json:"turnId"`
+	RequestID   string `json:"requestId,omitempty"`
+	ExecutionID string `json:"executionId,omitempty"`
+}
+
+type ConversationTurnAwaitResult struct {
+	Idle   bool   `json:"idle"`
+	TurnID string `json:"turnId,omitempty"`
+}
+
+type ConversationTurnController interface {
+	InterruptConversationTurn(ctx context.Context, request ConversationTurnInterruptRequest) (ConversationTurnInterruptResult, error)
+	AwaitConversationTurnIdle(ctx context.Context, request ConversationTurnInterruptRequest) (ConversationTurnAwaitResult, error)
+}
+
+type ProjectWorkspaceInput struct {
+	ID       string `json:"id"`
+	DeviceID string `json:"deviceId"`
+	Name     string `json:"name"`
+	Kind     string `json:"kind"`
+	RootURI  string `json:"rootUri"`
+	ReadOnly bool   `json:"readOnly,omitempty"`
+}
+
+type ProjectCreateRequest struct {
+	SpaceID            string
+	CharacterID        string
+	Title              string
+	DirectoryPath      string
+	Workspaces         []ProjectWorkspaceInput
+	PrimaryWorkspaceID string
+	RequestID          string
+}
+
+type ProjectUpdateRequest struct {
+	ProjectID          string
+	Title              *string
+	Pinned             *bool
+	Hidden             *bool
+	Workspaces         []ProjectWorkspaceInput
+	PrimaryWorkspaceID *string
+	RequestID          string
+}
+
+type ProjectDeleteRequest struct {
+	ProjectID string
+	RequestID string
+}
+
+type ConversationArchiveRequest struct {
+	SpaceID        string
+	CharacterID    string
+	ConversationID string
+	Archived       bool
+	RequestID      string
+}
+
+type ConversationPinRequest struct {
+	SpaceID        string
+	CharacterID    string
+	ConversationID string
+	Pinned         bool
+	RequestID      string
+}
+
+type ConversationForkRequest struct {
+	SpaceID          string
+	CharacterID      string
+	ConversationID   string
+	BoundarySequence int64
+	Title            string
+	RequestID        string
+}
+
+type ConversationForker interface {
+	ForkConversation(ctx context.Context, request ConversationForkRequest) (json.RawMessage, error)
+}
+
+type ModelDefaultsProvider interface {
+	ModelDefaults(ctx context.Context) (map[string]any, error)
+}
+
+type ConversationPinner interface {
+	PinConversation(ctx context.Context, request ConversationPinRequest) (json.RawMessage, error)
+}
+
+const (
+	hostDirectoryDefaultLimit = 200
+	hostDirectoryMaxLimit     = 1000
+)
+
+type DirectoryEntry struct {
+	Name       string `json:"name"`
+	Path       string `json:"path"`
+	Kind       string `json:"kind"`
+	Size       int64  `json:"size"`
+	ModifiedAt string `json:"modifiedAt"`
+}
+
+type DirectoryListRequest struct {
+	Path  string
+	Limit int
+}
+
+type DirectoryListResult struct {
+	Path    string           `json:"path"`
+	Entries []DirectoryEntry `json:"entries"`
+}
+
+type DirectoryCreateRequest struct {
+	Path string
+	Name string
+}
+
+type DirectoryLister interface {
+	ListDirectory(ctx context.Context, request DirectoryListRequest) (DirectoryListResult, error)
+}
+
+type DirectoryCreator interface {
+	CreateDirectory(ctx context.Context, request DirectoryCreateRequest) (string, error)
+}
+
+type ProjectLister interface {
+	ListProjects(ctx context.Context, limit int, cursor string) (any, error)
+}
+
+type ProjectCreator interface {
+	CreateProject(ctx context.Context, request ProjectCreateRequest) (json.RawMessage, error)
+}
+
+type ProjectUpdater interface {
+	UpdateProject(ctx context.Context, request ProjectUpdateRequest) (json.RawMessage, error)
+}
+
+type ProjectDeleter interface {
+	DeleteProject(ctx context.Context, request ProjectDeleteRequest) (json.RawMessage, error)
+}
+
+type ConversationArchiver interface {
+	ArchiveConversation(ctx context.Context, request ConversationArchiveRequest) (json.RawMessage, error)
+}
+
 type ExtensionDataSource interface {
 	Read(ctx context.Context, sourceID string, params json.RawMessage) (json.RawMessage, error)
 }
@@ -280,11 +474,15 @@ type ExtensionDataSource interface {
 type HostAPIRouteDeps struct {
 	StateStore                  ExtensionStateStore
 	CharacterReader             CharacterReader
+	CharacterRevisionReader     CharacterRevisionReader
 	CharacterLister             CharacterLister
 	ConversationReader          ConversationReader
+	ConversationSearcher        ConversationSearcher
 	MemoryQueryService          MemoryQueryService
 	EventService                *event.Service
 	ScheduleService             *schedule.ScheduleService
+	Coordination                *coordination.Service
+	UIExecutionIdentity         func(sessionID string) (spaceID string, deviceID string)
 	ToolFacade                  *ToolFacade
 	PluginPackages              HostPluginPackageManagerPort
 	ExecutionKernel             *execution.ExecutionPipeline
@@ -295,10 +493,29 @@ type HostAPIRouteDeps struct {
 	ClipboardHost               ClipboardHost
 	RuntimeSupervisor           RuntimeHealthReader
 	ScopeSnapshotStore          host_api.ScopeSnapshotStore
+	ScopeSnapshotWriter         ScopeSnapshotWriter
+	ScopeSnapshotDeleter        ScopeSnapshotDeleter
 	SecretStore                 SecretStore
 	ProviderInvoker             ProviderInvoker
+	ModelGateway                *ModelGatewayBridge
+	ApprovalBroker              *execution.ApprovalBroker
+	ConversationCreator         ConversationCreator
+	ConversationLister          ConversationLister
+	ConversationDeleter         ConversationDeleter
 	ConversationMessageSender   ConversationMessageSender
 	ConversationMessageAppender ConversationMessageAppender
+	ConversationTurnController  ConversationTurnController
+	ConversationArchiver        ConversationArchiver
+	ConversationPinner          ConversationPinner
+	ModelDefaults               ModelDefaultsProvider
+	ConversationForker          ConversationForker
+	DirectoryLister             DirectoryLister
+	DirectoryCreator            DirectoryCreator
+	SkillCatalog                *agent_skill.AgentSkillCatalog
+	ProjectLister               ProjectLister
+	ProjectCreator              ProjectCreator
+	ProjectUpdater              ProjectUpdater
+	ProjectDeleter              ProjectDeleter
 	ExtensionDataSources        ExtensionDataSource
 	ResourceLinks               *ResourceLinkManager
 	VectorStore                 ExtensionVectorStore
@@ -458,6 +675,14 @@ func conversationMessageRouteHandler(deps HostAPIRouteDeps) host_api.Handler {
 		}
 		ctx = resolveHostAPIScope(ctx, deps.ScopeSnapshotStore, req.ScopeSnapshotID)
 		scope := GetHostAPIScope(ctx)
+		targetScope, targetErr := resolveConversationTargetScope(ctx, deps, req, p.ConversationID)
+		if targetErr != nil {
+			return host_api.CallResult{
+				Status: host_api.StatusRejected,
+				Error:  &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: targetErr.Error()},
+			}, nil
+		}
+		scope = targetScope
 		if req.SpaceID != "" {
 			if scope.SpaceID != "" && scope.SpaceID != req.SpaceID {
 				return host_api.CallResult{
@@ -476,7 +701,7 @@ func conversationMessageRouteHandler(deps HostAPIRouteDeps) host_api.Handler {
 			}
 			scope.CharacterID = req.CharacterID
 		}
-		if req.ConversationID != "" {
+		if req.ConversationID != "" && req.TargetScopeSnapshotID == "" {
 			if scope.ConversationID != "" && scope.ConversationID != req.ConversationID {
 				return host_api.CallResult{
 					Status: host_api.StatusRejected,
@@ -578,6 +803,14 @@ func conversationMessageAppendRouteHandler(deps HostAPIRouteDeps) host_api.Handl
 		}
 		ctx = resolveHostAPIScope(ctx, deps.ScopeSnapshotStore, req.ScopeSnapshotID)
 		scope := GetHostAPIScope(ctx)
+		targetScope, targetErr := resolveConversationTargetScope(ctx, deps, req, p.ConversationID)
+		if targetErr != nil {
+			return host_api.CallResult{
+				Status: host_api.StatusRejected,
+				Error:  &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: targetErr.Error()},
+			}, nil
+		}
+		scope = targetScope
 		if req.SpaceID != "" {
 			if scope.SpaceID != "" && scope.SpaceID != req.SpaceID {
 				return host_api.CallResult{
@@ -596,7 +829,7 @@ func conversationMessageAppendRouteHandler(deps HostAPIRouteDeps) host_api.Handl
 			}
 			scope.CharacterID = req.CharacterID
 		}
-		if req.ConversationID != "" {
+		if req.ConversationID != "" && req.TargetScopeSnapshotID == "" {
 			if scope.ConversationID != "" && scope.ConversationID != req.ConversationID {
 				return host_api.CallResult{
 					Status: host_api.StatusRejected,
@@ -661,6 +894,1118 @@ func conversationMessageAppendRouteHandler(deps HostAPIRouteDeps) host_api.Handl
 			}, nil
 		}
 		output, _ := json.Marshal(result)
+		return host_api.CallResult{Status: host_api.StatusSuccess, Output: output}, nil
+	}
+}
+
+func conversationCreateRouteHandler(deps HostAPIRouteDeps) host_api.Handler {
+	return func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+		var p struct {
+			SpaceID        string `json:"spaceId"`
+			CharacterID    string `json:"characterId"`
+			ConversationID string `json:"conversationId"`
+			RequestID      string `json:"requestId"`
+			Title          string `json:"title"`
+			ProjectID      string `json:"projectId"`
+			Channel        string `json:"channel"`
+			PeerID         string `json:"peerId"`
+		}
+		if err := json.Unmarshal(req.Input, &p); err != nil {
+			return host_api.CallResult{
+				Status: host_api.StatusFailed,
+				Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: err.Error()},
+			}, nil
+		}
+		p.SpaceID = strings.TrimSpace(p.SpaceID)
+		p.CharacterID = strings.TrimSpace(p.CharacterID)
+		p.ConversationID = strings.TrimSpace(p.ConversationID)
+		p.RequestID = strings.TrimSpace(p.RequestID)
+		p.Title = strings.TrimSpace(p.Title)
+		p.ProjectID = strings.TrimSpace(p.ProjectID)
+		p.Channel = strings.TrimSpace(p.Channel)
+		p.PeerID = strings.TrimSpace(p.PeerID)
+		if len(p.Title) > 1024 || len(p.ConversationID) > 512 || len(p.RequestID) > 128 || len(p.ProjectID) > 512 || len(p.Channel) > 128 || len(p.PeerID) > 512 {
+			return host_api.CallResult{
+				Status: host_api.StatusFailed,
+				Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: "conversation create input is too long"},
+			}, nil
+		}
+		ctx = resolveHostAPIScope(ctx, deps.ScopeSnapshotStore, req.ScopeSnapshotID)
+		scope := GetHostAPIScope(ctx)
+		if req.SpaceID != "" {
+			if scope.SpaceID != "" && scope.SpaceID != req.SpaceID {
+				return host_api.CallResult{Status: host_api.StatusRejected, Error: &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "spaceId does not match current scope"}}, nil
+			}
+			scope.SpaceID = req.SpaceID
+		}
+		if req.CharacterID != "" {
+			if scope.CharacterID != "" && scope.CharacterID != req.CharacterID {
+				return host_api.CallResult{Status: host_api.StatusRejected, Error: &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "characterId does not match current scope"}}, nil
+			}
+			scope.CharacterID = req.CharacterID
+		}
+		ctx = WithHostAPIScope(ctx, scope)
+		if scope.SpaceID != "" {
+			if p.SpaceID != "" && p.SpaceID != scope.SpaceID {
+				return host_api.CallResult{Status: host_api.StatusRejected, Error: &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "spaceId does not match current scope"}}, nil
+			}
+			p.SpaceID = scope.SpaceID
+		}
+		if scope.CharacterID != "" {
+			if p.CharacterID != "" && p.CharacterID != scope.CharacterID {
+				return host_api.CallResult{Status: host_api.StatusRejected, Error: &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "characterId does not match current scope"}}, nil
+			}
+			p.CharacterID = scope.CharacterID
+		}
+		if p.SpaceID == "" || p.CharacterID == "" {
+			return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: "spaceId and characterId are required"}}, nil
+		}
+		if deps.ConversationCreator == nil {
+			return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "conversation creator not configured"}}, nil
+		}
+		if p.RequestID == "" {
+			p.RequestID = uuid.NewString()
+		}
+		output, err := deps.ConversationCreator.CreateConversation(ctx, ConversationCreateRequest{
+			SpaceID:        p.SpaceID,
+			CharacterID:    p.CharacterID,
+			ConversationID: p.ConversationID,
+			RequestID:      p.RequestID,
+			Title:          p.Title,
+			ProjectID:      p.ProjectID,
+			Channel:        p.Channel,
+			PeerID:         p.PeerID,
+		})
+		if err != nil {
+			return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()}}, nil
+		}
+		if len(output) == 0 {
+			output = json.RawMessage(`{}`)
+		}
+		if !json.Valid(output) {
+			return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeOutputInvalid, Message: "conversation creator returned invalid JSON"}}, nil
+		}
+		var created map[string]any
+		if err := json.Unmarshal(output, &created); err != nil {
+			return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeOutputInvalid, Message: err.Error()}}, nil
+		}
+		createdConversationID, _ := created["conversationId"].(string)
+		if strings.TrimSpace(createdConversationID) == "" {
+			createdConversationID = p.ConversationID
+		}
+		targetSnapshotID, err := createConversationTargetSnapshot(ctx, deps, req, createdConversationID)
+		if err != nil {
+			return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()}}, nil
+		}
+		created["scopeSnapshotId"] = targetSnapshotID
+		output, err = json.Marshal(created)
+		if err != nil {
+			return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()}}, nil
+		}
+		return host_api.CallResult{Status: host_api.StatusSuccess, Output: output}, nil
+	}
+}
+
+func conversationDeleteRouteHandler(deps HostAPIRouteDeps) host_api.Handler {
+	return func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+		var p struct {
+			SpaceID        string `json:"spaceId"`
+			CharacterID    string `json:"characterId"`
+			ConversationID string `json:"conversationId"`
+			RequestID      string `json:"requestId"`
+		}
+		if err := json.Unmarshal(req.Input, &p); err != nil {
+			return host_api.CallResult{
+				Status: host_api.StatusFailed,
+				Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: err.Error()},
+			}, nil
+		}
+		p.SpaceID = strings.TrimSpace(p.SpaceID)
+		p.CharacterID = strings.TrimSpace(p.CharacterID)
+		p.ConversationID = strings.TrimSpace(p.ConversationID)
+		p.RequestID = strings.TrimSpace(p.RequestID)
+		if p.ConversationID == "" || len(p.ConversationID) > 512 || len(p.RequestID) > 128 {
+			return host_api.CallResult{
+				Status: host_api.StatusFailed,
+				Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: "conversationId is required and conversation delete input is too long"},
+			}, nil
+		}
+		ctx = resolveHostAPIScope(ctx, deps.ScopeSnapshotStore, req.ScopeSnapshotID)
+		scope := GetHostAPIScope(ctx)
+		targetScope, targetErr := resolveConversationTargetScope(ctx, deps, req, p.ConversationID)
+		if targetErr != nil {
+			return host_api.CallResult{
+				Status: host_api.StatusRejected,
+				Error:  &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: targetErr.Error()},
+			}, nil
+		}
+		scope = targetScope
+		if p.SpaceID != "" && scope.SpaceID != "" && p.SpaceID != scope.SpaceID {
+			return host_api.CallResult{Status: host_api.StatusRejected, Error: &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "spaceId does not match current scope"}}, nil
+		}
+		if p.CharacterID != "" && scope.CharacterID != "" && p.CharacterID != scope.CharacterID {
+			return host_api.CallResult{Status: host_api.StatusRejected, Error: &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "characterId does not match current scope"}}, nil
+		}
+		if scope.SpaceID == "" {
+			scope.SpaceID = p.SpaceID
+		}
+		if scope.CharacterID == "" {
+			scope.CharacterID = p.CharacterID
+		}
+		if scope.SpaceID == "" || scope.CharacterID == "" {
+			return host_api.CallResult{
+				Status: host_api.StatusFailed,
+				Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: "spaceId and characterId are required"},
+			}, nil
+		}
+		scope.ConversationID = p.ConversationID
+		ctx = WithHostAPIScope(ctx, scope)
+		if deps.ConversationDeleter == nil {
+			return host_api.CallResult{
+				Status: host_api.StatusFailed,
+				Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "conversation deleter not configured"},
+			}, nil
+		}
+		if p.RequestID == "" {
+			p.RequestID = uuid.NewString()
+		}
+		output, err := deps.ConversationDeleter.DeleteConversation(ctx, ConversationDeleteRequest{
+			SpaceID:        scope.SpaceID,
+			CharacterID:    scope.CharacterID,
+			ConversationID: p.ConversationID,
+			RequestID:      p.RequestID,
+		})
+		if err != nil {
+			return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()}}, nil
+		}
+		if len(output) == 0 {
+			output = json.RawMessage(`{"deleted":true}`)
+		}
+		if !json.Valid(output) {
+			return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeOutputInvalid, Message: "conversation deleter returned invalid JSON"}}, nil
+		}
+		if err := deleteConversationTargetSnapshot(ctx, deps, req); err != nil {
+			return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()}}, nil
+		}
+		return host_api.CallResult{Status: host_api.StatusSuccess, Output: output}, nil
+	}
+}
+
+func hostRouteInputInvalid(message string) host_api.CallResult {
+	return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: message}}
+}
+
+func hostRouteScopeDenied(message string) host_api.CallResult {
+	return host_api.CallResult{Status: host_api.StatusRejected, Error: &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: message}}
+}
+
+func hostRouteUnavailable(message string) host_api.CallResult {
+	return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: message}}
+}
+
+func hostRouteInternal(err error) host_api.CallResult {
+	return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()}}
+}
+
+func hostRouteOutput(value json.RawMessage, fallback string) host_api.CallResult {
+	output := value
+	if len(output) == 0 {
+		output = json.RawMessage(fallback)
+	}
+	if !json.Valid(output) {
+		return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeOutputInvalid, Message: "host route produced invalid JSON"}}
+	}
+	return host_api.CallResult{Status: host_api.StatusSuccess, Output: output}
+}
+
+func resolveProjectHostScope(ctx context.Context, deps HostAPIRouteDeps, req host_api.CallRequest, inputSpaceID string, inputCharacterID string) (context.Context, HostAPIScopeContext, host_api.CallResult, bool) {
+	ctx = resolveHostAPIScope(ctx, deps.ScopeSnapshotStore, req.ScopeSnapshotID)
+	scope := GetHostAPIScope(ctx)
+	for _, pair := range []struct {
+		scopeValue *string
+		requestVal string
+		inputVal   string
+		label      string
+	}{
+		{&scope.SpaceID, req.SpaceID, inputSpaceID, "spaceId"},
+		{&scope.CharacterID, req.CharacterID, inputCharacterID, "characterId"},
+	} {
+		if pair.requestVal != "" {
+			if *pair.scopeValue != "" && *pair.scopeValue != pair.requestVal {
+				return ctx, scope, hostRouteScopeDenied(pair.label + " does not match current scope"), false
+			}
+			*pair.scopeValue = pair.requestVal
+		}
+		if pair.inputVal != "" {
+			if *pair.scopeValue != "" && *pair.scopeValue != pair.inputVal {
+				return ctx, scope, hostRouteScopeDenied(pair.label + " does not match current scope"), false
+			}
+			*pair.scopeValue = pair.inputVal
+		}
+	}
+	if scope.SpaceID == "" || scope.CharacterID == "" {
+		return ctx, scope, hostRouteInputInvalid("spaceId and characterId are required"), false
+	}
+	ctx = WithHostAPIScope(ctx, scope)
+	return ctx, scope, host_api.CallResult{}, true
+}
+
+func projectListRouteHandler(deps HostAPIRouteDeps) host_api.Handler {
+	return func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+		var p struct {
+			SpaceID     string `json:"spaceId"`
+			CharacterID string `json:"characterId"`
+			Limit       int    `json:"limit"`
+			Cursor      string `json:"cursor"`
+		}
+		if len(req.Input) > 0 {
+			if err := json.Unmarshal(req.Input, &p); err != nil {
+				return hostRouteInputInvalid(err.Error()), nil
+			}
+		}
+		p.SpaceID = strings.TrimSpace(p.SpaceID)
+		p.CharacterID = strings.TrimSpace(p.CharacterID)
+		p.Cursor = strings.TrimSpace(p.Cursor)
+		if len(p.Cursor) > 4096 {
+			return hostRouteInputInvalid("project cursor is too long"), nil
+		}
+		ctx, _, rejected, ok := resolveProjectHostScope(ctx, deps, req, p.SpaceID, p.CharacterID)
+		if !ok {
+			return rejected, nil
+		}
+		if deps.ProjectLister == nil {
+			return hostRouteUnavailable("project lister not configured"), nil
+		}
+		if p.Limit <= 0 {
+			p.Limit = 50
+		}
+		if p.Limit > 128 {
+			p.Limit = 128
+		}
+		result, err := deps.ProjectLister.ListProjects(ctx, p.Limit, p.Cursor)
+		if err != nil {
+			return hostRouteInternal(err), nil
+		}
+		output, err := json.Marshal(result)
+		if err != nil {
+			return hostRouteInternal(err), nil
+		}
+		return host_api.CallResult{Status: host_api.StatusSuccess, Output: output}, nil
+	}
+}
+
+func projectCreateRouteHandler(deps HostAPIRouteDeps) host_api.Handler {
+	return func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+		var p struct {
+			SpaceID            string                  `json:"spaceId"`
+			CharacterID        string                  `json:"characterId"`
+			Title              string                  `json:"title"`
+			DirectoryPath      string                  `json:"directoryPath"`
+			Workspaces         []ProjectWorkspaceInput `json:"workspaces"`
+			PrimaryWorkspaceID string                  `json:"primaryWorkspaceId"`
+			RequestID          string                  `json:"requestId"`
+		}
+		if err := json.Unmarshal(req.Input, &p); err != nil {
+			return hostRouteInputInvalid(err.Error()), nil
+		}
+		p.SpaceID = strings.TrimSpace(p.SpaceID)
+		p.CharacterID = strings.TrimSpace(p.CharacterID)
+		p.Title = strings.TrimSpace(p.Title)
+		p.DirectoryPath = strings.TrimSpace(p.DirectoryPath)
+		p.PrimaryWorkspaceID = strings.TrimSpace(p.PrimaryWorkspaceID)
+		p.RequestID = strings.TrimSpace(p.RequestID)
+		if len(p.Title) > 1024 || len(p.PrimaryWorkspaceID) > 512 || len(p.RequestID) > 128 || len(p.Workspaces) > 32 {
+			return hostRouteInputInvalid("project create input is too long"), nil
+		}
+		if p.DirectoryPath != "" {
+			if len(p.DirectoryPath) > 4096 {
+				return hostRouteInputInvalid("project directoryPath is too long"), nil
+			}
+			if len(p.Workspaces) > 0 || p.PrimaryWorkspaceID != "" {
+				return hostRouteInputInvalid("project create accepts either directoryPath or explicit workspaces, not both"), nil
+			}
+		}
+		ctx, scope, rejected, ok := resolveProjectHostScope(ctx, deps, req, p.SpaceID, p.CharacterID)
+		if !ok {
+			return rejected, nil
+		}
+		if deps.ProjectCreator == nil {
+			return hostRouteUnavailable("project creator not configured"), nil
+		}
+		output, err := deps.ProjectCreator.CreateProject(ctx, ProjectCreateRequest{
+			SpaceID:            scope.SpaceID,
+			CharacterID:        scope.CharacterID,
+			Title:              p.Title,
+			DirectoryPath:      p.DirectoryPath,
+			Workspaces:         p.Workspaces,
+			PrimaryWorkspaceID: p.PrimaryWorkspaceID,
+			RequestID:          p.RequestID,
+		})
+		if err != nil {
+			return hostRouteInternal(err), nil
+		}
+		return hostRouteOutput(output, `{}`), nil
+	}
+}
+
+func projectUpdateRouteHandler(deps HostAPIRouteDeps) host_api.Handler {
+	return func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+		var p struct {
+			SpaceID            string                  `json:"spaceId"`
+			CharacterID        string                  `json:"characterId"`
+			ProjectID          string                  `json:"projectId"`
+			Title              *string                 `json:"title"`
+			Pinned             *bool                   `json:"pinned"`
+			Hidden             *bool                   `json:"hidden"`
+			Workspaces         []ProjectWorkspaceInput `json:"workspaces"`
+			PrimaryWorkspaceID *string                 `json:"primaryWorkspaceId"`
+			RequestID          string                  `json:"requestId"`
+		}
+		if err := json.Unmarshal(req.Input, &p); err != nil {
+			return hostRouteInputInvalid(err.Error()), nil
+		}
+		p.SpaceID = strings.TrimSpace(p.SpaceID)
+		p.CharacterID = strings.TrimSpace(p.CharacterID)
+		p.ProjectID = strings.TrimSpace(p.ProjectID)
+		p.RequestID = strings.TrimSpace(p.RequestID)
+		if p.ProjectID == "" || len(p.ProjectID) > 512 || len(p.RequestID) > 128 {
+			return hostRouteInputInvalid("projectId is required and project update input is too long"), nil
+		}
+		if p.Title == nil && p.Pinned == nil && p.Hidden == nil && p.Workspaces == nil && p.PrimaryWorkspaceID == nil {
+			return hostRouteInputInvalid("project update requires at least one of title, pinned, hidden, workspaces or primaryWorkspaceId"), nil
+		}
+		if p.Title != nil {
+			trimmed := strings.TrimSpace(*p.Title)
+			if len(trimmed) > 1024 {
+				return hostRouteInputInvalid("project title is too long"), nil
+			}
+			p.Title = &trimmed
+		}
+		if p.PrimaryWorkspaceID != nil {
+			trimmed := strings.TrimSpace(*p.PrimaryWorkspaceID)
+			if len(trimmed) > 512 {
+				return hostRouteInputInvalid("project primaryWorkspaceId is too long"), nil
+			}
+			p.PrimaryWorkspaceID = &trimmed
+		}
+		if len(p.Workspaces) > 32 {
+			return hostRouteInputInvalid("project workspaces are too many"), nil
+		}
+		ctx, _, rejected, ok := resolveProjectHostScope(ctx, deps, req, p.SpaceID, p.CharacterID)
+		if !ok {
+			return rejected, nil
+		}
+		if deps.ProjectUpdater == nil {
+			return hostRouteUnavailable("project updater not configured"), nil
+		}
+		output, err := deps.ProjectUpdater.UpdateProject(ctx, ProjectUpdateRequest{
+			ProjectID:          p.ProjectID,
+			Title:              p.Title,
+			Pinned:             p.Pinned,
+			Hidden:             p.Hidden,
+			Workspaces:         p.Workspaces,
+			PrimaryWorkspaceID: p.PrimaryWorkspaceID,
+			RequestID:          p.RequestID,
+		})
+		if err != nil {
+			return hostRouteInternal(err), nil
+		}
+		return hostRouteOutput(output, `{}`), nil
+	}
+}
+
+func projectDeleteRouteHandler(deps HostAPIRouteDeps) host_api.Handler {
+	return func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+		var p struct {
+			SpaceID     string `json:"spaceId"`
+			CharacterID string `json:"characterId"`
+			ProjectID   string `json:"projectId"`
+			RequestID   string `json:"requestId"`
+		}
+		if err := json.Unmarshal(req.Input, &p); err != nil {
+			return hostRouteInputInvalid(err.Error()), nil
+		}
+		p.SpaceID = strings.TrimSpace(p.SpaceID)
+		p.CharacterID = strings.TrimSpace(p.CharacterID)
+		p.ProjectID = strings.TrimSpace(p.ProjectID)
+		p.RequestID = strings.TrimSpace(p.RequestID)
+		if p.ProjectID == "" || len(p.ProjectID) > 512 || len(p.RequestID) > 128 {
+			return hostRouteInputInvalid("projectId is required and project delete input is too long"), nil
+		}
+		ctx, _, rejected, ok := resolveProjectHostScope(ctx, deps, req, p.SpaceID, p.CharacterID)
+		if !ok {
+			return rejected, nil
+		}
+		if deps.ProjectDeleter == nil {
+			return hostRouteUnavailable("project deleter not configured"), nil
+		}
+		output, err := deps.ProjectDeleter.DeleteProject(ctx, ProjectDeleteRequest{ProjectID: p.ProjectID, RequestID: p.RequestID})
+		if err != nil {
+			return hostRouteInternal(err), nil
+		}
+		return hostRouteOutput(output, `{"deleted":true}`), nil
+	}
+}
+
+func conversationArchiveRouteHandler(deps HostAPIRouteDeps) host_api.Handler {
+	return func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+		var p struct {
+			SpaceID        string `json:"spaceId"`
+			CharacterID    string `json:"characterId"`
+			ConversationID string `json:"conversationId"`
+			Archived       *bool  `json:"archived"`
+			StopActivity   bool   `json:"stopActivity"`
+			RequestID      string `json:"requestId"`
+		}
+		if err := json.Unmarshal(req.Input, &p); err != nil {
+			return hostRouteInputInvalid(err.Error()), nil
+		}
+		p.SpaceID = strings.TrimSpace(p.SpaceID)
+		p.CharacterID = strings.TrimSpace(p.CharacterID)
+		p.ConversationID = strings.TrimSpace(p.ConversationID)
+		p.RequestID = strings.TrimSpace(p.RequestID)
+		if p.Archived == nil || p.ConversationID == "" || len(p.ConversationID) > 512 || len(p.RequestID) > 128 {
+			return hostRouteInputInvalid("conversationId and archived are required and conversation archive input is too long"), nil
+		}
+		ctx = resolveHostAPIScope(ctx, deps.ScopeSnapshotStore, req.ScopeSnapshotID)
+		scope := GetHostAPIScope(ctx)
+		targetScope, targetErr := resolveConversationTargetScope(ctx, deps, req, p.ConversationID)
+		if targetErr != nil {
+			return hostRouteScopeDenied(targetErr.Error()), nil
+		}
+		scope = targetScope
+		if req.SpaceID != "" {
+			if scope.SpaceID != "" && scope.SpaceID != req.SpaceID {
+				return hostRouteScopeDenied("spaceId does not match current scope"), nil
+			}
+			scope.SpaceID = req.SpaceID
+		}
+		if req.CharacterID != "" {
+			if scope.CharacterID != "" && scope.CharacterID != req.CharacterID {
+				return hostRouteScopeDenied("characterId does not match current scope"), nil
+			}
+			scope.CharacterID = req.CharacterID
+		}
+		if p.SpaceID != "" && scope.SpaceID != "" && p.SpaceID != scope.SpaceID {
+			return hostRouteScopeDenied("spaceId does not match current scope"), nil
+		}
+		if p.CharacterID != "" && scope.CharacterID != "" && p.CharacterID != scope.CharacterID {
+			return hostRouteScopeDenied("characterId does not match current scope"), nil
+		}
+		if scope.SpaceID == "" {
+			scope.SpaceID = p.SpaceID
+		}
+		if scope.CharacterID == "" {
+			scope.CharacterID = p.CharacterID
+		}
+		if scope.SpaceID == "" || scope.CharacterID == "" {
+			return hostRouteInputInvalid("spaceId and characterId are required"), nil
+		}
+		scope.ConversationID = p.ConversationID
+		ctx = WithHostAPIScope(ctx, scope)
+		if deps.ConversationArchiver == nil {
+			return hostRouteUnavailable("conversation archiver not configured"), nil
+		}
+		if p.StopActivity && *p.Archived {
+			if deps.ConversationTurnController == nil {
+				return hostRouteUnavailable("conversation turn controller not configured"), nil
+			}
+			if _, err := deps.ConversationTurnController.InterruptConversationTurn(ctx, ConversationTurnInterruptRequest{SpaceID: scope.SpaceID, CharacterID: scope.CharacterID, ConversationID: p.ConversationID}); err != nil && !errors.Is(err, ErrConversationTurnUnavailable) {
+				return hostRouteInternal(err), nil
+			}
+		}
+		output, err := deps.ConversationArchiver.ArchiveConversation(ctx, ConversationArchiveRequest{
+			SpaceID:        scope.SpaceID,
+			CharacterID:    scope.CharacterID,
+			ConversationID: p.ConversationID,
+			Archived:       *p.Archived,
+			RequestID:      p.RequestID,
+		})
+		if err != nil {
+			return hostRouteInternal(err), nil
+		}
+		archivedJSON := "false"
+		if *p.Archived {
+			archivedJSON = "true"
+		}
+		return hostRouteOutput(output, `{"conversationId":"`+p.ConversationID+`","archived":`+archivedJSON+`}`), nil
+	}
+}
+
+func conversationForkRouteHandler(deps HostAPIRouteDeps) host_api.Handler {
+	return func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+		var p struct {
+			SpaceID          string `json:"spaceId"`
+			CharacterID      string `json:"characterId"`
+			ConversationID   string `json:"conversationId"`
+			BoundarySequence int64  `json:"boundarySequence"`
+			Title            string `json:"title"`
+			RequestID        string `json:"requestId"`
+		}
+		if err := json.Unmarshal(req.Input, &p); err != nil {
+			return hostRouteInputInvalid(err.Error()), nil
+		}
+		p.SpaceID = strings.TrimSpace(p.SpaceID)
+		p.CharacterID = strings.TrimSpace(p.CharacterID)
+		p.ConversationID = strings.TrimSpace(p.ConversationID)
+		p.RequestID = strings.TrimSpace(p.RequestID)
+		p.Title = strings.TrimSpace(p.Title)
+		if p.ConversationID == "" || len(p.ConversationID) > 512 || len(p.Title) > 200 || p.BoundarySequence < 0 {
+			return hostRouteInputInvalid("conversationId is required and fork input is too long"), nil
+		}
+		ctx = resolveHostAPIScope(ctx, deps.ScopeSnapshotStore, req.ScopeSnapshotID)
+		scope := GetHostAPIScope(ctx)
+		targetScope, targetErr := resolveConversationTargetScope(ctx, deps, req, p.ConversationID)
+		if targetErr != nil {
+			return hostRouteScopeDenied(targetErr.Error()), nil
+		}
+		scope = targetScope
+		if p.SpaceID != "" && scope.SpaceID != "" && p.SpaceID != scope.SpaceID {
+			return hostRouteScopeDenied("spaceId does not match current scope"), nil
+		}
+		if p.CharacterID != "" && scope.CharacterID != "" && p.CharacterID != scope.CharacterID {
+			return hostRouteScopeDenied("characterId does not match current scope"), nil
+		}
+		if scope.SpaceID == "" || scope.CharacterID == "" {
+			return hostRouteInputInvalid("spaceId and characterId are required"), nil
+		}
+		scope.ConversationID = p.ConversationID
+		ctx = WithHostAPIScope(ctx, scope)
+		if deps.ConversationForker == nil {
+			return hostRouteUnavailable("conversation forker not configured"), nil
+		}
+		output, err := deps.ConversationForker.ForkConversation(ctx, ConversationForkRequest{
+			SpaceID:          scope.SpaceID,
+			CharacterID:      scope.CharacterID,
+			ConversationID:   p.ConversationID,
+			BoundarySequence: p.BoundarySequence,
+			Title:            p.Title,
+			RequestID:        p.RequestID,
+		})
+		if err != nil {
+			return hostRouteInternal(err), nil
+		}
+		return host_api.CallResult{Status: host_api.StatusSuccess, Output: output}, nil
+	}
+}
+
+func modelDefaultsRouteHandler(deps HostAPIRouteDeps) host_api.Handler {
+	return func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+		if deps.ModelDefaults == nil {
+			return hostRouteUnavailable("model defaults provider not configured"), nil
+		}
+		defaults, err := deps.ModelDefaults.ModelDefaults(ctx)
+		if err != nil {
+			return hostRouteInternal(err), nil
+		}
+		output, err := json.Marshal(defaults)
+		if err != nil {
+			return hostRouteInternal(err), nil
+		}
+		return host_api.CallResult{Status: host_api.StatusSuccess, Output: output}, nil
+	}
+}
+
+func skillListRouteHandler(deps HostAPIRouteDeps) host_api.Handler {
+	return func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+		var p struct {
+			Query   string `json:"query"`
+			Enabled *bool  `json:"enabled"`
+			Limit   int    `json:"limit"`
+		}
+		if len(req.Input) > 0 {
+			if err := json.Unmarshal(req.Input, &p); err != nil {
+				return hostRouteInputInvalid(err.Error()), nil
+			}
+		}
+		if deps.SkillCatalog == nil {
+			return hostRouteUnavailable("skill catalog not configured"), nil
+		}
+		ctx = resolveHostAPIScope(ctx, deps.ScopeSnapshotStore, req.ScopeSnapshotID)
+		scope := GetHostAPIScope(ctx)
+		limit := p.Limit
+		if limit <= 0 {
+			limit = 50
+		}
+		if limit > 200 {
+			limit = 200
+		}
+		definitions := deps.SkillCatalog.List(agent_skill.CatalogFilter{
+			Enabled: p.Enabled,
+			Query:   strings.TrimSpace(p.Query),
+			SpaceID: scope.SpaceID,
+		})
+		items := make([]map[string]any, 0, len(definitions))
+		for _, definition := range definitions {
+			items = append(items, map[string]any{
+				"skillId":        definition.ID,
+				"id":             definition.ID,
+				"name":           definition.Name,
+				"displayName":    definition.DisplayName,
+				"description":    definition.Description,
+				"version":        definition.Version,
+				"extensionId":    definition.ExtensionID,
+				"contributionId": definition.ContributionID,
+				"enabled":        definition.Enabled,
+			})
+			if len(items) >= limit {
+				break
+			}
+		}
+		output, err := json.Marshal(map[string]any{"items": items})
+		if err != nil {
+			return hostRouteInternal(err), nil
+		}
+		return host_api.CallResult{Status: host_api.StatusSuccess, Output: output}, nil
+	}
+}
+
+func conversationPinRouteHandler(deps HostAPIRouteDeps) host_api.Handler {
+	return func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+		var p struct {
+			SpaceID        string `json:"spaceId"`
+			CharacterID    string `json:"characterId"`
+			ConversationID string `json:"conversationId"`
+			Pinned         *bool  `json:"pinned"`
+			RequestID      string `json:"requestId"`
+		}
+		if err := json.Unmarshal(req.Input, &p); err != nil {
+			return hostRouteInputInvalid(err.Error()), nil
+		}
+		p.SpaceID = strings.TrimSpace(p.SpaceID)
+		p.CharacterID = strings.TrimSpace(p.CharacterID)
+		p.ConversationID = strings.TrimSpace(p.ConversationID)
+		p.RequestID = strings.TrimSpace(p.RequestID)
+		if p.Pinned == nil || p.ConversationID == "" || len(p.ConversationID) > 512 || len(p.RequestID) > 128 {
+			return hostRouteInputInvalid("conversationId and pinned are required and conversation pin input is too long"), nil
+		}
+		ctx = resolveHostAPIScope(ctx, deps.ScopeSnapshotStore, req.ScopeSnapshotID)
+		scope := GetHostAPIScope(ctx)
+		targetScope, targetErr := resolveConversationTargetScope(ctx, deps, req, p.ConversationID)
+		if targetErr != nil {
+			return hostRouteScopeDenied(targetErr.Error()), nil
+		}
+		scope = targetScope
+		if req.SpaceID != "" {
+			if scope.SpaceID != "" && scope.SpaceID != req.SpaceID {
+				return hostRouteScopeDenied("spaceId does not match current scope"), nil
+			}
+			scope.SpaceID = req.SpaceID
+		}
+		if req.CharacterID != "" {
+			if scope.CharacterID != "" && scope.CharacterID != req.CharacterID {
+				return hostRouteScopeDenied("characterId does not match current scope"), nil
+			}
+			scope.CharacterID = req.CharacterID
+		}
+		if p.SpaceID != "" && scope.SpaceID != "" && p.SpaceID != scope.SpaceID {
+			return hostRouteScopeDenied("spaceId does not match current scope"), nil
+		}
+		if p.CharacterID != "" && scope.CharacterID != "" && p.CharacterID != scope.CharacterID {
+			return hostRouteScopeDenied("characterId does not match current scope"), nil
+		}
+		if scope.SpaceID == "" {
+			scope.SpaceID = p.SpaceID
+		}
+		if scope.CharacterID == "" {
+			scope.CharacterID = p.CharacterID
+		}
+		if scope.SpaceID == "" || scope.CharacterID == "" {
+			return hostRouteInputInvalid("spaceId and characterId are required"), nil
+		}
+		scope.ConversationID = p.ConversationID
+		ctx = WithHostAPIScope(ctx, scope)
+		if deps.ConversationPinner == nil {
+			return hostRouteUnavailable("conversation pinner not configured"), nil
+		}
+		output, err := deps.ConversationPinner.PinConversation(ctx, ConversationPinRequest{
+			SpaceID:        scope.SpaceID,
+			CharacterID:    scope.CharacterID,
+			ConversationID: p.ConversationID,
+			Pinned:         *p.Pinned,
+			RequestID:      p.RequestID,
+		})
+		if err != nil {
+			return hostRouteInternal(err), nil
+		}
+		pinnedJSON := "false"
+		if *p.Pinned {
+			pinnedJSON = "true"
+		}
+		return hostRouteOutput(output, `{"conversationId":"`+p.ConversationID+`","pinned":`+pinnedJSON+`}`), nil
+	}
+}
+
+func directoryListRouteHandler(deps HostAPIRouteDeps) host_api.Handler {
+	return func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+		var p struct {
+			Path  string `json:"path"`
+			Limit int    `json:"limit"`
+		}
+		if len(req.Input) > 0 {
+			if err := json.Unmarshal(req.Input, &p); err != nil {
+				return hostRouteInputInvalid(err.Error()), nil
+			}
+		}
+		path, err := resolveHostDirectoryPath(p.Path)
+		if err != nil {
+			return hostRouteInputInvalid(err.Error()), nil
+		}
+		limit := p.Limit
+		if limit <= 0 {
+			limit = hostDirectoryDefaultLimit
+		}
+		if limit > hostDirectoryMaxLimit {
+			limit = hostDirectoryMaxLimit
+		}
+		if deps.DirectoryLister == nil {
+			return hostRouteUnavailable("directory lister not configured"), nil
+		}
+		result, err := deps.DirectoryLister.ListDirectory(ctx, DirectoryListRequest{Path: path, Limit: limit})
+		if err != nil {
+			return hostRouteInternal(err), nil
+		}
+		result.Path = path
+		output, err := json.Marshal(result)
+		if err != nil {
+			return hostRouteInternal(err), nil
+		}
+		return host_api.CallResult{Status: host_api.StatusSuccess, Output: output}, nil
+	}
+}
+
+func directoryCreateRouteHandler(deps HostAPIRouteDeps) host_api.Handler {
+	return func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+		var p struct {
+			Path string `json:"path"`
+			Name string `json:"name"`
+		}
+		if err := json.Unmarshal(req.Input, &p); err != nil {
+			return hostRouteInputInvalid(err.Error()), nil
+		}
+		if strings.TrimSpace(p.Path) == "" {
+			return hostRouteInputInvalid("directory path is required"), nil
+		}
+		path, err := resolveHostDirectoryPath(p.Path)
+		if err != nil {
+			return hostRouteInputInvalid(err.Error()), nil
+		}
+		name := strings.TrimSpace(p.Name)
+		if err := validateHostDirectoryName(name); err != nil {
+			return hostRouteInputInvalid(err.Error()), nil
+		}
+		if deps.DirectoryCreator == nil {
+			return hostRouteUnavailable("directory creator not configured"), nil
+		}
+		created, err := deps.DirectoryCreator.CreateDirectory(ctx, DirectoryCreateRequest{Path: path, Name: name})
+		if err != nil {
+			return hostRouteInternal(err), nil
+		}
+		output, err := json.Marshal(map[string]string{"path": created})
+		if err != nil {
+			return hostRouteInternal(err), nil
+		}
+		return host_api.CallResult{Status: host_api.StatusSuccess, Output: output}, nil
+	}
+}
+
+func resolveHostDirectoryPath(path string) (string, error) {
+	trimmed := strings.TrimSpace(path)
+	if trimmed == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", err
+		}
+		trimmed = home
+	}
+	if !filepath.IsAbs(trimmed) {
+		return "", fmt.Errorf("directory path must be absolute: %s", trimmed)
+	}
+	for _, segment := range strings.FieldsFunc(trimmed, func(r rune) bool { return r == '/' || r == '\\' }) {
+		if segment == ".." {
+			return "", fmt.Errorf("directory path must not contain parent traversal: %s", trimmed)
+		}
+	}
+	return filepath.Clean(trimmed), nil
+}
+
+func validateHostDirectoryName(name string) error {
+	if name == "" {
+		return nil
+	}
+	if name == "." || name == ".." {
+		return fmt.Errorf("directory name must not be a traversal segment: %s", name)
+	}
+	if strings.ContainsAny(name, `/\`) {
+		return fmt.Errorf("directory name must not contain path separators: %s", name)
+	}
+	return nil
+}
+
+func conversationTurnInterruptRouteHandler(deps HostAPIRouteDeps) host_api.Handler {
+	return func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+		var p struct {
+			SpaceID        string `json:"spaceId"`
+			CharacterID    string `json:"characterId"`
+			ConversationID string `json:"conversationId"`
+			TurnID         string `json:"turnId"`
+		}
+		if err := json.Unmarshal(req.Input, &p); err != nil {
+			return host_api.CallResult{
+				Status: host_api.StatusFailed,
+				Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: err.Error()},
+			}, nil
+		}
+		p.SpaceID = strings.TrimSpace(p.SpaceID)
+		p.CharacterID = strings.TrimSpace(p.CharacterID)
+		p.ConversationID = strings.TrimSpace(p.ConversationID)
+		p.TurnID = strings.TrimSpace(p.TurnID)
+		if len(p.ConversationID) > 512 || len(p.TurnID) > 512 {
+			return host_api.CallResult{
+				Status: host_api.StatusFailed,
+				Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: "conversationId or turnId is too long"},
+			}, nil
+		}
+		ctx = resolveHostAPIScope(ctx, deps.ScopeSnapshotStore, req.ScopeSnapshotID)
+		scope := GetHostAPIScope(ctx)
+		targetScope, targetErr := resolveConversationTargetScope(ctx, deps, req, p.ConversationID)
+		if targetErr != nil {
+			return host_api.CallResult{
+				Status: host_api.StatusRejected,
+				Error:  &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: targetErr.Error()},
+			}, nil
+		}
+		scope = targetScope
+		if req.SpaceID != "" {
+			if scope.SpaceID != "" && scope.SpaceID != req.SpaceID {
+				return host_api.CallResult{
+					Status: host_api.StatusRejected,
+					Error:  &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "spaceId does not match current scope"},
+				}, nil
+			}
+			scope.SpaceID = req.SpaceID
+		}
+		if req.CharacterID != "" {
+			if scope.CharacterID != "" && scope.CharacterID != req.CharacterID {
+				return host_api.CallResult{
+					Status: host_api.StatusRejected,
+					Error:  &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "characterId does not match current scope"},
+				}, nil
+			}
+			scope.CharacterID = req.CharacterID
+		}
+		if req.ConversationID != "" && req.TargetScopeSnapshotID == "" {
+			if scope.ConversationID != "" && scope.ConversationID != req.ConversationID {
+				return host_api.CallResult{
+					Status: host_api.StatusRejected,
+					Error:  &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "conversationId does not match current scope"},
+				}, nil
+			}
+			scope.ConversationID = req.ConversationID
+		}
+		ctx = WithHostAPIScope(ctx, scope)
+		if scope.SpaceID != "" {
+			if p.SpaceID != "" && p.SpaceID != scope.SpaceID {
+				return host_api.CallResult{
+					Status: host_api.StatusRejected,
+					Error:  &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "spaceId does not match current scope"},
+				}, nil
+			}
+			p.SpaceID = scope.SpaceID
+		}
+		if scope.CharacterID != "" {
+			if p.CharacterID != "" && p.CharacterID != scope.CharacterID {
+				return host_api.CallResult{
+					Status: host_api.StatusRejected,
+					Error:  &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "characterId does not match current scope"},
+				}, nil
+			}
+			p.CharacterID = scope.CharacterID
+		}
+		if scope.ConversationID != "" {
+			if p.ConversationID != "" && p.ConversationID != scope.ConversationID {
+				return host_api.CallResult{
+					Status: host_api.StatusRejected,
+					Error:  &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "conversationId does not match current scope"},
+				}, nil
+			}
+			p.ConversationID = scope.ConversationID
+		}
+		if p.SpaceID == "" || p.CharacterID == "" || p.ConversationID == "" {
+			return host_api.CallResult{
+				Status: host_api.StatusFailed,
+				Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: "spaceId, characterId and conversationId are required"},
+			}, nil
+		}
+		if deps.ConversationTurnController == nil {
+			return host_api.CallResult{
+				Status: host_api.StatusFailed,
+				Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "conversation turn controller not configured"},
+			}, nil
+		}
+		result, err := deps.ConversationTurnController.InterruptConversationTurn(ctx, ConversationTurnInterruptRequest{
+			SpaceID:        p.SpaceID,
+			CharacterID:    p.CharacterID,
+			ConversationID: p.ConversationID,
+			TurnID:         p.TurnID,
+		})
+		if err != nil {
+			status, code := host_api.StatusFailed, host_api.ErrorCodeInternal
+			if errors.Is(err, ErrConversationTurnUnavailable) {
+				status, code = host_api.StatusRejected, host_api.ErrorCodeStateConflict
+			}
+			return host_api.CallResult{
+				Status: status,
+				Error:  &host_api.Error{Code: code, Message: err.Error()},
+			}, nil
+		}
+		if !result.Interrupted {
+			return host_api.CallResult{
+				Status: host_api.StatusRejected,
+				Error:  &host_api.Error{Code: host_api.ErrorCodeStateConflict, Message: ErrConversationTurnUnavailable.Error()},
+			}, nil
+		}
+		output, err := json.Marshal(result)
+		if err != nil {
+			return host_api.CallResult{
+				Status: host_api.StatusFailed,
+				Error:  &host_api.Error{Code: host_api.ErrorCodeOutputInvalid, Message: err.Error()},
+			}, nil
+		}
+		return host_api.CallResult{Status: host_api.StatusSuccess, Output: output}, nil
+	}
+}
+
+func conversationTurnAwaitRouteHandler(deps HostAPIRouteDeps) host_api.Handler {
+	return func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+		var p struct {
+			SpaceID        string `json:"spaceId"`
+			CharacterID    string `json:"characterId"`
+			ConversationID string `json:"conversationId"`
+			TurnID         string `json:"turnId"`
+		}
+		if err := json.Unmarshal(req.Input, &p); err != nil {
+			return host_api.CallResult{
+				Status: host_api.StatusFailed,
+				Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: err.Error()},
+			}, nil
+		}
+		p.SpaceID = strings.TrimSpace(p.SpaceID)
+		p.CharacterID = strings.TrimSpace(p.CharacterID)
+		p.ConversationID = strings.TrimSpace(p.ConversationID)
+		p.TurnID = strings.TrimSpace(p.TurnID)
+		if len(p.ConversationID) > 512 || len(p.TurnID) > 512 {
+			return host_api.CallResult{
+				Status: host_api.StatusFailed,
+				Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: "conversationId or turnId is too long"},
+			}, nil
+		}
+		ctx = resolveHostAPIScope(ctx, deps.ScopeSnapshotStore, req.ScopeSnapshotID)
+		scope := GetHostAPIScope(ctx)
+		targetScope, targetErr := resolveConversationTargetScope(ctx, deps, req, p.ConversationID)
+		if targetErr != nil {
+			return host_api.CallResult{
+				Status: host_api.StatusRejected,
+				Error:  &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: targetErr.Error()},
+			}, nil
+		}
+		scope = targetScope
+		if req.SpaceID != "" {
+			if scope.SpaceID != "" && scope.SpaceID != req.SpaceID {
+				return host_api.CallResult{
+					Status: host_api.StatusRejected,
+					Error:  &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "spaceId does not match current scope"},
+				}, nil
+			}
+			scope.SpaceID = req.SpaceID
+		}
+		if req.CharacterID != "" {
+			if scope.CharacterID != "" && scope.CharacterID != req.CharacterID {
+				return host_api.CallResult{
+					Status: host_api.StatusRejected,
+					Error:  &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "characterId does not match current scope"},
+				}, nil
+			}
+			scope.CharacterID = req.CharacterID
+		}
+		if req.ConversationID != "" && req.TargetScopeSnapshotID == "" {
+			if scope.ConversationID != "" && scope.ConversationID != req.ConversationID {
+				return host_api.CallResult{
+					Status: host_api.StatusRejected,
+					Error:  &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "conversationId does not match current scope"},
+				}, nil
+			}
+			scope.ConversationID = req.ConversationID
+		}
+		ctx = WithHostAPIScope(ctx, scope)
+		if scope.SpaceID != "" {
+			if p.SpaceID != "" && p.SpaceID != scope.SpaceID {
+				return host_api.CallResult{
+					Status: host_api.StatusRejected,
+					Error:  &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "spaceId does not match current scope"},
+				}, nil
+			}
+			p.SpaceID = scope.SpaceID
+		}
+		if scope.CharacterID != "" {
+			if p.CharacterID != "" && p.CharacterID != scope.CharacterID {
+				return host_api.CallResult{
+					Status: host_api.StatusRejected,
+					Error:  &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "characterId does not match current scope"},
+				}, nil
+			}
+			p.CharacterID = scope.CharacterID
+		}
+		if scope.ConversationID != "" {
+			if p.ConversationID != "" && p.ConversationID != scope.ConversationID {
+				return host_api.CallResult{
+					Status: host_api.StatusRejected,
+					Error:  &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "conversationId does not match current scope"},
+				}, nil
+			}
+			p.ConversationID = scope.ConversationID
+		}
+		if p.SpaceID == "" || p.CharacterID == "" || p.ConversationID == "" {
+			return host_api.CallResult{
+				Status: host_api.StatusFailed,
+				Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: "spaceId, characterId and conversationId are required"},
+			}, nil
+		}
+		if deps.ConversationTurnController == nil {
+			return host_api.CallResult{
+				Status: host_api.StatusFailed,
+				Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "conversation turn controller not configured"},
+			}, nil
+		}
+		result, err := deps.ConversationTurnController.AwaitConversationTurnIdle(ctx, ConversationTurnInterruptRequest{
+			SpaceID:        p.SpaceID,
+			CharacterID:    p.CharacterID,
+			ConversationID: p.ConversationID,
+			TurnID:         p.TurnID,
+		})
+		if err != nil {
+			status, code := host_api.StatusFailed, host_api.ErrorCodeInternal
+			if errors.Is(err, ErrConversationTurnUnavailable) {
+				status, code = host_api.StatusRejected, host_api.ErrorCodeStateConflict
+			}
+			return host_api.CallResult{
+				Status: status,
+				Error:  &host_api.Error{Code: code, Message: err.Error()},
+			}, nil
+		}
+		if !result.Idle {
+			return host_api.CallResult{
+				Status: host_api.StatusRejected,
+				Error:  &host_api.Error{Code: host_api.ErrorCodeStateConflict, Message: "conversation did not become idle"},
+			}, nil
+		}
+		output, err := json.Marshal(result)
+		if err != nil {
+			return host_api.CallResult{
+				Status: host_api.StatusFailed,
+				Error:  &host_api.Error{Code: host_api.ErrorCodeOutputInvalid, Message: err.Error()},
+			}, nil
+		}
 		return host_api.CallResult{Status: host_api.StatusSuccess, Output: output}, nil
 	}
 }
@@ -785,6 +2130,14 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 	handleTable := newResourceHandleTable()
 	conversationMessageHandler := conversationMessageRouteHandler(deps)
 	conversationMessageAppendHandler := conversationMessageAppendRouteHandler(deps)
+	conversationCreateHandler := conversationCreateRouteHandler(deps)
+	conversationTurnInterruptHandler := conversationTurnInterruptRouteHandler(deps)
+	conversationTurnAwaitHandler := conversationTurnAwaitRouteHandler(deps)
+	conversationArchiveHandler := conversationArchiveRouteHandler(deps)
+	projectListHandler := projectListRouteHandler(deps)
+	projectCreateHandler := projectCreateRouteHandler(deps)
+	projectUpdateHandler := projectUpdateRouteHandler(deps)
+	projectDeleteHandler := projectDeleteRouteHandler(deps)
 	vectorUpsertHandler := vectorUpsertRouteHandler(deps)
 	vectorSearchHandler := vectorSearchRouteHandler(deps)
 	vectorDeleteHandler := vectorDeleteRouteHandler(deps)
@@ -1474,6 +2827,100 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 			},
 		},
 		{
+			method:          host_api.MethodConversationList,
+			riskLevel:       host_api.RiskLow,
+			sideEffectLevel: host_api.SideEffectReadOnly,
+			timeout:         10 * time.Second,
+			handler: func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+				var p struct {
+					Limit    int  `json:"limit"`
+					Offset   int  `json:"offset"`
+					Archived bool `json:"archived"`
+				}
+				if len(req.Input) > 0 {
+					if err := json.Unmarshal(req.Input, &p); err != nil {
+						return host_api.CallResult{
+							Status: host_api.StatusFailed,
+							Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: err.Error()},
+						}, nil
+					}
+				}
+				if deps.ConversationLister == nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "conversation lister not configured"},
+					}, nil
+				}
+				if p.Limit <= 0 {
+					p.Limit = 50
+				}
+				if p.Limit > 128 {
+					p.Limit = 128
+				}
+				if p.Offset < 0 {
+					p.Offset = 0
+				}
+				ctx = resolveHostAPIScope(ctx, deps.ScopeSnapshotStore, req.ScopeSnapshotID)
+				result, err := deps.ConversationLister.ListConversations(ctx, p.Limit, p.Offset, p.Archived)
+				if err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()},
+					}, nil
+				}
+				output, err := json.Marshal(result)
+				if err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()},
+					}, nil
+				}
+				return host_api.CallResult{Status: host_api.StatusSuccess, Output: output}, nil
+			},
+		},
+		{
+			method:          host_api.MethodConversationScope,
+			riskLevel:       host_api.RiskLow,
+			sideEffectLevel: host_api.SideEffectReadOnly,
+			timeout:         5 * time.Second,
+			handler: func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+				var p struct {
+					ConversationID string `json:"conversationId"`
+				}
+				if err := json.Unmarshal(req.Input, &p); err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: err.Error()},
+					}, nil
+				}
+				conversationID := strings.TrimSpace(p.ConversationID)
+				if conversationID == "" {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: "conversationId is required"},
+					}, nil
+				}
+				scopeSnapshotID, err := createConversationTargetSnapshot(ctx, deps, req, conversationID)
+				if err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()},
+					}, nil
+				}
+				output, err := json.Marshal(map[string]any{
+					"conversationId":  conversationID,
+					"scopeSnapshotId": scopeSnapshotID,
+				})
+				if err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()},
+					}, nil
+				}
+				return host_api.CallResult{Status: host_api.StatusSuccess, Output: output}, nil
+			},
+		},
+		{
 			method:          host_api.MethodConversationRead,
 			riskLevel:       host_api.RiskLow,
 			sideEffectLevel: host_api.SideEffectReadOnly,
@@ -1500,6 +2947,14 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 					p.Limit = 50
 				}
 				ctx = resolveHostAPIScope(ctx, deps.ScopeSnapshotStore, req.ScopeSnapshotID)
+				targetScope, targetErr := resolveConversationTargetScope(ctx, deps, req, p.ConversationID)
+				if targetErr != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusRejected,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: targetErr.Error()},
+					}, nil
+				}
+				ctx = WithHostAPIScope(ctx, targetScope)
 				msgs, hasMore, err := deps.ConversationReader.ReadConversation(ctx, p.ConversationID, p.Limit, p.Offset)
 				if err != nil {
 					return host_api.CallResult{
@@ -1515,6 +2970,59 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 					Status: host_api.StatusSuccess,
 					Output: output,
 				}, nil
+			},
+		},
+		{
+			method:          host_api.MethodConversationSearch,
+			riskLevel:       host_api.RiskLow,
+			sideEffectLevel: host_api.SideEffectReadOnly,
+			timeout:         5 * time.Second,
+			handler: func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+				var p struct {
+					Query string `json:"query"`
+					Limit int    `json:"limit"`
+				}
+				if err := json.Unmarshal(req.Input, &p); err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: err.Error()},
+					}, nil
+				}
+				if deps.ConversationSearcher == nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "conversation searcher not configured"},
+					}, nil
+				}
+				p.Query = strings.TrimSpace(p.Query)
+				if p.Query == "" {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: "conversation search query is required"},
+					}, nil
+				}
+				if p.Limit <= 0 || p.Limit > 20 {
+					p.Limit = 20
+				}
+				ctx = resolveHostAPIScope(ctx, deps.ScopeSnapshotStore, req.ScopeSnapshotID)
+				items, hasMore, err := deps.ConversationSearcher.SearchConversations(ctx, p.Query, p.Limit)
+				if err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()},
+					}, nil
+				}
+				output, err := json.Marshal(map[string]any{
+					"items":   items,
+					"hasMore": hasMore,
+				})
+				if err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()},
+					}, nil
+				}
+				return host_api.CallResult{Status: host_api.StatusSuccess, Output: output}, nil
 			},
 		},
 		{
@@ -1749,6 +3257,128 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 				if def.ContributionID == "" {
 					def.ContributionID = fmt.Sprintf("sched-contrib-%s", uuid.NewString())
 				}
+				if def.Target.Type == schedule.TargetTypeSessionPrompt {
+					var targetMetadata struct {
+						TargetKind        string `json:"dshTargetKind"`
+						ReservedSessionID string `json:"dshReservedSessionId"`
+						ProjectID         string `json:"dshProjectId"`
+					}
+					_ = json.Unmarshal(def.Target.InputTemplate, &targetMetadata)
+					targetKind := strings.TrimSpace(targetMetadata.TargetKind)
+					reservedSessionID := strings.TrimSpace(targetMetadata.ReservedSessionID)
+					if targetKind == "" {
+						targetKind = "session"
+					}
+					if targetKind != "session" && targetKind != "new_once" && targetKind != "new" {
+						return host_api.CallResult{
+							Status: host_api.StatusFailed,
+							Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: fmt.Sprintf("unsupported session prompt target kind %q", targetKind)},
+						}, nil
+					}
+					if deps.ScopeSnapshotStore == nil || req.ScopeSnapshotID == "" {
+						return host_api.CallResult{
+							Status: host_api.StatusFailed,
+							Error:  &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "session prompt schedule requires an owner scope snapshot"},
+						}, nil
+					}
+					snapshot, snapshotErr := deps.ScopeSnapshotStore.Get(ctx, req.ScopeSnapshotID)
+					if snapshotErr != nil || snapshot == nil {
+						message := "owner scope snapshot not found"
+						if snapshotErr != nil {
+							message = snapshotErr.Error()
+						}
+						return host_api.CallResult{
+							Status: host_api.StatusFailed,
+							Error:  &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: message},
+						}, nil
+					}
+					if snapshot.SpaceID == "" || snapshot.CharacterID == "" {
+						return host_api.CallResult{
+							Status: host_api.StatusFailed,
+							Error:  &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "session prompt schedule requires space and character owner scope"},
+						}, nil
+					}
+					if targetKind == "new_once" && (reservedSessionID == "" || reservedSessionID != def.Target.TargetID) {
+						return host_api.CallResult{
+							Status: host_api.StatusFailed,
+							Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: "new_once schedule requires its reserved session id as targetId"},
+						}, nil
+					}
+					if targetKind == "session" && (snapshot.ConversationID == "" || snapshot.ConversationID != def.Target.TargetID) {
+						return host_api.CallResult{
+							Status: host_api.StatusFailed,
+							Error:  &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "session prompt target does not match owner conversation"},
+						}, nil
+					}
+					ownedExecutionScope := append(json.RawMessage(nil), snapshot.OwnedExecutionScope...)
+					executionSpaceID := snapshot.SpaceID
+					executionDeviceID := req.ExecutionContext.DeviceID.String()
+					if actor, ok := auth.FromContext(ctx); ok && actor != nil {
+						if actor.SpaceID.String() != "" {
+							executionSpaceID = actor.SpaceID.String()
+						}
+						if actor.DeviceID.String() != "" {
+							executionDeviceID = actor.DeviceID.String()
+						}
+					}
+					if deps.UIExecutionIdentity != nil {
+						uiSessionID := req.ExecutionContext.RuntimeSessionID.String()
+						if uiSessionID == "" {
+							uiSessionID = req.RuntimeIdentity.InstanceID
+						}
+						if uiSpaceID, uiDeviceID := deps.UIExecutionIdentity(uiSessionID); uiSpaceID != "" && uiDeviceID != "" {
+							executionSpaceID = uiSpaceID
+							executionDeviceID = uiDeviceID
+						}
+					}
+					if (len(ownedExecutionScope) == 0 || strings.EqualFold(strings.TrimSpace(string(ownedExecutionScope)), "null")) && deps.Coordination != nil && executionSpaceID != "" && executionDeviceID != "" {
+						requestID := strings.TrimSpace(req.InvocationID)
+						if requestID == "" {
+							requestID = req.CallID
+						}
+						_, owned, finish, resolveErr := deps.Coordination.BeginWithResourceOwner(ctx, executionSpaceID, executionDeviceID, executionDeviceID, executionSpaceID, snapshot.CharacterID, requestID, executionDeviceID)
+						if resolveErr != nil {
+							return host_api.CallResult{
+								Status: host_api.StatusFailed,
+								Error:  &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: fmt.Sprintf("resolve session prompt owner execution scope: %v", resolveErr)},
+							}, nil
+						}
+						if deps.CharacterRevisionReader != nil {
+							owned.RoleRevision, resolveErr = deps.CharacterRevisionReader(ctx, snapshot.CharacterID)
+							if resolveErr != nil {
+								finish()
+								return host_api.CallResult{
+									Status: host_api.StatusFailed,
+									Error:  &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: fmt.Sprintf("resolve session prompt owner role revision: %v", resolveErr)},
+								}, nil
+							}
+						}
+						if resolveErr = coordination.ResolveMemoryScope(&owned, ""); resolveErr != nil {
+							finish()
+							return host_api.CallResult{
+								Status: host_api.StatusFailed,
+								Error:  &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: fmt.Sprintf("resolve session prompt owner memory scope: %v", resolveErr)},
+							}, nil
+						}
+						ownedExecutionScope, resolveErr = json.Marshal(owned)
+						finish()
+						if resolveErr != nil {
+							return host_api.CallResult{
+								Status: host_api.StatusFailed,
+								Error:  &host_api.Error{Code: host_api.ErrorCodeInternal, Message: fmt.Sprintf("encode session prompt owner execution scope: %v", resolveErr)},
+							}, nil
+						}
+					}
+					def.SessionPromptScope = &schedule.SessionPromptScope{
+						SpaceID:                snapshot.SpaceID,
+						CharacterID:            snapshot.CharacterID,
+						ProjectID:              strings.TrimSpace(targetMetadata.ProjectID),
+						ConversationID:         snapshot.ConversationID,
+						ReservedConversationID: reservedSessionID,
+						TargetKind:             targetKind,
+						OwnedExecutionScope:    ownedExecutionScope,
+					}
+				}
 				if err := deps.ScheduleService.InstallDefinition(ctx, &def); err != nil {
 					return host_api.CallResult{
 						Status: host_api.StatusFailed,
@@ -1770,6 +3400,160 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 			riskLevel:       host_api.RiskMedium,
 			sideEffectLevel: host_api.SideEffectWrite,
 			timeout:         5 * time.Second,
+			handler: func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+				var p struct {
+					ScheduleID        string `json:"scheduleId"`
+					ExpectedUpdatedAt string `json:"expectedUpdatedAt"`
+				}
+				if err := json.Unmarshal(req.Input, &p); err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: err.Error()},
+					}, nil
+				}
+				if deps.ScheduleService == nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "schedule service not configured"},
+					}, nil
+				}
+				scheduleDef, state, err := deps.ScheduleService.GetSchedule(ctx, p.ScheduleID)
+				if err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeResourceNotFound, Message: err.Error()},
+					}, nil
+				}
+				if scheduleDef == nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeResourceNotFound, Message: "schedule not found"},
+					}, nil
+				}
+				if scheduleDef.Target.Type == schedule.TargetTypeHostWorkload {
+					return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "业务任务须通过统一任务接口管理"}}, nil
+				}
+				if scheduleDef.ExtensionID != string(req.RuntimeIdentity.ExtensionID) {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodePermissionDenied, Message: "schedule does not belong to caller"},
+					}, nil
+				}
+				if expected := strings.TrimSpace(p.ExpectedUpdatedAt); expected != "" && (state == nil || expected != state.UpdatedAt.UTC().Format(time.RFC3339Nano)) {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeStateConflict, Message: "schedule_conflict: expectedUpdatedAt does not match current revision"},
+					}, nil
+				}
+				if err := deps.ScheduleService.Uninstall(ctx, p.ScheduleID); err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()},
+					}, nil
+				}
+				output, _ := json.Marshal(map[string]any{"ok": true})
+				return host_api.CallResult{
+					Status: host_api.StatusSuccess,
+					Output: output,
+				}, nil
+			},
+		},
+		{
+			method:          host_api.MethodScheduleUpdate,
+			riskLevel:       host_api.RiskMedium,
+			sideEffectLevel: host_api.SideEffectWrite,
+			timeout:         10 * time.Second,
+			handler: func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+				var p struct {
+					ScheduleID        string                                  `json:"scheduleId"`
+					ExpectedUpdatedAt string                                  `json:"expectedUpdatedAt"`
+					Definition        schedule.ScheduleContributionDefinition `json:"definition"`
+					Enabled           *bool                                   `json:"enabled"`
+				}
+				if err := json.Unmarshal(req.Input, &p); err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: err.Error()},
+					}, nil
+				}
+				if deps.ScheduleService == nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "schedule service not configured"},
+					}, nil
+				}
+				existing, state, err := deps.ScheduleService.GetSchedule(ctx, p.ScheduleID)
+				if err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeResourceNotFound, Message: err.Error()},
+					}, nil
+				}
+				if existing == nil || state == nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeResourceNotFound, Message: "schedule not found"},
+					}, nil
+				}
+				if existing.ExtensionID != string(req.RuntimeIdentity.ExtensionID) {
+					return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodePermissionDenied, Message: "schedule does not belong to caller"}}, nil
+				}
+				if existing.Target.Type == schedule.TargetTypeHostWorkload || p.Definition.Target.Type != schedule.TargetTypeSessionPrompt {
+					return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "business schedules must use the unified task interface"}}, nil
+				}
+				if expected := strings.TrimSpace(p.ExpectedUpdatedAt); expected != "" && expected != state.UpdatedAt.UTC().Format(time.RFC3339Nano) {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeStateConflict, Message: "schedule_conflict: expectedUpdatedAt does not match current revision"},
+					}, nil
+				}
+				if existing.SessionPromptScope == nil {
+					return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "session prompt schedule is missing its owner scope"}}, nil
+				}
+				var targetMetadata struct {
+					TargetKind        string `json:"dshTargetKind"`
+					ReservedSessionID string `json:"dshReservedSessionId"`
+					ProjectID         string `json:"dshProjectId"`
+				}
+				if err := json.Unmarshal(p.Definition.Target.InputTemplate, &targetMetadata); err != nil {
+					return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: err.Error()}}, nil
+				}
+				targetKind := strings.TrimSpace(targetMetadata.TargetKind)
+				reservedSessionID := strings.TrimSpace(targetMetadata.ReservedSessionID)
+				if targetKind == "" {
+					targetKind = "session"
+				}
+				if targetKind == "session" && p.Definition.Target.TargetID != existing.SessionPromptScope.ConversationID {
+					return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "session prompt schedules can only target their owner conversation"}}, nil
+				}
+				if targetKind == "new_once" && (reservedSessionID == "" || reservedSessionID != p.Definition.Target.TargetID) {
+					return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: "new_once schedule requires its reserved session id as targetId"}}, nil
+				}
+				if targetKind != "session" && targetKind != "new_once" && targetKind != "new" {
+					return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: fmt.Sprintf("unsupported session prompt target kind %q", targetKind)}}, nil
+				}
+				p.Definition.ScheduleID = p.ScheduleID
+				p.Definition.ExtensionID = existing.ExtensionID
+				p.Definition.ModuleID = existing.ModuleID
+				scope := *existing.SessionPromptScope
+				scope.TargetKind = targetKind
+				scope.ReservedConversationID = reservedSessionID
+				scope.ProjectID = strings.TrimSpace(targetMetadata.ProjectID)
+				p.Definition.SessionPromptScope = &scope
+				if err := deps.ScheduleService.UpdateHostDefinitionState(ctx, p.ScheduleID, state.Generation, &p.Definition, p.Enabled); err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()},
+					}, nil
+				}
+				return host_api.CallResult{Status: host_api.StatusSuccess, Output: json.RawMessage(`{"ok":true}`)}, nil
+			},
+		},
+		{
+			method:          host_api.MethodScheduleRun,
+			riskLevel:       host_api.RiskMedium,
+			sideEffectLevel: host_api.SideEffectWrite,
+			timeout:         10 * time.Second,
 			handler: func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
 				var p struct {
 					ScheduleID string `json:"scheduleId"`
@@ -1803,22 +3587,149 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 					return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "业务任务须通过统一任务接口管理"}}, nil
 				}
 				if scheduleDef.ExtensionID != string(req.RuntimeIdentity.ExtensionID) {
-					return host_api.CallResult{
-						Status: host_api.StatusFailed,
-						Error:  &host_api.Error{Code: host_api.ErrorCodePermissionDenied, Message: "schedule does not belong to caller"},
-					}, nil
+					return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodePermissionDenied, Message: "schedule does not belong to caller"}}, nil
 				}
-				if err := deps.ScheduleService.Uninstall(ctx, p.ScheduleID); err != nil {
+				trigger, err := deps.ScheduleService.RunNow(ctx, p.ScheduleID)
+				if err != nil {
 					return host_api.CallResult{
 						Status: host_api.StatusFailed,
 						Error:  &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()},
 					}, nil
 				}
-				output, _ := json.Marshal(map[string]any{"ok": true})
-				return host_api.CallResult{
-					Status: host_api.StatusSuccess,
-					Output: output,
-				}, nil
+				output, _ := json.Marshal(map[string]any{
+					"ok":         true,
+					"scheduleId": p.ScheduleID,
+					"triggerId":  trigger.TriggerID,
+				})
+				return host_api.CallResult{Status: host_api.StatusSuccess, Output: output}, nil
+			},
+		},
+		{
+			method:          host_api.MethodScheduleHistory,
+			riskLevel:       host_api.RiskLow,
+			sideEffectLevel: host_api.SideEffectReadOnly,
+			timeout:         10 * time.Second,
+			handler: func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+				var p struct {
+					ScheduleID string `json:"scheduleId"`
+					Limit      int    `json:"limit"`
+					Before     string `json:"before"`
+				}
+				if err := json.Unmarshal(req.Input, &p); err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: err.Error()},
+					}, nil
+				}
+				if deps.ScheduleService == nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "schedule service not configured"},
+					}, nil
+				}
+				def, _, err := deps.ScheduleService.GetSchedule(ctx, p.ScheduleID)
+				if err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeResourceNotFound, Message: err.Error()},
+					}, nil
+				}
+				if def == nil {
+					return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeResourceNotFound, Message: "schedule not found"}}, nil
+				}
+				if def.ExtensionID != string(req.RuntimeIdentity.ExtensionID) {
+					return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodePermissionDenied, Message: "schedule does not belong to caller"}}, nil
+				}
+				if def.Target.Type != schedule.TargetTypeSessionPrompt {
+					return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "schedule history is available only for session prompt targets"}}, nil
+				}
+				limit := p.Limit
+				if limit <= 0 || limit > 100 {
+					limit = 100
+				}
+				triggers, err := deps.ScheduleService.GetAllTriggers(ctx, p.ScheduleID)
+				if err != nil {
+					return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()}}, nil
+				}
+				runs, err := deps.ScheduleService.GetAllRuns(ctx, p.ScheduleID)
+				if err != nil {
+					return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()}}, nil
+				}
+				triggerTimes := make(map[string]time.Time, len(triggers))
+				for _, trigger := range triggers {
+					triggerTimes[trigger.TriggerID] = trigger.ScheduledAt
+				}
+				records := make([]map[string]any, 0, len(runs))
+				for _, run := range runs {
+					if run.Status != schedule.RunStatusCompleted || len(run.ResultJSON) == 0 {
+						continue
+					}
+					var receipt struct {
+						MessageIDs      []string `json:"messageIds"`
+						Prompt          string   `json:"prompt"`
+						TargetSessionID string   `json:"targetSessionId"`
+					}
+					if err := json.Unmarshal(run.ResultJSON, &receipt); err != nil || len(receipt.MessageIDs) == 0 {
+						continue
+					}
+					deliveredAt := run.UpdatedAt
+					if run.FinishedAt != nil {
+						deliveredAt = *run.FinishedAt
+					}
+					scheduledAt := triggerTimes[run.TriggerID]
+					if scheduledAt.IsZero() {
+						scheduledAt = run.StartedAt
+					}
+					record := map[string]any{
+						"scheduledAt":     scheduledAt.UTC().Format(time.RFC3339Nano),
+						"deliveredAt":     deliveredAt.UTC().Format(time.RFC3339Nano),
+						"messageId":       receipt.MessageIDs[0],
+						"targetSessionId": receipt.TargetSessionID,
+					}
+					if receipt.TargetSessionID == "" {
+						record["targetSessionId"] = def.Target.TargetID
+					}
+					if receipt.Prompt != "" {
+						record["prompt"] = receipt.Prompt
+					}
+					records = append(records, record)
+				}
+				sort.Slice(records, func(i, j int) bool {
+					left, _ := records[i]["deliveredAt"].(string)
+					right, _ := records[j]["deliveredAt"].(string)
+					return left > right
+				})
+				if p.Before != "" {
+					index := -1
+					for i, record := range records {
+						if record["messageId"] == p.Before {
+							index = i
+							break
+						}
+					}
+					if index < 0 {
+						output, _ := json.Marshal(map[string]any{"id": p.ScheduleID, "code": "delivery_cursor_not_found"})
+						return host_api.CallResult{Status: host_api.StatusSuccess, Output: output}, nil
+					}
+					records = records[index+1:]
+				}
+				nextBefore := ""
+				if len(records) > limit {
+					nextBefore = records[limit-1]["messageId"].(string)
+					records = records[:limit]
+				}
+				output, _ := json.Marshal(map[string]any{
+					"id":                        p.ScheduleID,
+					"records":                   records,
+					"earlierRecordsUnavailable": false,
+					"earlierRecordsPruned":      false,
+					"retention": map[string]any{
+						"days":    30,
+						"records": 200,
+					},
+					"nextBefore": nextBefore,
+				})
+				return host_api.CallResult{Status: host_api.StatusSuccess, Output: output}, nil
 			},
 		},
 		{
@@ -1842,13 +3753,25 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 					}, nil
 				}
 				technical := make([]*schedule.ScheduleContributionDefinition, 0, len(defs))
+				states := make(map[string]*schedule.ScheduleState, len(defs))
 				for _, definition := range defs {
 					if definition.Target.Type != schedule.TargetTypeHostWorkload {
 						technical = append(technical, definition)
 					}
 				}
+				for _, definition := range technical {
+					state, stateErr := deps.ScheduleService.GetScheduleState(ctx, definition.ScheduleID)
+					if stateErr != nil {
+						return host_api.CallResult{
+							Status: host_api.StatusFailed,
+							Error:  &host_api.Error{Code: host_api.ErrorCodeInternal, Message: stateErr.Error()},
+						}, nil
+					}
+					states[definition.ScheduleID] = state
+				}
 				output, _ := json.Marshal(map[string]any{
 					"schedules": technical,
+					"states":    states,
 					"total":     len(technical),
 				})
 				return host_api.CallResult{
@@ -2888,6 +4811,120 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 			},
 		},
 		{
+			method:          host_api.MethodModelInvoke,
+			riskLevel:       host_api.RiskCritical,
+			sideEffectLevel: host_api.SideEffectExternal,
+			timeout:         5 * time.Minute,
+			handler: func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+				var input ModelInvokeRequest
+				if err := json.Unmarshal(req.Input, &input); err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: err.Error()},
+					}, nil
+				}
+				if deps.ModelGateway == nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "model gateway not configured"},
+					}, nil
+				}
+				result, err := deps.ModelGateway.Invoke(ctx, input)
+				if err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()},
+					}, nil
+				}
+				output, err := json.Marshal(result)
+				if err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()},
+					}, nil
+				}
+				return host_api.CallResult{Status: host_api.StatusSuccess, Output: output}, nil
+			},
+		},
+		{
+			method:          host_api.MethodApprovalRequest,
+			riskLevel:       host_api.RiskMedium,
+			sideEffectLevel: host_api.SideEffectNone,
+			timeout:         0,
+			handler: func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+				var p struct {
+					ToolName       string `json:"toolName"`
+					Arguments      string `json:"arguments"`
+					RiskLevel      string `json:"riskLevel"`
+					ToolCallID     string `json:"toolCallId"`
+					RequestID      string `json:"requestId"`
+					ConversationID string `json:"conversationId"`
+					TimeoutMS      int    `json:"timeoutMs"`
+				}
+				if err := json.Unmarshal(req.Input, &p); err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: err.Error()},
+					}, nil
+				}
+				p.ToolName = strings.TrimSpace(p.ToolName)
+				if p.ToolName == "" {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: "toolName is required"},
+					}, nil
+				}
+				if deps.ApprovalBroker == nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "approval broker not configured"},
+					}, nil
+				}
+				ctx = resolveHostAPIScope(ctx, deps.ScopeSnapshotStore, req.ScopeSnapshotID)
+				scope, scopeErr := resolveConversationTargetScope(ctx, deps, req, p.ConversationID)
+				if scopeErr != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: scopeErr.Error()},
+					}, nil
+				}
+				if strings.TrimSpace(scope.ConversationID) == "" {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: "host.approval.request requires an active conversation in scope"},
+					}, nil
+				}
+				timeout := 5 * time.Minute
+				if p.TimeoutMS > 0 {
+					timeout = time.Duration(p.TimeoutMS) * time.Millisecond
+				}
+				approved, err := deps.ApprovalBroker.Await(ctx, execution.ApprovalRequest{
+					SpaceID:        scope.SpaceID,
+					CharacterID:    scope.CharacterID,
+					ConversationID: scope.ConversationID,
+					RequestID:      strings.TrimSpace(p.RequestID),
+					ToolCallID:     strings.TrimSpace(p.ToolCallID),
+					ToolName:       p.ToolName,
+					Arguments:      p.Arguments,
+					RiskLevel:      strings.TrimSpace(p.RiskLevel),
+				}, timeout)
+				if err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()},
+					}, nil
+				}
+				output, err := json.Marshal(map[string]any{"approved": approved})
+				if err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()},
+					}, nil
+				}
+				return host_api.CallResult{Status: host_api.StatusSuccess, Output: output}, nil
+			},
+		},
+		{
 			method:          host_api.MethodVectorUpsert,
 			riskLevel:       host_api.RiskMedium,
 			sideEffectLevel: host_api.SideEffectWrite,
@@ -2921,6 +4958,111 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 			sideEffectLevel: host_api.SideEffectWrite,
 			timeout:         30 * time.Second,
 			handler:         conversationMessageAppendHandler,
+		},
+		{
+			method:          host_api.MethodConversationTurnInterrupt,
+			riskLevel:       host_api.RiskHigh,
+			sideEffectLevel: host_api.SideEffectWrite,
+			timeout:         10 * time.Second,
+			handler:         conversationTurnInterruptHandler,
+		},
+		{
+			method:          host_api.MethodConversationCreate,
+			riskLevel:       host_api.RiskHigh,
+			sideEffectLevel: host_api.SideEffectWrite,
+			timeout:         30 * time.Second,
+			handler:         conversationCreateHandler,
+		},
+		{
+			method:          host_api.MethodConversationDelete,
+			riskLevel:       host_api.RiskHigh,
+			sideEffectLevel: host_api.SideEffectWrite,
+			timeout:         30 * time.Second,
+			handler:         conversationDeleteRouteHandler(deps),
+		},
+		{
+			method:          host_api.MethodConversationTurnAwait,
+			riskLevel:       host_api.RiskLow,
+			sideEffectLevel: host_api.SideEffectReadOnly,
+			timeout:         0,
+			handler:         conversationTurnAwaitHandler,
+		},
+		{
+			method:          host_api.MethodConversationArchive,
+			riskLevel:       host_api.RiskHigh,
+			sideEffectLevel: host_api.SideEffectWrite,
+			timeout:         30 * time.Second,
+			handler:         conversationArchiveHandler,
+		},
+		{
+			method:          host_api.MethodConversationFork,
+			riskLevel:       host_api.RiskHigh,
+			sideEffectLevel: host_api.SideEffectWrite,
+			timeout:         30 * time.Second,
+			handler:         conversationForkRouteHandler(deps),
+		},
+		{
+			method:          host_api.MethodModelDefaults,
+			riskLevel:       host_api.RiskLow,
+			sideEffectLevel: host_api.SideEffectReadOnly,
+			timeout:         10 * time.Second,
+			handler:         modelDefaultsRouteHandler(deps),
+		},
+		{
+			method:          host_api.MethodSkillList,
+			riskLevel:       host_api.RiskLow,
+			sideEffectLevel: host_api.SideEffectReadOnly,
+			timeout:         10 * time.Second,
+			handler:         skillListRouteHandler(deps),
+		},
+		{
+			method:          host_api.MethodConversationPin,
+			riskLevel:       host_api.RiskHigh,
+			sideEffectLevel: host_api.SideEffectWrite,
+			timeout:         30 * time.Second,
+			handler:         conversationPinRouteHandler(deps),
+		},
+		{
+			method:          host_api.MethodDirectoryList,
+			riskLevel:       host_api.RiskLow,
+			sideEffectLevel: host_api.SideEffectReadOnly,
+			timeout:         15 * time.Second,
+			handler:         directoryListRouteHandler(deps),
+		},
+		{
+			method:          host_api.MethodDirectoryCreate,
+			riskLevel:       host_api.RiskMedium,
+			sideEffectLevel: host_api.SideEffectWrite,
+			timeout:         15 * time.Second,
+			handler:         directoryCreateRouteHandler(deps),
+		},
+		{
+			method:          host_api.MethodProjectList,
+			riskLevel:       host_api.RiskLow,
+			sideEffectLevel: host_api.SideEffectReadOnly,
+			timeout:         10 * time.Second,
+			handler:         projectListHandler,
+		},
+		{
+			method:          host_api.MethodProjectCreate,
+			riskLevel:       host_api.RiskHigh,
+			sideEffectLevel: host_api.SideEffectWrite,
+			timeout:         30 * time.Second,
+			handler:         projectCreateHandler,
+		},
+		{
+			method:          host_api.MethodProjectUpdate,
+			riskLevel:       host_api.RiskHigh,
+			sideEffectLevel: host_api.SideEffectWrite,
+			timeout:         30 * time.Second,
+			handler:         projectUpdateHandler,
+		},
+		{
+			method:          host_api.MethodProjectDelete,
+			riskLevel:       host_api.RiskHigh,
+			sideEffectLevel: host_api.SideEffectWrite,
+			timeout:         30 * time.Second,
+			handler:         projectDeleteHandler,
 		},
 		{
 			method:          host_api.MethodExtensionDataRead,

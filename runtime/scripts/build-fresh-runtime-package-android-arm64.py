@@ -281,6 +281,8 @@ def main():
     parser.add_argument("--qdrant-archive", required=True)
     parser.add_argument("--surrealdb", required=True)
     parser.add_argument("--plugin-market-package", required=True)
+    parser.add_argument("--plugin-host-dir")
+    parser.add_argument("--task-host-dir")
     parser.add_argument("--llama-runtime-dir")
     parser.add_argument("--source-commit", required=True)
     parser.add_argument("--output", required=True)
@@ -299,6 +301,8 @@ def main():
     ca_certificates_deb = Path(args.ca_certificates_deb).resolve()
     node_executable = Path(args.node_executable).resolve()
     plugin_market_package = Path(args.plugin_market_package).resolve()
+    plugin_host_dir = Path(args.plugin_host_dir).resolve() if args.plugin_host_dir else project / "runtime/plugin-host"
+    task_host_dir = Path(args.task_host_dir).resolve() if args.task_host_dir else project / "runtime/task-host"
     llama_runtime_dir = Path(args.llama_runtime_dir).resolve() if args.llama_runtime_dir else project / "desktop/resources/release-runtime/llama"
     node_lock = json.loads((project / "runtime/artifacts/node/linux-arm64/node-runtime-lock.json").read_text(encoding="utf-8"))
     rootfs_lock = json.loads((project / "runtime/artifacts/ubuntu-rootfs/linux-arm64/ubuntu-rootfs-lock.json").read_text(encoding="utf-8"))
@@ -319,9 +323,10 @@ def main():
         extract_node(node_archive, program / "node")
         extract_binary(Path(args.qdrant_archive), "qdrant", program / "qdrant/bin/qdrant")
         copy(Path(args.surrealdb), program / "surrealdb/surreal")
-        for host in ("plugin-host", "task-host"):
-            shutil.copytree(project / "runtime" / host / "dist", program / host / "dist")
-            copy(project / "runtime" / host / "package.json", program / host / "package.json")
+        for host, source_root in (("plugin-host", plugin_host_dir), ("task-host", task_host_dir)):
+            shutil.copytree(source_root / "dist", program / host / "dist")
+            shutil.copytree(project / "sdk" / "plugin-sdk" / "dist", program / host / "dist" / "sdk" / "plugin-sdk")
+            copy(source_root / "package.json", program / host / "package.json")
         copy(plugin_market_package, program / "bundled-plugins" / "plugin-market" / plugin_market_package.name)
         for script in ("amitia-node-prepare.sh", "amitia-node-probe.sh"):
             copy(project / "runtime/scripts/node" / script, program / "scripts/node" / script)

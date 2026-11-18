@@ -63,7 +63,7 @@ type Repository interface {
 	FindOperationByIdempotencyKey(ctx context.Context, spaceID, deviceID, key, operationType string) (*operation.InstallationOperation, error)
 
 	GetInstallation(ctx context.Context, spaceID, deviceID, installationID string) (*InstallationRecord, error)
-	GetDesiredStateSnapshot(ctx context.Context, spaceID, deviceID string) (*DesiredStateSnapshot, error)
+	GetDesiredStateSnapshot(ctx context.Context, spaceID, deviceID, installationID string) (*DesiredStateSnapshot, error)
 	CreateInstallationAndDesiredState(ctx context.Context, op *operation.InstallationOperation, install *InstallationRecord, desired *DesiredStateSnapshot, stagingPathKey string) (desiredRevision int64, err error)
 	UpdateDesiredEnabled(ctx context.Context, op *operation.InstallationOperation, installationID string, enabled bool) (desiredRevision int64, err error)
 	SwitchRelease(ctx context.Context, op *operation.InstallationOperation, installationID, targetReleaseID, stagingPathKey, defaultActionKey string) (desiredRevision int64, err error)
@@ -502,7 +502,7 @@ func (c *Coordinator) executeInstall(ctx context.Context, req InstallRequest, id
 		CreatedAt:       time.Now().Format(operationTimeFormat),
 		UpdatedAt:       time.Now().Format(operationTimeFormat),
 	}
-	op.RequestHash = operationRequestHash(op, nil)
+	op.RequestHash = operationRequestHash(op, map[string]string{"startDisabled": fmt.Sprintf("%t", req.StartDisabled)})
 	if existing, err := c.resolveIdempotentOperation(ctx, op); err != nil {
 		return &InstallResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: operation.ErrCodeIDEMPOTENCYConflict, ErrorMessage: err.Error()}, err
 	} else if existing != nil {
@@ -545,7 +545,7 @@ func (c *Coordinator) executeInstall(ctx context.Context, req InstallRequest, id
 		PetID:             op.PetID,
 		ReleaseID:         req.TargetReleaseID,
 		Status:            "installed",
-		Enabled:           true,
+		Enabled:           !req.StartDisabled,
 		InstallStorageKey: stagingKey,
 		DefaultActionKey:  validationResult.DefaultActionKey,
 	}
@@ -557,7 +557,7 @@ func (c *Coordinator) executeInstall(ctx context.Context, req InstallRequest, id
 		SpaceID:          req.DeviceCtx.SpaceID,
 		DeviceID:         req.DeviceCtx.DeviceID,
 		RuntimeID:        req.DeviceCtx.RuntimeID,
-		EnsureAbsent:     false,
+		EnsureAbsent:     req.StartDisabled,
 		DefaultActionKey: validationResult.DefaultActionKey,
 	}, stagingKey)
 	if err != nil {
@@ -577,7 +577,7 @@ func (c *Coordinator) executeInstall(ctx context.Context, req InstallRequest, id
 		return c.failInstall(ctx, op, operation.OpStageDesiredStateCommitted, err)
 	}
 
-	if err := c.publishPersistedDesiredState(ctx, req.DeviceCtx, false); err != nil {
+	if err := c.publishPersistedDesiredState(ctx, req.DeviceCtx, op.InstallationID, req.StartDisabled); err != nil {
 		return c.failInstall(ctx, op, operation.OpStageRuntimeCommandEnqueued, err)
 	}
 
@@ -641,7 +641,7 @@ func (c *Coordinator) executeEnableDisable(ctx context.Context, req EnableDisabl
 		return &EnableDisableResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "OPERATION_UPDATE_FAILED"}, err
 	}
 
-	if err := c.publishPersistedDesiredState(ctx, req.DeviceCtx, !enabled); err != nil {
+	if err := c.publishPersistedDesiredState(ctx, req.DeviceCtx, req.InstallationID, !enabled); err != nil {
 		op.Status = operation.OpStatusFailedTerminal
 		op.ErrorCode = "PUBLISH_FAILED"
 		op.ErrorMessage = err.Error()
@@ -734,7 +734,8 @@ func (c *Coordinator) executeSwitch(ctx context.Context, req SwitchRequest, idem
 		return &SwitchResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "OPERATION_UPDATE_FAILED"}, err
 	}
 
-	if err := c.publishPersistedDesiredState(ctx, req.DeviceCtx, false); err != nil {
+	ensureAbsent := operationType == operation.TypeUpgrade && !currentInst.Enabled
+	if err := c.publishPersistedDesiredState(ctx, req.DeviceCtx, req.SourceInstallationID, ensureAbsent); err != nil {
 		op.Status = operation.OpStatusFailedTerminal
 		op.ErrorCode = "PUBLISH_FAILED"
 		op.ErrorMessage = err.Error()
@@ -822,7 +823,7 @@ func (c *Coordinator) executeRepair(ctx context.Context, req RepairRequest, idem
 		return &InstallResult{OperationID: op.ID, InstallationID: req.InstallationID, Status: operation.OpStatusFailedTerminal, ErrorCode: "OPERATION_UPDATE_FAILED"}, err
 	}
 
-	if err := c.publishPersistedDesiredState(ctx, req.DeviceCtx, false); err != nil {
+	if err := c.publishPersistedDesiredState(ctx, req.DeviceCtx, req.InstallationID, false); err != nil {
 		return c.failInstall(ctx, op, operation.OpStageRuntimeCommandEnqueued, err)
 	}
 
@@ -875,7 +876,7 @@ func (c *Coordinator) executeUninstall(ctx context.Context, req UninstallRequest
 		return &UninstallResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorMessage: err.Error()}, err
 	}
 
-	if err := c.publishPersistedDesiredState(ctx, req.DeviceCtx, true); err != nil {
+	if err := c.publishPersistedDesiredState(ctx, req.DeviceCtx, req.InstallationID, true); err != nil {
 		op.Status = operation.OpStatusFailedTerminal
 		op.ErrorCode = "PUBLISH_FAILED"
 		op.ErrorMessage = err.Error()
@@ -932,7 +933,7 @@ func (c *Coordinator) executeSettings(ctx context.Context, req SettingsRequest, 
 		return &SettingsResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "OPERATION_UPDATE_FAILED", ErrorMessage: err.Error()}, err
 	}
 
-	if err := c.publishPersistedDesiredState(ctx, req.DeviceCtx, false); err != nil {
+	if err := c.publishPersistedDesiredState(ctx, req.DeviceCtx, req.InstallationID, false); err != nil {
 		op.Status = operation.OpStatusFailedTerminal
 		op.ErrorCode = "PUBLISH_FAILED"
 		op.ErrorMessage = err.Error()
@@ -989,7 +990,7 @@ func (c *Coordinator) executeDefaultAction(ctx context.Context, req DefaultActio
 		return &EnableDisableResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "OPERATION_UPDATE_FAILED"}, err
 	}
 
-	if err := c.publishPersistedDesiredState(ctx, req.DeviceCtx, false); err != nil {
+	if err := c.publishPersistedDesiredState(ctx, req.DeviceCtx, req.InstallationID, false); err != nil {
 		op.Status = operation.OpStatusFailedTerminal
 		op.ErrorCode = "PUBLISH_FAILED"
 		op.ErrorMessage = err.Error()
@@ -1073,8 +1074,8 @@ func (c *Coordinator) failInstall(ctx context.Context, op *operation.Installatio
 	}, cause
 }
 
-func (c *Coordinator) publishPersistedDesiredState(ctx context.Context, deviceCtx device.DeviceContext, ensureAbsent bool) error {
-	snapshot, err := c.repo.GetDesiredStateSnapshot(ctx, deviceCtx.SpaceID, deviceCtx.DeviceID)
+func (c *Coordinator) publishPersistedDesiredState(ctx context.Context, deviceCtx device.DeviceContext, installationID string, ensureAbsent bool) error {
+	snapshot, err := c.repo.GetDesiredStateSnapshot(ctx, deviceCtx.SpaceID, deviceCtx.DeviceID, installationID)
 	if err != nil {
 		return fmt.Errorf("load persisted desired state: %w", err)
 	}

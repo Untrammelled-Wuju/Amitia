@@ -65,7 +65,7 @@ func (b *petxAssetReleaseBridge) AttachPluginResource(
 ) (string, error) {
 	resourceRef := strings.TrimSpace(fmt.Sprint(definition["resourceRef"]))
 	if resourceRef == "" || resourceRef == "<nil>" {
-		return b.attachCorrelation(extensionID, contributionID, revision, definition)
+		return "", errors.New("petx resource reference is required")
 	}
 	if b.spaceID == "" || b.deviceID == "" {
 		return "", errors.New("petx asset bridge requires local space and device identity")
@@ -126,21 +126,6 @@ func (b *petxAssetReleaseBridge) RebuildFromExisting() error {
 	defer b.mu.Unlock()
 	b.handles = make(map[string]integration.ExistingPetResourceBinding)
 	return nil
-}
-
-func (b *petxAssetReleaseBridge) attachCorrelation(extensionID, contributionID string, revision int, definition map[string]any) (string, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	handle := "petx-correlation://" + extensionID + "/" + contributionID + "/" + fmt.Sprint(revision)
-	b.handles[handle] = integration.ExistingPetResourceBinding{
-		Handle:         handle,
-		ExtensionID:    extensionID,
-		ContributionID: contributionID,
-		Revision:       revision,
-		Definition:     clonePetxDefinition(definition),
-	}
-	return handle, nil
 }
 
 func (b *petxAssetReleaseBridge) resolveAssetManifest(
@@ -391,6 +376,7 @@ func (b *petxAssetReleaseBridge) ensureInstallation(ctx context.Context, extensi
 		PetID:           releaseData.PetID,
 		TargetReleaseID: releaseData.ID,
 		IdempotencyKey:  idempotencyKey,
+		StartDisabled:   true,
 	})
 	return err
 }

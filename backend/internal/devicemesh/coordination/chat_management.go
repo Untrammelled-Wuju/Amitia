@@ -9,6 +9,8 @@ type ChatManagementRequest struct {
 	PrivacyDeletion     *PrivacyDeletionRequest `json:"privacyDeletion,omitempty"`
 	PrivacyMessage      *PrivacyMessage         `json:"privacyMessage,omitempty"`
 	Title               string                  `json:"title,omitempty"`
+	Archived            *bool                   `json:"archived,omitempty"`
+	Pinned              *bool                   `json:"pinned,omitempty"`
 	ProjectID           string                  `json:"projectId,omitempty"`
 	Channel             string                  `json:"channel,omitempty"`
 	PeerID              string                  `json:"peerId,omitempty"`
@@ -36,6 +38,7 @@ type ChatManagementRequest struct {
 	Sources             []string                `json:"sources,omitempty"`
 	IncludeMemories     bool                    `json:"includeMemories"`
 	ArchivedOnly        bool                    `json:"archivedOnly,omitempty"`
+	Draft               bool                    `json:"draft,omitempty"`
 	PreviewID           string                  `json:"previewId,omitempty"`
 	ConfirmText         string                  `json:"confirmText,omitempty"`
 }

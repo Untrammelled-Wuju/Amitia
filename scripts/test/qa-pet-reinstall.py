@@ -36,15 +36,16 @@ def main():
         assert all(row[1:] == ("uninstalled", "uninstalled", 0) for row in initial), initial
         ui("route=/creative-workshop/pet/installations", "expect=com.amitia.builtin.desktop-pet",
            "absent=QA Desktop Pet Plugin")
+        open_install = 'clickwithin=[".extension-page-header","安装桌宠","安装桌宠"]'
         seen = {row[0] for row in initial}
         for cycle in range(2):
             upload = "file=" + json.dumps([".package-drop-zone input[type=file]", str(args.package.resolve())])
             if cycle == 0:
-                ui("click=安装插件", upload, "expect=我已查看签名、权限和风险信息，并确认继续安装。",
-                   "click=取消", "absent=确认安装", "click=安装插件", "expect=选择或拖入 .petx 桌宠插件",
+                ui(open_install, upload, "expect=我已查看签名、权限和风险信息，并确认继续安装。",
+                   "click=取消", "absent=确认安装", open_install, "expect=选择或拖入 .petx 桌宠插件",
                    "absent=我已查看签名、权限和风险信息，并确认继续安装。")
             else:
-                ui("click=安装插件")
+                ui(open_install)
             ui(upload, "expect=QA Desktop Pet Plugin",
                "click=我已查看签名、权限和风险信息，并确认继续安装。", "clicktwice=确认安装",
                "expect=桌宠插件已安装", "absent=确认安装", 'clickwithin=[".plugin-item","QA Desktop Pet Plugin","启用"]',

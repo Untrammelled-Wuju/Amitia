@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/extension_page_host"
+	"github.com/u-ai/backend/internal/extension/kernel/ui_contribution"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_provider"
 )
 
@@ -66,6 +67,25 @@ func TestProviderModuleCapability(t *testing.T) {
 	}
 }
 
+func TestSignUIContributionModuleCapabilityDoesNotMutateDefinition(t *testing.T) {
+	definition := &ui_contribution.UIContributionDefinition{
+		ContributionID: "mobile-slot",
+		ExtensionID:    "com.example/mobile",
+		Entry: ui_contribution.UIEntryDefinition{
+			Type:        ui_contribution.SandboxMobileWebRuntime,
+			Path:        "modules/mobile/index.mjs",
+			ContentHash: "sha256-module",
+		},
+	}
+	signed := signUIContributionModuleCapabilities(definition)
+	if definition.Entry.ModuleToken != "" {
+		t.Fatal("source contribution was mutated")
+	}
+	if signed.Entry.ModuleToken == "" || !validContributionModuleCapability("com.example/mobile", "mobile-slot", signed.Entry.ModuleToken) {
+		t.Fatal("signed mobile contribution did not receive a valid capability")
+	}
+}
+
 func TestProviderModuleResourceRequiresCapability(t *testing.T) {
 	root := t.TempDir()
 	extensionID := "com.example/module"
@@ -77,7 +97,8 @@ func TestProviderModuleResourceRequiresCapability(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(generationRoot, "manifest.json"), []byte(`{}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(generationRoot, "modules", "page", "index.mjs"), []byte("export default {}"), 0o644); err != nil {
+	content := []byte("export default {}")
+	if err := os.WriteFile(filepath.Join(generationRoot, "modules", "page", "index.mjs"), content, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	current := map[string]string{"generationID": generationID}
@@ -97,7 +118,7 @@ func TestProviderModuleResourceRequiresCapability(t *testing.T) {
 			"web": {
 				Type:        ui_provider.EntryWebModule,
 				Path:        "modules/page/index.mjs",
-				ContentHash: "sha256:9aeb8d59b4d483ca6298e9a450fbf37dfd2b4c63990135ab1d040d76314087ec",
+				ContentHash: "sha256-" + base64.StdEncoding.EncodeToString(sha256Sum(content)),
 			},
 		},
 	}
@@ -122,6 +143,13 @@ func TestProviderModuleResourceRequiresCapability(t *testing.T) {
 	}
 	if recorder.Header().Get("Access-Control-Allow-Origin") != "*" {
 		t.Fatal("provider module response is not CORS-readable")
+	}
+	queryToken := providerModuleCapability("provider", time.Now().Add(time.Minute).Unix())
+	request = httptest.NewRequest(http.MethodGet, "/ui/provider-module/provider/modules/page/index.mjs?accessToken="+queryToken, nil)
+	recorder = httptest.NewRecorder()
+	handler.handleProviderModuleResource(recorder, request)
+	if recorder.Code != http.StatusOK || recorder.Body.String() != string(content) {
+		t.Fatalf("unexpected query-token provider module response: %d %q", recorder.Code, recorder.Body.String())
 	}
 }
 
@@ -182,6 +210,85 @@ func TestPageModuleResourceRequiresMatchingPageCapability(t *testing.T) {
 	handler.handlePageModuleResource(recorder, request)
 	if recorder.Code != http.StatusForbidden && recorder.Code != http.StatusBadRequest {
 		t.Fatalf("outside module directory should be rejected, got %d", recorder.Code)
+	}
+}
+
+func TestContributionModuleResourceSupportsMobileWebRuntime(t *testing.T) {
+	root := t.TempDir()
+	extensionID := "com.example/mobile-slot"
+	generationID := "generation-mobile-slot"
+	generationRoot := filepath.Join(root, "installations", "com.example__mobile-slot", "generations", generationID)
+	moduleRoot := filepath.Join(generationRoot, "modules", "slot")
+	if err := os.MkdirAll(moduleRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	moduleContent := []byte("export function mount() {}")
+	styleContent := []byte(".slot{display:block}")
+	if err := os.WriteFile(filepath.Join(moduleRoot, "index.mjs"), moduleContent, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(moduleRoot, "index.css"), styleContent, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(generationRoot, "manifest.json"), []byte(`{}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	currentData, _ := json.Marshal(map[string]string{"generationID": generationID})
+	if err := os.WriteFile(filepath.Join(root, "installations", "com.example__mobile-slot", "current.json"), currentData, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	host := ui_contribution.NewUIHost()
+	definition := &ui_contribution.UIContributionDefinition{
+		ContributionID:  "mobile-slot",
+		ExtensionID:     ui_contribution.ExtensionID(extensionID),
+		ModuleID:        "mobile-slot-module",
+		Kind:            ui_contribution.UIContributionPanel,
+		Slot:            ui_contribution.UISlotReference{SlotID: "test.mobile.slot", ContractVersion: 1},
+		ContractVersion: 1,
+		Entry: ui_contribution.UIEntryDefinition{
+			Type:        ui_contribution.SandboxMobileWebRuntime,
+			Path:        "modules/slot/index.mjs",
+			StylePath:   "modules/slot/index.css",
+			ContentHash: "sha256-" + base64.StdEncoding.EncodeToString(sha256Sum(moduleContent)),
+			StyleHash:   "sha256-" + base64.StdEncoding.EncodeToString(sha256Sum(styleContent)),
+		},
+		Sandbox:   ui_contribution.UISandboxPolicy{Type: ui_contribution.SandboxMobileWebRuntime},
+		Integrity: ui_contribution.ContributionIntegrity{DefinitionHash: "definition", Generation: 1},
+	}
+	if err := host.RegisterContribution(definition); err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHTTPHandler(host, nil, nil)
+	handler.SetExtensionRoot(root)
+	token := contributionModuleCapability(extensionID, "mobile-slot", time.Now().Add(time.Minute).Unix())
+	basePath := "/ui/contribution-module/com.example%2Fmobile-slot/mobile-slot/modules/slot/"
+
+	request := httptest.NewRequest(http.MethodGet, basePath+"index.mjs", nil)
+	recorder := httptest.NewRecorder()
+	handler.handleContributionModuleResource(recorder, request)
+	if recorder.Code != http.StatusForbidden {
+		t.Fatalf("expected missing capability denial, got %d", recorder.Code)
+	}
+
+	request = httptest.NewRequest(http.MethodGet, basePath+"index.mjs?accessToken="+token, nil)
+	recorder = httptest.NewRecorder()
+	handler.handleContributionModuleResource(recorder, request)
+	if recorder.Code != http.StatusOK || recorder.Body.String() != string(moduleContent) {
+		t.Fatalf("unexpected contribution module response: %d %q", recorder.Code, recorder.Body.String())
+	}
+
+	request = httptest.NewRequest(http.MethodGet, basePath+"index.css?accessToken="+token, nil)
+	recorder = httptest.NewRecorder()
+	handler.handleContributionModuleResource(recorder, request)
+	if recorder.Code != http.StatusOK || recorder.Body.String() != string(styleContent) {
+		t.Fatalf("unexpected contribution style response: %d %q", recorder.Code, recorder.Body.String())
+	}
+
+	request = httptest.NewRequest(http.MethodGet, basePath+"index.mjs?accessToken="+contributionModuleCapability("other/extension", "mobile-slot", time.Now().Add(time.Minute).Unix()), nil)
+	recorder = httptest.NewRecorder()
+	handler.handleContributionModuleResource(recorder, request)
+	if recorder.Code != http.StatusForbidden {
+		t.Fatalf("extension mismatch should be forbidden, got %d", recorder.Code)
 	}
 }
 

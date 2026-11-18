@@ -46,6 +46,10 @@ import { configureDesktopNotificationHost } from "./desktop-notification";
 import { ensureInstalledAppElevation } from "./windows-elevation";
 import { onCoreEndpointChanged } from "./core-endpoint";
 
+const configuredCdpPort = String(process.env.AMITIA_CDP_PORT || "").trim();
+const cdpPort = configuredCdpPort === "0" ? "" : configuredCdpPort || (isDevMode() ? "9229" : "");
+if (cdpPort) app.commandLine.appendSwitch("remote-debugging-port", cdpPort);
+
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let currentConfig: DeploymentModeConfig = { mode: "local" };

@@ -11,7 +11,17 @@
       <span v-if="state === 'streaming'" class="amrp-thinking-spinner"></span>
     </summary>
     <div v-if="hasContent && open" class="amrp-thinking-body">
-      <pre>{{ content }}</pre>
+      <ExtensionSlot
+        slot-id="chat.message.reasoning.body"
+        :context="{ ...(extensionContext || {}), text: content, state, duration }"
+        fallback="default"
+        layout="stack"
+        surface-role="message"
+        bare
+        render-fallback-while-scope-pending
+      >
+        <pre>{{ content }}</pre>
+      </ExtensionSlot>
     </div>
   </details>
 </template>
@@ -19,16 +29,19 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import type { MessageState } from "../types";
+import ExtensionSlot from "@/components/extension/ExtensionSlot.vue";
 
 const props = withDefaults(
   defineProps<{
     content: string;
     state?: MessageState;
     duration?: number;
+    extensionContext?: Record<string, unknown>;
   }>(),
   {
     state: "completed",
     duration: 0,
+    extensionContext: () => ({}),
   },
 );
 

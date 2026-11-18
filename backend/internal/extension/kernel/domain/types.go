@@ -630,8 +630,9 @@ type RuntimeHostAccess struct {
 }
 
 type RuntimeFilesystemAccess struct {
-	Mode  string   `json:"mode,omitempty"`
-	Roots []string `json:"roots,omitempty"`
+	Mode        string   `json:"mode,omitempty"`
+	Roots       []string `json:"roots,omitempty"`
+	DurableSync bool     `json:"durableSync,omitempty"`
 }
 
 type RuntimeNetworkAccess struct {

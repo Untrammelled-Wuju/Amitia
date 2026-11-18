@@ -336,13 +336,14 @@ func uiActionExecutionContext(ctx context.Context, execCtx UIActionExecContext) 
 		return permission.PermissionExecutionContext{}
 	}
 	return permission.PermissionExecutionContext{
-		Placement:   permission.ExecutionPlacementDevice,
-		SpaceID:     spaceID,
-		DeviceID:    deviceID,
-		RuntimeID:   runtimeidentity.ParseRuntimeID(execCtx.SessionID),
-		ExtensionID: execCtx.ExtensionID,
-		ModuleID:    execCtx.ModuleID,
-		Source:      "ui_action",
+		Placement:        permission.ExecutionPlacementDevice,
+		SpaceID:          spaceID,
+		DeviceID:         deviceID,
+		RuntimeID:        runtimeidentity.ParseRuntimeID(execCtx.SessionID),
+		RuntimeSessionID: runtimeidentity.ParseRuntimeSessionID(execCtx.SessionID),
+		ExtensionID:      execCtx.ExtensionID,
+		ModuleID:         execCtx.ModuleID,
+		Source:           "ui_action",
 	}
 }
 

@@ -31,10 +31,11 @@ func WithOwnedContext(ctx context.Context, scope coordination.ExecutionScope, da
 	version := "owned-context-v1"
 	snapshot := ContextSnapshot{Version: version, AssembledAt: time.Now().UTC(), RuntimeProfile: FieldReady(runtimeProfileFromRole(&profile), "owned-role", version)}
 	fields := map[string]any{"psyche": &snapshot.Psyche, "relationship": &snapshot.Relationship, "beliefs": &snapshot.Beliefs, "memories": &snapshot.Memories, "life": &snapshot.Life, "needs": &snapshot.Needs, "unresolvedThreads": &snapshot.UnresolvedThreads, "temporal": &snapshot.Temporal, "continuity": &snapshot.Continuity}
+	fields["promptExtensions"] = &snapshot.PromptExtensions
 	for name, raw := range data.RuntimeContext {
 		target, ok := fields[name]
 		if !ok {
-			return ctx, errors.New("Owner 运行上下文包含未知字段")
+			return ctx, fmt.Errorf("Owner 运行上下文包含未知字段 %q", name)
 		}
 		var header struct {
 			Status LoadStatus `json:"status"`

@@ -1,0 +1,21 @@
+.dsh-mobile-slot,
+.dsh-mobile-slot > * {
+  min-width: 0;
+}
+
+.dsh-mobile-slot {
+  color: CanvasText;
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.dsh-mobile-slot__error {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  border: 1px solid color-mix(in srgb, #c43b3b 38%, transparent);
+  border-radius: 12px;
+  padding: 10px;
+  background: color-mix(in srgb, #c43b3b 10%, Canvas);
+  color: color-mix(in srgb, #c43b3b 78%, CanvasText);
+  font: 11px/1.5 ui-monospace, SFMono-Regular, monospace;
+}

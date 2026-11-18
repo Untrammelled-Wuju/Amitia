@@ -45,6 +45,9 @@ const (
 	MethodScheduleCreate               Method = "host.schedule.create"
 	MethodScheduleCancel               Method = "host.schedule.cancel"
 	MethodScheduleList                 Method = "host.schedule.list"
+	MethodScheduleRun                  Method = "host.schedule.run"
+	MethodScheduleUpdate               Method = "host.schedule.update"
+	MethodScheduleHistory              Method = "host.schedule.history"
 	MethodUINotify                     Method = "host.ui.notify"
 	MethodUIDialog                     Method = "host.ui.dialog"
 	MethodUINavigate                   Method = "host.ui.navigate"
@@ -52,11 +55,31 @@ const (
 	MethodClipboardRead                Method = "host.clipboard.read"
 	MethodCharacterRead                Method = "host.character.read"
 	MethodCharacterList                Method = "host.character.list"
+	MethodConversationList             Method = "host.conversation.list"
 	MethodConversationRead             Method = "host.conversation.read"
+	MethodConversationSearch           Method = "host.conversation.search"
+	MethodConversationCreate           Method = "host.conversation.create"
+	MethodConversationScope            Method = "host.conversation.scope"
+	MethodConversationDelete           Method = "host.conversation.delete"
 	MethodConversationMessageSend      Method = "host.conversation.message.send"
 	MethodConversationMessageAppend    Method = "host.conversation.message.append"
+	MethodConversationTurnInterrupt    Method = "host.conversation.turn.interrupt"
+	MethodConversationTurnAwait        Method = "host.conversation.turn.await"
+	MethodConversationArchive          Method = "host.conversation.archive"
+	MethodConversationPin              Method = "host.conversation.pin"
+	MethodConversationFork             Method = "host.conversation.fork"
+	MethodDirectoryList                Method = "host.directory.list"
+	MethodDirectoryCreate              Method = "host.directory.create"
+	MethodSkillList                    Method = "host.skill.list"
+	MethodProjectList                  Method = "host.project.list"
+	MethodProjectCreate                Method = "host.project.create"
+	MethodProjectUpdate                Method = "host.project.update"
+	MethodProjectDelete                Method = "host.project.delete"
 	MethodMemoryQuery                  Method = "host.memory.query"
 	MethodProviderInvoke               Method = "host.provider.invoke"
+	MethodModelDefaults                Method = "host.model.defaults"
+	MethodModelInvoke                  Method = "host.model.invoke"
+	MethodApprovalRequest              Method = "host.approval.request"
 	MethodExtensionDataRead            Method = "host.extension.data.read"
 	MethodVectorUpsert                 Method = "host.vector.upsert"
 	MethodVectorSearch                 Method = "host.vector.search"
@@ -134,24 +157,25 @@ type PermissionRequirement struct {
 }
 
 type CallRequest struct {
-	CallID               string
-	RuntimeIdentity      runtime_supervisor.RuntimeIdentity
-	Method               Method
-	Version              int
-	Input                json.RawMessage
-	ScopeSnapshotID      string
-	PermissionSnapshotID string
-	TraceID              string
-	InvocationID         string
-	ApprovalRecordID     string
-	ExecutionContext     permission.PermissionExecutionContext
-	ParentID             string
-	Deadline             time.Time
-	UserInitiated        bool
-	SpaceID              string
-	CharacterID          string
-	ConversationID       string
-	Channel              string
+	CallID                string
+	RuntimeIdentity       runtime_supervisor.RuntimeIdentity
+	Method                Method
+	Version               int
+	Input                 json.RawMessage
+	ScopeSnapshotID       string
+	TargetScopeSnapshotID string
+	PermissionSnapshotID  string
+	TraceID               string
+	InvocationID          string
+	ApprovalRecordID      string
+	ExecutionContext      permission.PermissionExecutionContext
+	ParentID              string
+	Deadline              time.Time
+	UserInitiated         bool
+	SpaceID               string
+	CharacterID           string
+	ConversationID        string
+	Channel               string
 }
 
 type CallResult struct {
@@ -325,6 +349,10 @@ type PermissionSnapshotChecker interface {
 
 type ScopeChecker interface {
 	Check(ctx context.Context, identity runtime_supervisor.RuntimeIdentity, scopeSnapshotID string, policy ScopePolicy) error
+}
+
+type TargetScopeChecker interface {
+	CheckTarget(ctx context.Context, identity runtime_supervisor.RuntimeIdentity, request CallRequest, policy ScopePolicy) error
 }
 
 type AuditWriter interface {

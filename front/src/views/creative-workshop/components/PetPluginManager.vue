@@ -6,7 +6,6 @@
         <p>管理桌宠扩展插件的安装、更新、启用与卸载</p>
       </div>
       <div class="section-actions">
-        <el-button :icon="Plus" type="primary" :disabled="installLoading" @click="openInstallDialog()">安装插件</el-button>
         <el-button :icon="Refresh" :loading="loading" @click="loadPlugins">刷新</el-button>
       </div>
     </div>
@@ -36,7 +35,7 @@
         description="暂无已安装的桌宠插件"
         :image-size="80"
       >
-        <el-button type="primary" :icon="Plus" @click="openInstallDialog()">安装插件</el-button>
+        <el-button type="primary" :icon="Plus" @click="openInstallDialog()">安装桌宠</el-button>
       </el-empty>
 
       <div v-else v-loading="loading" class="plugin-list">
@@ -325,6 +324,8 @@ function openInstallDialog(plugin?: PetPlugin) {
   updateTarget.value = plugin || null;
   installDialogVisible.value = true;
 }
+
+defineExpose({ openInstallDialog });
 
 function resetInstallState() {
   previewRequest += 1;

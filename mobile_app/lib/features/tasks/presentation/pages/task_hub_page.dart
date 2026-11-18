@@ -9,6 +9,7 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/models/reminder.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/ui_runtime/mobile_extension_slot.dart';
 import '../../../../core/widgets/amitia_icons.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/hub_entry_card.dart';
@@ -184,6 +185,19 @@ class _TaskHubPageState extends ConsumerState<TaskHubPage> {
           Text('计划中的任务', style: AppTypography.label(context)),
           SizedBox(height: AppSpacing.xs),
           _buildPlannedTasks(tasksAsync),
+          SizedBox(height: AppSpacing.lg),
+          MobileExtensionSlot(
+            slotId: 'tasks.page.section',
+            context: <String, dynamic>{
+              'route': AppRoutes.tasks,
+              'surface': 'tasks',
+              'surfaceRole': 'main',
+              'platform': 'mobile',
+              'taskCount': _plannedTasks(
+                tasksAsync.valueOrNull ?? const <ReminderDto>[],
+              ).length,
+            },
+          ),
         ],
       ),
     );

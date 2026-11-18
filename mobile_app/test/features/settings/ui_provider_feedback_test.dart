@@ -10,13 +10,17 @@ import 'package:go_router/go_router.dart';
 class TestExtensionService extends Fake implements ExtensionService {}
 
 class TestRuntime extends UIRuntimeController {
-  TestRuntime()
+  TestRuntime({Object? failure, StackTrace? stackTrace})
     : super(
         TestExtensionService(),
         onLastKnownGood: (_) {},
         cacheNamespace: () async => 'feedback',
         meshDeviceId: () async => null,
       ) {
+    if (failure != null) {
+      state = AsyncValue.error(failure, stackTrace ?? StackTrace.empty);
+      return;
+    }
     state = AsyncValue.data(
       UIProviderSnapshot.fromJson({
         'providers': [
@@ -87,5 +91,34 @@ void main() {
     await tester.pump();
     expect(find.text('该界面提供者未启用，无法选择。'), findsOneWidget);
     expect(runtime.writes, 0);
+  });
+
+  testWidgets('读取界面配置失败后可以展开并复制原始错误和堆栈', (tester) async {
+    final runtime = TestRuntime(
+      failure: StateError('设备身份暂不可读'),
+      stackTrace: StackTrace.fromString('identity resolver stack'),
+    );
+    final router = GoRouter(
+      routes: [
+        GoRoute(
+          path: '/',
+          builder: (context, state) => const UIProviderSettingsPage(),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [uiRuntimeProvider.overrideWith((ref) => runtime)],
+        child: MaterialApp.router(routerConfig: router),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final failureTile = find.text('加载界面提供者失败');
+    await tester.ensureVisible(failureTile);
+    await tester.tap(failureTile);
+    await tester.pumpAndSettle();
+    final original = tester.widget<SelectableText>(find.byType(SelectableText));
+    expect(original.data, 'Bad state: 设备身份暂不可读\nidentity resolver stack');
   });
 }

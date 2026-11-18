@@ -130,24 +130,24 @@ func (a *txRepositoryAdapter) UpdateRuntimeSettingsCAS(tx *gorm.DB, installation
 	return a.scoped().UpdateRuntimeSettingsCAS(tx, installationID, spaceID, deviceID, expectedRevision, updates)
 }
 
-func (a *txRepositoryAdapter) GetActiveBindingForSpaceDeviceTx(tx *gorm.DB, spaceID, deviceID string) (*binding.DeviceActiveInstallationBinding, error) {
-	return a.scoped().GetActiveBindingForSpaceDeviceTx(tx, spaceID, deviceID)
+func (a *txRepositoryAdapter) GetActiveBindingForSpaceDeviceTx(tx *gorm.DB, spaceID, deviceID, installationID string) (*binding.DeviceActiveInstallationBinding, error) {
+	return a.scoped().GetActiveBindingForSpaceDeviceTx(tx, spaceID, deviceID, installationID)
 }
 
 func (a *txRepositoryAdapter) UpsertActiveBindingTx(tx *gorm.DB, b *binding.DeviceActiveInstallationBinding) error {
 	return a.scoped().UpsertActiveBindingTx(tx, b)
 }
 
-func (a *txRepositoryAdapter) DeleteActiveBindingTx(tx *gorm.DB, spaceID, deviceID string) error {
-	return a.scoped().DeleteActiveBindingTx(tx, spaceID, deviceID)
+func (a *txRepositoryAdapter) DeleteActiveBindingTx(tx *gorm.DB, spaceID, deviceID, installationID string) error {
+	return a.scoped().DeleteActiveBindingTx(tx, spaceID, deviceID, installationID)
 }
 
 func (a *txRepositoryAdapter) InsertBindingHistoryTx(tx *gorm.DB, entry *binding.BindingHistoryEntry) error {
 	return a.scoped().InsertBindingHistoryTx(tx, entry)
 }
 
-func (a *txRepositoryAdapter) GetRuntimeDesiredStateTx(tx *gorm.DB, spaceID, deviceID string) (*desired.RuntimeDesiredState, error) {
-	return a.scoped().GetRuntimeDesiredStateTx(tx, spaceID, deviceID)
+func (a *txRepositoryAdapter) GetRuntimeDesiredStateTx(tx *gorm.DB, spaceID, deviceID, installationID string) (*desired.RuntimeDesiredState, error) {
+	return a.scoped().GetRuntimeDesiredStateTx(tx, spaceID, deviceID, installationID)
 }
 
 func (a *txRepositoryAdapter) UpsertRuntimeDesiredStateCAS(tx *gorm.DB, spaceID, deviceID string, state *desired.RuntimeDesiredState, expectedRevision int64) (*desired.RuntimeDesiredState, error) {
@@ -610,9 +610,9 @@ func (r *repository) UpdateRuntimeSettingsCAS(tx *gorm.DB, installationID, space
 	return &updated, nil
 }
 
-func (r *repository) GetActiveBindingForSpaceDeviceTx(tx *gorm.DB, spaceID, deviceID string) (*binding.DeviceActiveInstallationBinding, error) {
+func (r *repository) GetActiveBindingForSpaceDeviceTx(tx *gorm.DB, spaceID, deviceID, installationID string) (*binding.DeviceActiveInstallationBinding, error) {
 	var b binding.DeviceActiveInstallationBinding
-	err := tx.Where("space_id = ? AND device_id = ?", spaceID, deviceID).First(&b).Error
+	err := tx.Where("space_id = ? AND device_id = ? AND installation_id = ?", spaceID, deviceID, installationID).First(&b).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrBindingNotFound
@@ -624,13 +624,13 @@ func (r *repository) GetActiveBindingForSpaceDeviceTx(tx *gorm.DB, spaceID, devi
 
 func (r *repository) UpsertActiveBindingTx(tx *gorm.DB, b *binding.DeviceActiveInstallationBinding) error {
 	return tx.Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "space_id"}, {Name: "device_id"}},
+		Columns:   []clause.Column{{Name: "space_id"}, {Name: "device_id"}, {Name: "installation_id"}},
 		DoUpdates: clause.AssignmentColumns([]string{"installation_id", "pet_id", "release_id", "binding_revision", "bound_reason", "bound_at", "bound_by", "updated_at"}),
 	}).Create(b).Error
 }
 
-func (r *repository) DeleteActiveBindingTx(tx *gorm.DB, spaceID, deviceID string) error {
-	return tx.Where("space_id = ? AND device_id = ?", spaceID, deviceID).
+func (r *repository) DeleteActiveBindingTx(tx *gorm.DB, spaceID, deviceID, installationID string) error {
+	return tx.Where("space_id = ? AND device_id = ? AND installation_id = ?", spaceID, deviceID, installationID).
 		Delete(&binding.DeviceActiveInstallationBinding{}).Error
 }
 
@@ -638,9 +638,9 @@ func (r *repository) InsertBindingHistoryTx(tx *gorm.DB, entry *binding.BindingH
 	return tx.Create(entry).Error
 }
 
-func (r *repository) GetRuntimeDesiredStateTx(tx *gorm.DB, spaceID, deviceID string) (*desired.RuntimeDesiredState, error) {
+func (r *repository) GetRuntimeDesiredStateTx(tx *gorm.DB, spaceID, deviceID, installationID string) (*desired.RuntimeDesiredState, error) {
 	var state desired.RuntimeDesiredState
-	err := tx.Where("space_id = ? AND device_id = ?", spaceID, deviceID).First(&state).Error
+	err := tx.Where("space_id = ? AND device_id = ? AND installation_id = ?", spaceID, deviceID, installationID).First(&state).Error
 	if err != nil {
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, err
@@ -651,7 +651,7 @@ func (r *repository) GetRuntimeDesiredStateTx(tx *gorm.DB, spaceID, deviceID str
 }
 
 func (r *repository) UpsertRuntimeDesiredStateCAS(tx *gorm.DB, spaceID, deviceID string, state *desired.RuntimeDesiredState, expectedRevision int64) (*desired.RuntimeDesiredState, error) {
-	existing, err := r.GetRuntimeDesiredStateTx(tx, spaceID, deviceID)
+	existing, err := r.GetRuntimeDesiredStateTx(tx, spaceID, deviceID, state.InstallationID)
 	if err != nil {
 		return nil, err
 	}

@@ -2,6 +2,7 @@ package kernel
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"os"
@@ -14,6 +15,15 @@ import (
 	"github.com/u-ai/backend/internal/workspace"
 	workspacegit "github.com/u-ai/backend/internal/workspace/git"
 )
+
+type fixtureConversationWorkspaceResolver struct {
+	workspace ConversationWorkspace
+	err       error
+}
+
+func (r fixtureConversationWorkspaceResolver) ResolveConversationWorkspace(context.Context, string) (ConversationWorkspace, error) {
+	return r.workspace, r.err
+}
 
 func workspaceBridgeFixture(t *testing.T) (*WorkspaceBridge, workspace.WorkspaceMount, string) {
 	t.Helper()
@@ -106,6 +116,127 @@ func TestWorkspaceBridgeRejectsGitMutationOnReadOnlyMount(t *testing.T) {
 	_, err = bridge.Write(context.Background(), json.RawMessage(`{"operation":"git_add","payload":{"workspaceUri":"`+mount.RootURI+`","paths":["hello.txt"]}}`))
 	if !errors.Is(err, workspace.ErrReadOnly) {
 		t.Fatalf("git mutation error=%v, want read-only", err)
+	}
+}
+
+func TestWorkspaceBridgeResolvesDSHSessionFiles(t *testing.T) {
+	bridge, mount, root := workspaceBridgeFixture(t)
+	content := "one\ntwo\nthree\nfour"
+	if err := os.WriteFile(filepath.Join(root, "notes.txt"), []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(root, "folder"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	bridge.SetConversationWorkspaceResolver(fixtureConversationWorkspaceResolver{
+		workspace: ConversationWorkspace{
+			ProjectID:   "project-1",
+			WorkspaceID: string(mount.ID),
+			RootURI:     mount.RootURI,
+		},
+	})
+	ctx := context.Background()
+	stat, err := bridge.Read(ctx, json.RawMessage(`{"operation":"file_stat","payload":{"sessionId":"conversation-1","path":"notes.txt"}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	statValue := stat.(map[string]any)
+	expectedPath, err := filepath.EvalSymlinks(filepath.Join(root, "notes.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if statValue["absolutePath"] != expectedPath || statValue["bytes"] != int64(len(content)) {
+		t.Fatalf("unexpected stat: %+v", statValue)
+	}
+	page, err := bridge.Read(ctx, json.RawMessage(`{"operation":"file_read_text","payload":{"sessionId":"conversation-1","path":"notes.txt","offset":2,"limit":2}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pageValue := page.(map[string]any)
+	if pageValue["text"] != "two\nthree" || pageValue["lines"] != 2 || pageValue["eof"] != false {
+		t.Fatalf("unexpected text page: %+v", pageValue)
+	}
+	binary, err := bridge.Read(ctx, json.RawMessage(`{"operation":"file_read_bytes","payload":{"sessionId":"conversation-1","path":"notes.txt","offset":4,"length":3}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	binaryValue := binary.(map[string]any)
+	decoded, err := base64.StdEncoding.DecodeString(binaryValue["dataBase64"].(string))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(decoded) != "two" || binaryValue["eof"] != false {
+		t.Fatalf("unexpected byte page: %q %+v", decoded, binaryValue)
+	}
+	rootListing, err := bridge.Read(ctx, json.RawMessage(`{"operation":"file_list","payload":{"sessionId":"conversation-1","path":""}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rootValue := rootListing.(map[string]any)
+	rootEntries := rootValue["entries"].([]map[string]any)
+	if rootValue["path"] != "" || len(rootEntries) != 3 || rootEntries[0]["name"] != "folder" || rootEntries[1]["name"] != "hello.txt" || rootEntries[2]["name"] != "notes.txt" {
+		t.Fatalf("unexpected root listing: %+v", rootValue)
+	}
+	folderListing, err := bridge.Read(ctx, json.RawMessage(`{"operation":"file_list","payload":{"sessionId":"conversation-1","path":"folder"}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	folderValue := folderListing.(map[string]any)
+	if folderValue["path"] != "folder" || len(folderValue["entries"].([]map[string]any)) != 0 {
+		t.Fatalf("unexpected folder listing: %+v", folderValue)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "src"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "node_modules"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "src", "notes.md"), []byte("search target"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".hidden.txt"), []byte("hidden target"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "node_modules", "ignored.js"), []byte("ignored target"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".gitignore"), []byte("node_modules/\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	search, err := bridge.Read(ctx, json.RawMessage(`{"operation":"file_search","payload":{"sessionId":"conversation-1","query":"notes.md","excludedPaths":[],"includeHidden":false,"respectGitignore":true}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	searchValue := search.(map[string]any)
+	searchMatches := searchValue["matches"].([]dshSearchMatch)
+	if len(searchMatches) != 2 || searchMatches[0].Path != "src" || searchMatches[0].Type != "directory" || searchMatches[1].Path != "src/notes.md" || searchMatches[1].Type != "file" {
+		t.Fatalf("unexpected workspace search: %+v", searchValue)
+	}
+	ignored, err := bridge.Read(ctx, json.RawMessage(`{"operation":"file_search","payload":{"sessionId":"conversation-1","query":"ignored","excludedPaths":[],"includeHidden":false,"respectGitignore":true}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := ignored.(map[string]any)["matches"].([]dshSearchMatch); len(got) != 0 {
+		t.Fatalf("gitignored workspace file was returned: %+v", got)
+	}
+	hidden, err := bridge.Read(ctx, json.RawMessage(`{"operation":"file_search","payload":{"sessionId":"conversation-1","query":"hidden","excludedPaths":[],"includeHidden":true,"respectGitignore":true}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := hidden.(map[string]any)["matches"].([]dshSearchMatch); len(got) != 1 || got[0].Path != ".hidden.txt" {
+		t.Fatalf("hidden workspace file search failed: %+v", got)
+	}
+	if _, err := bridge.Read(ctx, json.RawMessage(`{"operation":"file_stat","payload":{"sessionId":"conversation-1","path":"../outside.txt"}}`)); err == nil {
+		t.Fatal("workspace traversal was accepted")
+	}
+}
+
+func TestWorkspaceBridgePreservesConversationWorkspaceFailure(t *testing.T) {
+	bridge, _, _ := workspaceBridgeFixture(t)
+	bridge.SetConversationWorkspaceResolver(fixtureConversationWorkspaceResolver{err: errors.New("conversation workspace missing")})
+	_, err := bridge.Read(context.Background(), json.RawMessage(`{"operation":"file_stat","payload":{"sessionId":"conversation-1","path":"hello.txt"}}`))
+	if err == nil || err.Error() != "conversation workspace missing" {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

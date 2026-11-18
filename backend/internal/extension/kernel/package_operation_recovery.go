@@ -70,6 +70,33 @@ func (r *Runtime) RecoverPackageOperations(ctx context.Context) error {
 	return errors.Join(failures...)
 }
 
+func (r *Runtime) resolveSupersededPackageOperation(ctx context.Context, operation PackageOperationRecord) (bool, string) {
+	if r.container.PackageGenerationStore == nil || operation.ExtensionID == "" {
+		return false, ""
+	}
+	current, err := r.container.PackageGenerationStore.ReadCurrent(operation.ExtensionID)
+	if err != nil || current.GenerationID == "" || current.OperationID == "" {
+		return false, ""
+	}
+	if current.OperationID == operation.OperationID {
+		return false, ""
+	}
+	newer, _, err := r.container.PackageRepository.GetOperation(ctx, operation.SpaceID, current.OperationID)
+	if err != nil {
+		return false, ""
+	}
+	if PackageOperationStatus(newer.Status) != PackageOperationCompleted {
+		return false, ""
+	}
+	if newer.ExtensionID != operation.ExtensionID {
+		return false, ""
+	}
+	if newer.TargetVersion != operation.TargetVersion {
+		return false, ""
+	}
+	return true, newer.OperationID
+}
+
 func (r *Runtime) recoverPackageOperation(ctx context.Context, operation PackageOperationRecord) error {
 	if r.container == nil || r.container.PackageRepository == nil {
 		return fmt.Errorf("kernel: package repository unavailable")
@@ -86,6 +113,15 @@ func (r *Runtime) recoverPackageOperation(ctx context.Context, operation Package
 
 	if operation.OperationType == "uninstall" && PackageOperationStatus(operation.Status) == PackageOperationCompleted {
 		return r.verifyUninstallFinalizedState(ctx, operation)
+	}
+	if PackageOperationStatus(operation.Status) == PackageOperationRequiresRecovery {
+		if superseded, supersededBy := r.resolveSupersededPackageOperation(ctx, operation); superseded {
+			detail := "operation superseded by completed operation " + supersededBy
+			if err := r.container.PackageRepository.SetOperation(ctx, operation.OperationID, "completed", "superseded", "", detail, true, PackageWriteGuard{}); err != nil {
+				return err
+			}
+			return nil
+		}
 	}
 
 	lease, leaseErr := r.acquirePackageExtensionLease(ctx, operation.ExtensionID, operation.OperationID)

@@ -5,10 +5,13 @@
       <div class="bubble-entry-body">
       <slot name="identity" />
       <div class="message-piece" :data-bubble-kind="item.kind === 'block' ? item.block.kind : item.kind">
-      <MarkdownContent v-if="item.kind === 'text'" :source="item.content" :streaming="false" :citation-ids="citationIds" @citation="emit('citation', $event)" />
+      <MarkdownContent v-if="item.kind === 'text'" :source="item.content" :streaming="false" :citation-ids="citationIds" :extension-context="extensionContext" @citation="emit('citation', $event)" />
       <AmitiaThinkingBlock v-else-if="item.kind === 'thinking'" :content="item.content" :state="item.complete ? 'completed' : 'streaming'" :duration="item.duration" />
-      <AssistantTurnTimeline v-else-if="item.kind === 'turn'" :turn="item.turn" :citation-ids="citationIds" @citation="emit('citation', $event)" />
-      <RichBlockRenderer v-else :block="item.block" />
+      <AssistantTurnTimeline v-else-if="item.kind === 'turn'" :turn="item.turn" :citation-ids="citationIds" :extension-context="extensionContext" @citation="emit('citation', $event)" />
+      <slot v-else-if="item.kind === 'images'" name="images" :images="item.images">
+        <AmitiaImageBlock :images="item.images" />
+      </slot>
+      <RichBlockRenderer v-else :block="item.block" :extension-context="extensionContext" />
       </div>
       </div>
     </div>
@@ -28,10 +31,11 @@ import type { AIMessageData, AssistantTurnData } from "./types";
 import { projectBubbleContent } from "./bubbleMessageProjection";
 import MarkdownContent from "./markdown/MarkdownContent.vue";
 import AmitiaThinkingBlock from "./blocks/AmitiaThinkingBlock.vue";
+import AmitiaImageBlock from "./blocks/AmitiaImageBlock.vue";
 import AssistantTurnTimeline from "./AssistantTurnTimeline.vue";
 import RichBlockRenderer from "./blocks/RichBlockRenderer.vue";
 
-const props = defineProps<{ message: AIMessageData; turn?: AssistantTurnData | null; citationIds?: string[]; pending?: boolean }>();
+const props = defineProps<{ message: AIMessageData; turn?: AssistantTurnData | null; citationIds?: string[]; pending?: boolean; extensionContext?: Record<string, unknown> }>();
 const emit = defineEmits<{ citation: [id: string] }>();
 const items = computed(() => projectBubbleContent(props.message, props.turn));
 </script>

@@ -7,6 +7,7 @@ import (
 
 	"github.com/glebarez/sqlite"
 	"github.com/u-ai/backend/internal/character"
+	"github.com/u-ai/backend/internal/interaction"
 	"gorm.io/gorm"
 )
 
@@ -153,5 +154,27 @@ func TestBuildRoleSystemPartsUsesRuntimeProfile(t *testing.T) {
 	}
 	if strings.Contains(joined, "【场景配置】") {
 		t.Fatalf("default-only scene rules should not be appended: %s", joined)
+	}
+}
+
+func TestBuildRoleSystemPartsAppendsPromptExtensions(t *testing.T) {
+	parts := buildRoleSystemParts(&character.RoleRuntimeProfile{
+		CharacterID: "char-1",
+		Name:        "Amitia",
+		Identity:    "伙伴",
+	}, &interaction.RuntimeAssembly{
+		Context: interaction.ContextSnapshot{
+			PromptExtensions: interaction.FieldReady(interaction.PromptExtensionSet{
+				Count: 1,
+				Sections: []interaction.PromptExtensionSection{{
+					ID:      "dsh",
+					Content: "DSH prompt section",
+				}},
+			}, "promptExtensions", "v1"),
+		},
+	})
+	joined := strings.Join(parts, "\n")
+	if !strings.Contains(joined, "【扩展提示词】") || !strings.Contains(joined, "DSH prompt section") {
+		t.Fatalf("prompt extensions missing: %s", joined)
 	}
 }

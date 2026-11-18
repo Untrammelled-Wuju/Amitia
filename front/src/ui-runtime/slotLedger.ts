@@ -10,6 +10,7 @@ export type UnifiedSlotItem =
       priority: number;
       contributionId: string;
       entryKey: string;
+      entryKeyExplicit: boolean;
       cellId: string;
       matched?: unknown;
       server: UIContributionSummary;
@@ -21,6 +22,7 @@ export type UnifiedSlotItem =
       priority: number;
       contributionId: string;
       entryKey: string;
+      entryKeyExplicit: boolean;
       cellId: string;
       matched?: unknown;
       client: ClientSlotContribution;
@@ -62,6 +64,8 @@ export function buildUnifiedSlotItems(
       // here only after their executable select(owner) matched. We can therefore
       // merge both families by shadow priority without a second selector system.
       return pickChainWinner(items);
+    case "hoc":
+      return dispatchHoc(items, options.dispatchKey);
     default:
       return [];
   }
@@ -89,6 +93,7 @@ function toItems(
       ordering: finite(entry.ordering),
       priority: finite(entry.priority ?? entry.ordering),
       entryKey: normalizeIdentity(entry.entryKey, entry.contributionId),
+      entryKeyExplicit: typeof entry.entryKey === "string" && entry.entryKey.trim().length > 0,
       cellId: normalizeIdentity(entry.cellId, entry.contributionId),
       matched: entry.matched,
       server: entry,
@@ -100,6 +105,7 @@ function toItems(
       ordering: finite(entry.ordering),
       priority: finite(entry.priority),
       entryKey: normalizeIdentity(entry.entryKey, entry.key),
+      entryKeyExplicit: typeof entry.entryKey === "string" && entry.entryKey.trim().length > 0,
       cellId: normalizeIdentity(entry.cellId, entry.key),
       matched: clientMatched?.get(entry.contributionId),
       client: entry,
@@ -138,6 +144,13 @@ function pickChainWinner(items: UnifiedSlotItem[]): UnifiedSlotItem[] {
   return [[...items].sort(compareChain)[0]!];
 }
 
+function dispatchHoc(items: UnifiedSlotItem[], dispatchKey?: string): UnifiedSlotItem[] {
+  const key = dispatchKey?.trim() ?? "";
+  return [...items]
+    .filter((item) => !item.entryKeyExplicit || (key && item.entryKey === key))
+    .sort(compareHoc);
+}
+
 function shadowWinner(items: UnifiedSlotItem[], cell: string): UnifiedSlotItem | undefined {
   if (items.length === 0) return undefined;
   const ordered = [...items].sort(compareShadow);
@@ -165,6 +178,10 @@ function compareListDisplay(a: UnifiedSlotItem, b: UnifiedSlotItem): number {
   return a.ordering - b.ordering || compareAssembly(a, b);
 }
 
+function compareHoc(a: UnifiedSlotItem, b: UnifiedSlotItem): number {
+  return a.ordering - b.ordering || a.priority - b.priority || compareAssembly(a, b);
+}
+
 function compareAssembly(a: UnifiedSlotItem, b: UnifiedSlotItem): number {
   if (a.source === "client" && b.source === "client") {
     return a.client.sequence - b.client.sequence || a.key.localeCompare(b.key);
@@ -185,5 +202,5 @@ function finite(value: unknown): number {
 }
 
 // Compile-time guard that keeps the union synchronized with the client kind.
-const _kindGuard: Record<ClientSlotKind, true> = { single: true, list: true, keyed: true, chain: true };
+const _kindGuard: Record<ClientSlotKind, true> = { single: true, list: true, keyed: true, chain: true, hoc: true };
 void _kindGuard;

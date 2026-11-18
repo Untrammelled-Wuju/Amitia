@@ -45,6 +45,7 @@ def parse_arguments(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument("--runtime-package", required=True, help="Path to runtime package zip")
     parser.add_argument("--runtime-version", required=True, help="Expected runtime version")
     parser.add_argument("--commit", required=True, help="Expected commit hash")
+    parser.add_argument("--package-id", default="amitia.runtime.android", help="Expected runtime package ID")
     parser.add_argument("--profile", default="mobile-balanced", help="Primary Qdrant profile")
     parser.add_argument("--work-dir", default="", help="Temporary validation working directory")
     parser.add_argument("--report", default="", help="Path to output JSON report")
@@ -89,7 +90,13 @@ def full_validate(args: argparse.Namespace) -> int:
     start_time = int(time.time() * 1000)
 
     check_environment(validation_report)
-    check_package(validation_report, args.runtime_package, args.runtime_version, args.commit)
+    check_package(
+        validation_report,
+        args.runtime_package,
+        args.runtime_version,
+        args.package_id,
+        args.commit,
+    )
     if validation_report.result == "failed":
         return finalize_report(validation_report, args, work_dir, start_time)
 
@@ -158,12 +165,23 @@ def check_environment(validation_report: report.ValidationReport) -> None:
     ))
 
 
-def check_package(validation_report: report.ValidationReport, package_path: str, version: str, commit: str) -> None:
+def check_package(
+    validation_report: report.ValidationReport,
+    package_path: str,
+    version: str,
+    package_id: str,
+    commit: str,
+) -> None:
     try:
         from . import package_validator
     except ImportError:
         import package_validator
-    result = package_validator.validate_package(package_path, version, commit)
+    result = package_validator.validate_package(
+        package_path,
+        version,
+        package_id,
+        expected_source_revision=commit,
+    )
     validation_report.package = result.to_safe_dict()
     status = report.CheckStatus.PASSED.value if result.valid else report.CheckStatus.FAILED.value
     error_message = "; ".join(err.get("message", "") for err in result.errors) if not result.valid else None

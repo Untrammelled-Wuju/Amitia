@@ -2,7 +2,9 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch, defineAsyncComponent } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { apiClient } from "@/composables/useApi";
+import { extensionPageActionContext, extensionPageActionResult } from "./pageActionContext";
 import { useExtensionUIStore } from "@/stores/extensionUI";
+import { useAppStore } from "@/stores/app";
 import type { UIContributionSummary } from "@/stores/extensionUI";
 import { openExtensionPage, pollPageSessionStatus, closePageSession } from "@/api/extension";
 import { resolveHostEnvironment } from "@/composables/useHostEnvironment";
@@ -53,6 +55,7 @@ interface OpenPageResult {
 const route = useRoute();
 const router = useRouter();
 const uiStore = useExtensionUIStore();
+const appStore = useAppStore();
 
 const sessionId = ref<string>("");
 const pageSessionGeneration = ref<number>(0);
@@ -129,14 +132,14 @@ const pageActions = computed<Record<string, (input?: unknown) => Promise<unknown
       const contributionId = pageContributionDefinition.value?.contributionId || pageId.value;
       const response = await apiClient.post(
         `/api/extension/action/${encodeURIComponent(contributionId)}/${encodeURIComponent(action.actionId)}`,
-        { context: pageContext.value, input: input ?? {} },
+        { context: extensionPageActionContext(pageContext.value), input: input ?? {} },
       );
       const data = response.data as Record<string, unknown> | undefined;
       if (data?.ok === false) {
         const error = data.error as Record<string, unknown> | string | undefined;
         throw new Error(typeof error === "string" ? error : String(error?.message ?? "插件操作失败"));
       }
-      return data?.result ?? data;
+      return extensionPageActionResult(data);
     };
   }
   return actions;
@@ -156,6 +159,7 @@ const pageContext = computed<Record<string, unknown>>(() => {
     extensionId: extensionId.value,
     pageId: pageId.value,
     sessionId: sessionId.value,
+    characterId: appStore.currentCharacter?.id ?? "",
     scope: pageSpec.value?.scope ?? "global",
     params: route.query,
     platform: env.platform,

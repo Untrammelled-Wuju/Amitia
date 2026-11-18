@@ -22,7 +22,20 @@ type ContextSnapshot struct {
 	UnresolvedThreads SnapshotField[UnresolvedThreadSet] `json:"unresolvedThreads"`
 	Channel           SnapshotField[ChannelCapabilities] `json:"channel"`
 	Temporal          SnapshotField[temporal.Snapshot]   `json:"temporal"`
+	PromptExtensions  SnapshotField[PromptExtensionSet]  `json:"promptExtensions"`
 	AssembledAt       time.Time                          `json:"assembledAt"`
+}
+
+type PromptExtensionSection struct {
+	ID       string `json:"id"`
+	Content  string `json:"content"`
+	Priority int    `json:"priority,omitempty"`
+	Source   string `json:"source,omitempty"`
+}
+
+type PromptExtensionSet struct {
+	Sections []PromptExtensionSection `json:"sections"`
+	Count    int                      `json:"count"`
 }
 
 func (s ContextSnapshot) SnapshotVersion() string {

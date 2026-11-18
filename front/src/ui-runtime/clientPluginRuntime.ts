@@ -25,6 +25,8 @@ import type {
   ClientSlotStoreFactory,
   ClientSlotStoreResource,
 } from "@/ui-runtime/slotContract";
+import { foreignComponentRegistry } from "@/ui-runtime/foreignComponentRuntime";
+import { rightPaneRuntime } from "@/ui-runtime/rightPaneRuntime";
 
 export type ClientDisposer = () => void | Promise<void>;
 export type ClientSlotEffect = void | ClientDisposer | readonly ClientDisposer[] | Iterable<ClientDisposer> | Promise<void | ClientDisposer | readonly ClientDisposer[] | Iterable<ClientDisposer>>;
@@ -40,6 +42,7 @@ export interface ClientSlotDefinition {
   parentSlotId?: string;
   description?: string;
   scope?: "root" | "session-maybe" | "session";
+  allowRootChild?: boolean;
   declarationEpoch?: number;
   ownerId?: string;
   /** Exact registering entry that owns render authority for dynamic children. */
@@ -149,6 +152,31 @@ const EMPTY_ENVIRONMENT: ClientSlotRegistrationEnvironment = {
 };
 
 export type BrowserLocaleDictionaries = Readonly<Record<string, Readonly<Record<string, string>>>>;
+
+const CHAT_SURFACE_SLOT_PREFIXES = ["chat.", "provider.conversation."];
+const CHAT_SURFACE_CONTAINER_SLOT_IDS = ["provider.page.provider"];
+
+function inChatSurface(slotId: string): boolean {
+  return CHAT_SURFACE_SLOT_PREFIXES.some((prefix) => slotId.startsWith(prefix));
+}
+
+function inChatSurfaceContainer(slotId: string): boolean {
+  return CHAT_SURFACE_CONTAINER_SLOT_IDS.some((id) => slotId === id || slotId.startsWith(`${id}.`));
+}
+
+function sharesChatSurface(contributionSlotId: string, parentSlotId: string): boolean {
+  if (!parentSlotId) return true;
+  if (parentSlotId === contributionSlotId) return true;
+  return inChatSurface(contributionSlotId) && inChatSurface(parentSlotId);
+}
+
+function canRenderSessionChild(contributionSlotId: string, childSlotId: string, childParentSlotId?: string): boolean {
+  if (!childParentSlotId) return true;
+  if (childParentSlotId === contributionSlotId) return true;
+  if (inChatSurface(contributionSlotId) && inChatSurface(childSlotId)) return true;
+  if (inChatSurfaceContainer(contributionSlotId) && inChatSurface(childSlotId)) return true;
+  return sharesChatSurface(contributionSlotId, childParentSlotId);
+}
 
 export class BrowserLocaleRuntime {
   private readonly namespaces = new Map<string, { ownerId: string; dictionaries: BrowserLocaleDictionaries }>();
@@ -262,7 +290,7 @@ export class BrowserSlotRuntime {
     const parentId = input.parentSlotId?.trim();
     const parent = parentId ? this.current(parentId) : undefined;
     if (parentId && !parent) throw new Error(`parent client slot ${parentId} is not declared`);
-    if (parent && !clientScopeCanContain(parent.scope ?? "root", input.scope ?? parent.scope ?? "root")) {
+    if (parent && !clientScopeCanContain(parent.scope ?? "root", input.scope ?? parent.scope ?? "root", input.allowRootChild)) {
       throw new Error(`child slot ${input.slotId} cannot escape parent scope ${parent.scope}`);
     }
     const normalized = normalizeDefinition({
@@ -401,7 +429,7 @@ export class BrowserSlotRuntime {
     for (const child of childInputs) {
       if (child.slotId === normalizedSlotId) throw new Error(`child slot ${child.slotId} cannot equal its parent`);
       if (childIds.has(child.slotId)) throw new Error(`duplicate child slot ${child.slotId}`);
-      if (!clientScopeCanContain(parentDefinition.scope ?? "root", child.scope ?? parentDefinition.scope ?? "root")) {
+      if (!clientScopeCanContain(parentDefinition.scope ?? "root", child.scope ?? parentDefinition.scope ?? "root", child.allowRootChild)) {
         throw new Error(`child slot ${child.slotId} cannot escape parent scope ${parentDefinition.scope}`);
       }
       childIds.add(child.slotId);
@@ -409,7 +437,7 @@ export class BrowserSlotRuntime {
       if (existing) {
         // Amitia keeps predeclared host surfaces as a superset, but strict DSH
         // composition still enforces exactly one declaring parent entry.
-        if (existing.parentSlotId && existing.parentSlotId !== normalizedSlotId) {
+        if (!this.acceptsChildDeclaration(normalizedSlotId, child.slotId)) {
           throw new Error(`child slot ${child.slotId} belongs to ${existing.parentSlotId}, not ${normalizedSlotId}`);
         }
         if (existing.ownerEntryId && existing.ownerEntryId !== contributionId) {
@@ -452,7 +480,7 @@ export class BrowserSlotRuntime {
     if (dispatchKind === "keyed" && !options.entryKey?.trim()) throw new Error(`keyed slot ${normalizedSlotId} requires entryKey`);
     if (dispatchKind === "list" && !options.cellId?.trim()) throw new Error(`list slot ${normalizedSlotId} requires id`);
     if (dispatchKind === "chain" && typeof options.select !== "function") throw new Error(`chain slot ${normalizedSlotId} requires select()`);
-    if (dispatchKind !== "chain") {
+    if (dispatchKind !== "chain" && dispatchKind !== "hoc") {
       const cell = dispatchKind === "keyed" ? options.entryKey!.trim() : dispatchKind === "list" ? options.cellId!.trim() : "__single__";
       const priority = Number.isFinite(options.priority) ? Number(options.priority) : 0;
       for (const existing of slotContributions.values()) {
@@ -739,13 +767,34 @@ export class BrowserSlotRuntime {
     for (let index = instances.length - 1; index >= 0; index--) await instances[index]?.dispose();
   }
 
+  acceptsChildDeclaration(parentSlotId: string, childSlotId: string): boolean {
+    const existing = this.current(childSlotId);
+    if (!existing) return true;
+    if (!existing.parentSlotId || existing.parentSlotId === "root") return true;
+    if (existing.parentSlotId === parentSlotId) return true;
+    return sharesChatSurface(parentSlotId, existing.parentSlotId);
+  }
+
   isAuthorizedChild(contributionId: string, childSlotId: string): boolean {
     const contribution = this.contributionsById.get(contributionId);
-    if (!contribution || !contribution.active || !contribution.childSlotIds.has(childSlotId)) return false;
+    if (!contribution || !contribution.active) return false;
     const definition = this.current(childSlotId);
     if (!definition) return false;
-    if (definition.parentSlotId && definition.parentSlotId !== contribution.slotId) return false;
+    if (!canRenderSessionChild(contribution.slotId, childSlotId, definition.parentSlotId)) return false;
     if (definition.ownerEntryId && definition.ownerEntryId !== contributionId) return false;
+    if (!contribution.childSlotIds.has(childSlotId)) return false;
+    return true;
+  }
+
+  authorizeChildSlot(contributionId: string, childSlotId: string): boolean {
+    const contribution = this.contributionsById.get(contributionId);
+    if (!contribution || !contribution.active) return false;
+    const definition = this.current(childSlotId);
+    if (!canRenderSessionChild(contribution.slotId, childSlotId, definition?.parentSlotId)) return false;
+    if (definition?.ownerEntryId && definition.ownerEntryId !== contributionId) return false;
+    if (!contribution.childSlotIds.has(childSlotId)) {
+      (contribution.childSlotIds as Set<string>).add(childSlotId);
+    }
     return true;
   }
 
@@ -807,6 +856,12 @@ export class BrowserSlotRuntime {
     if (kind === "single") {
       const winner = [...active].sort(compareStrictShadow)[0];
       return winner ? [{ contribution: winner }] : [];
+    }
+    if (kind === "hoc") {
+      const layers = [...active]
+        .filter((entry) => !entry.entryKey || (dispatchKey && entry.entryKey === dispatchKey))
+        .sort(compareClientHoc);
+      return layers.map((contribution) => ({ contribution }));
     }
     const ordered = [...active].sort(compareClientChain);
     for (const contribution of ordered) {
@@ -935,6 +990,10 @@ function compareStrictListDisplay(a: ClientSlotContribution, b: ClientSlotContri
   return a.ordering - b.ordering || a.sequence - b.sequence;
 }
 
+function compareClientHoc(a: ClientSlotContribution, b: ClientSlotContribution): number {
+  return a.ordering - b.ordering || a.priority - b.priority || a.sequence - b.sequence;
+}
+
 function isClientSlotManagedStoreHandle(value: unknown): value is ClientSlotManagedStoreHandle<unknown, any> {
   return !!value
     && typeof value === "object"
@@ -942,13 +1001,23 @@ function isClientSlotManagedStoreHandle(value: unknown): value is ClientSlotMana
     && typeof (value as { create?: unknown }).create === "function";
 }
 
+function isSessionStoreCloneable(value: unknown, seen = new Set<unknown>()): boolean {
+  if (value === null) return true;
+  const type = typeof value;
+  if (type === "function" || type === "symbol") return false;
+  if (type !== "object") return true;
+  if (seen.has(value)) return true;
+  seen.add(value);
+  if (Array.isArray(value)) return value.every((item) => isSessionStoreCloneable(item, seen));
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) return false;
+  return Object.values(value as Record<string, unknown>).every((item) => isSessionStoreCloneable(item, seen));
+}
+
 function cloneSessionStoreIfNeeded(value: unknown, scope: ClientSlotContribution["scope"], sessionId?: string): unknown {
   if (value == null || scope === "root" || !sessionId) return value;
-  if (typeof structuredClone === "function") {
-    try { return structuredClone(value); } catch (error) {
-  console.error("[original-error]", error);
-/* fall through */ }
-  }
+  if (typeof value === "function") return value;
+  if (typeof structuredClone === "function" && isSessionStoreCloneable(value)) return structuredClone(value);
   if (Array.isArray(value)) return [...value];
   if (typeof value === "object" && Object.getPrototypeOf(value) === Object.prototype) return { ...(value as Record<string, unknown>) };
   return value;
@@ -1031,6 +1100,7 @@ export interface BrowserClientPluginContext {
     ): ClientDisposer;
     setCurrent(locale: string): void;
     current(): string;
+    bind(namespace: string): (key: string, params?: Record<string, unknown>) => string;
   };
   slots: {
     declare(definition: ClientSlotDefinition): Promise<ClientSlotRegistration>;
@@ -1162,6 +1232,8 @@ export class BrowserClientPluginRuntime {
   private readonly sessionSyncQueues = new Map<string, Promise<void>>();
   readonly slots = new BrowserSlotRuntime();
   readonly locale = new BrowserLocaleRuntime();
+  readonly foreignComponents = foreignComponentRegistry;
+  readonly rightPane = rightPaneRuntime;
 
   setActiveConversationScope(conversationId: string): void {
     const scope = conversationId.trim();
@@ -1563,6 +1635,56 @@ export class BrowserClientPluginRuntime {
     return (this.packageMutationEpoch.get(id) ?? 0) === epoch;
   }
 
+  registerConversationNode<State>(
+    pluginId: string,
+    key: string,
+    component: Component,
+    definition: BrowserConversationNodeDefinition<State>,
+    options?: ClientSlotContributionOptions,
+  ): ClientDisposer {
+    const normalizedKey = key.trim();
+    if (!normalizedKey) throw new Error("conversation node key is required");
+    const slotId = "chat.conversation.node";
+    const contributionId = `client:${pluginId}:${slotId}:${normalizedKey}`;
+    const disposeView = this.slots.register(
+      pluginId,
+      slotId,
+      normalizedKey,
+      component,
+      { ...options, cellId: options?.cellId ?? normalizedKey },
+      {
+        services: {
+          get: <T>(serviceId: string) => this.services.get(serviceId) as T | undefined,
+          list: () => Array.from(this.services.keys()).sort(),
+        },
+        events: {
+          emit: async <T>(eventType: string, payload: T) => {
+            for (const handler of Array.from(this.events.get(eventType) ?? [])) await handler(payload);
+          },
+        },
+      },
+    );
+    let disposeDefinition: ClientDisposer;
+    try {
+      disposeDefinition = registerProgrammaticConversationNodeDefinition({
+        ...definition,
+        id: `${pluginId}:${normalizedKey}`,
+        contributionId,
+        extensionId: pluginId,
+      });
+    } catch (error) {
+      void disposeView();
+      throw error;
+    }
+    let active = true;
+    return async () => {
+      if (!active) return;
+      active = false;
+      await disposeDefinition();
+      await disposeView();
+    };
+  }
+
   private context(pluginId: string, fiber: ClientFiber): BrowserClientPluginContext {
     return {
       pluginId,
@@ -1609,6 +1731,7 @@ export class BrowserClientPluginRuntime {
         register: (namespace, dictionaries) => fiber.own(this.locale.register(pluginId, namespace, dictionaries)),
         setCurrent: (locale) => this.locale.setLocale(locale),
         current: () => this.locale.getLocale(),
+        bind: (namespace: string) => this.locale.bind(namespace),
       },
       slots: {
         declare: async (definition) => {
@@ -1678,49 +1801,7 @@ export class BrowserClientPluginRuntime {
           component: Component,
           definition: BrowserConversationNodeDefinition<State>,
           options?: ClientSlotContributionOptions,
-        ) => {
-          const normalizedKey = key.trim();
-          if (!normalizedKey) throw new Error("conversation node key is required");
-          const slotId = "chat.conversation.node";
-          const contributionId = `client:${pluginId}:${slotId}:${normalizedKey}`;
-          const disposeView = this.slots.register(
-            pluginId,
-            slotId,
-            normalizedKey,
-            component,
-            options,
-            {
-              services: {
-                get: <T>(serviceId: string) => this.services.get(serviceId) as T | undefined,
-                list: () => Array.from(this.services.keys()).sort(),
-              },
-              events: {
-                emit: async <T>(eventType: string, payload: T) => {
-                  for (const handler of Array.from(this.events.get(eventType) ?? [])) await handler(payload);
-                },
-              },
-            },
-          );
-          let disposeDefinition: ClientDisposer;
-          try {
-            disposeDefinition = registerProgrammaticConversationNodeDefinition({
-              ...definition,
-              id: `${pluginId}:${normalizedKey}`,
-              contributionId,
-              extensionId: pluginId,
-            });
-          } catch (error) {
-            void disposeView();
-            throw error;
-          }
-          let active = true;
-          return fiber.own(async () => {
-            if (!active) return;
-            active = false;
-            await disposeDefinition();
-            await disposeView();
-          });
-        },
+        ) => fiber.own(this.registerConversationNode(pluginId, key, component, definition, options)),
       },
     };
   }
@@ -1898,6 +1979,7 @@ function fromSnapshot(slot: SlotSnapshot): ClientSlotDefinition {
     parentSlotId: slot.parentSlotId,
     description: slot.description,
     scope: slot.scope ?? "root",
+    allowRootChild: slot.allowRootChild,
     ownerId: slot.ownerExtension,
     declarationEpoch: slot.declarationEpoch,
   });
@@ -1906,7 +1988,9 @@ function fromSnapshot(slot: SlotSnapshot): ClientSlotDefinition {
 function clientScopeCanContain(
   parent: NonNullable<ClientSlotDefinition["scope"]>,
   child: NonNullable<ClientSlotDefinition["scope"]>,
+  allowRootChild = false,
 ): boolean {
+  if (allowRootChild && child === "root") return true;
   if (parent === "session") return child === "session";
   if (parent === "session-maybe") return child === "session-maybe" || child === "session";
   return true;

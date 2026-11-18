@@ -56,6 +56,9 @@ func (m Manifest) ToExtensionDefinition() (domain.ExtensionDefinition, error) {
 			"data.export":        m.Data.Export,
 			"data.uninstall":     m.Data.Uninstall,
 		}
+		if m.Data.PluginData != nil {
+			definition.Metadata["data.pluginData.include"] = append([]string(nil), m.Data.PluginData.Include...)
+		}
 	}
 	for index := range m.Modules {
 		moduleDefinition, err := m.Modules[index].ToDomain(domain.ExtensionID(m.Plugin.ID))
@@ -273,8 +276,9 @@ func (a *HostAccess) toDomain() domain.RuntimeHostAccess {
 	result := domain.RuntimeHostAccess{}
 	if a.Filesystem != nil {
 		result.Filesystem = domain.RuntimeFilesystemAccess{
-			Mode:  strings.TrimSpace(a.Filesystem.Mode),
-			Roots: append([]string(nil), a.Filesystem.Roots...),
+			Mode:        strings.TrimSpace(a.Filesystem.Mode),
+			Roots:       append([]string(nil), a.Filesystem.Roots...),
+			DurableSync: a.Filesystem.DurableSync,
 		}
 	}
 	if a.Network != nil {

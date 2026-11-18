@@ -1,0 +1,16 @@
+{
+  "name": "@amitia-test/non-plugin-entry-plugin",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./index.js"
+    },
+    "./types": {
+      "import": "./types.js"
+    }
+  },
+  "dsh": {
+    "manifestVersion": 1
+  }
+}

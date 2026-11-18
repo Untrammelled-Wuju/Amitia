@@ -64,6 +64,7 @@ type Service interface {
 	SetDeliveryStore(store DeliveryStore)
 	GenerateWorkshopJSON(ctx context.Context, systemPrompt string, userPrompt string) (string, string, string, error)
 	GenerateMCPSampling(ctx context.Context, request json.RawMessage) (any, error)
+	InvokeModelGateway(ctx context.Context, request ModelGatewayRequest) (*ModelGatewayResult, error)
 	ExportConversation(convID string, format string) (string, error)
 	SetHookInvoker(HookInvoker)
 	SetActionMaterializer(m *interaction.ActionMaterializer)

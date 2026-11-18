@@ -123,7 +123,9 @@ def main():
             finally:
                 for path in reversed(paths):
                     assert call("DELETE", path)["deleted"]
-                    assert call("GET", path, expected=404)["detail"] == "record not found"
+                    missing = call("GET", path, expected=404)
+                    assert missing["code"] == "MCP_SERVER_NOT_FOUND", missing
+                    assert missing["detail"] == "MCP 服务不存在: record not found", missing
                 for marker in markers.values():
                     if marker.is_file():
                         for pid in marker.read_text().splitlines():

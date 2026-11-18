@@ -51,6 +51,17 @@ func TestOwnedHostChatAppendAndReadShareActualOwner(t *testing.T) {
 	if json.Unmarshal(items[0], &message) != nil || message.Content != "Owner message" {
 		t.Fatalf("reader returned wrong data: %s", items[0])
 	}
+	searchItems, searchMore, err := reader.SearchConversations(ctx, "OWNER MESSAGE", 20)
+	if err != nil || searchMore || len(searchItems) != 1 {
+		t.Fatalf("Owner conversation search failed: %q %v %v", searchItems, searchMore, err)
+	}
+	var searchItem struct {
+		SessionID string `json:"sessionId"`
+		Snippet   string `json:"snippet"`
+	}
+	if json.Unmarshal(searchItems[0], &searchItem) != nil || searchItem.SessionID != "owned-host" || searchItem.Snippet == "" {
+		t.Fatalf("search returned wrong data: %s", searchItems[0])
+	}
 	var legacy int64
 	if err := p.services.DB.Table("messages").Count(&legacy).Error; err != nil || legacy != 0 {
 		t.Fatalf("plugin wrote old message table: %d %v", legacy, err)
@@ -63,6 +74,12 @@ func TestOwnedHostChatAppendAndReadShareActualOwner(t *testing.T) {
 	profile, found, err := characters.ReadCharacter(ctx, "one")
 	if err != nil || !found || len(profile) == 0 {
 		t.Fatalf("Owner character unavailable: %s %v %v", profile, found, err)
+	}
+	var character struct {
+		Revision int64 `json:"revision"`
+	}
+	if err := json.Unmarshal(profile, &character); err != nil || character.Revision < 1 {
+		t.Fatalf("Owner character revision unavailable: %s %v", profile, err)
 	}
 	if _, found, err := characters.ReadCharacter(ctx, "two"); err != nil || found {
 		t.Fatalf("cross-role character exposed: %v %v", found, err)

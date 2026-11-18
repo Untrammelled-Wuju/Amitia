@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 type SQLiteScopeStore struct {
@@ -164,8 +165,8 @@ func (s *SQLiteScopeStore) ListBindings(ctx context.Context, filter ScopeBinding
 
 func (s *SQLiteScopeStore) SaveSnapshot(ctx context.Context, snapshot ScopeSnapshot) error {
 	raw, err := json.Marshal(snapshot.ResolvedScopes)
-	if len(snapshot.OwnedExecutionScope) > 0 {
-		if !json.Valid(snapshot.OwnedExecutionScope) || len(snapshot.OwnedExecutionScope) > 64<<10 {
+	if len(snapshot.OwnedExecutionScope) > 0 || snapshot.SpaceID != "" {
+		if len(snapshot.OwnedExecutionScope) > 0 && (!json.Valid(snapshot.OwnedExecutionScope) || len(snapshot.OwnedExecutionScope) > 64<<10) {
 			return fmt.Errorf("设备执行授权快照无效或超过上限")
 		}
 		raw, err = json.Marshal(storedScopeAuthority{Version: 1, Snapshot: snapshot})
@@ -232,10 +233,13 @@ func (s *SQLiteScopeStore) GetSnapshot(ctx context.Context, snapshotID string) (
 	}
 	var document storedScopeAuthority
 	if len(resolvedScopes) > 0 && resolvedScopes[0] == '{' {
-		if err := json.Unmarshal([]byte(resolvedScopes), &document); err != nil || document.Version != 1 || !json.Valid(document.Snapshot.OwnedExecutionScope) || document.Snapshot.SnapshotID != snap.SnapshotID || document.Snapshot.InvocationID != snap.InvocationID {
+		if err := json.Unmarshal([]byte(resolvedScopes), &document); err != nil || document.Version != 1 || len(document.Snapshot.OwnedExecutionScope) > 0 && !json.Valid(document.Snapshot.OwnedExecutionScope) || document.Snapshot.SnapshotID != snap.SnapshotID || document.Snapshot.InvocationID != snap.InvocationID {
 			return snap, fmt.Errorf("设备执行授权快照不可读取")
 		}
 		snap = document.Snapshot
+		if strings.EqualFold(strings.TrimSpace(string(snap.OwnedExecutionScope)), "null") {
+			snap.OwnedExecutionScope = nil
+		}
 	} else if err := json.Unmarshal([]byte(resolvedScopes), &snap.ResolvedScopes); err != nil {
 		return snap, fmt.Errorf("scope: unmarshal resolved scopes: %w", err)
 	}

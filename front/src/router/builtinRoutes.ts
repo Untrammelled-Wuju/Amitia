@@ -20,7 +20,6 @@ export const builtinBusinessRoutes: RouteRecordRaw[] = [
   { path: "/creative-workshop", name: "creativeWorkshop", component: () => import("@/views/SectionLandingView.vue"), props: { title: "创意工坊", description: "创建和管理角色卡与桌宠内容。" }, meta: { requiresAuth: true, coreSurface: true } },
   { path: "/workshop", redirect: "/creative-workshop" },
   { path: "/creative-workshop/character-cards", name: "characterCardWorkshop", component: () => import("@/views/character-config/CharacterConfigView.vue"), meta: { requiresAuth: true, coreSurface: true } },
-  { path: "/creative-workshop/pet", name: "creativeWorkshopPet", component: () => import("@/views/creative-workshop/PetHubView.vue"), meta: { requiresAuth: true, coreSurface: true } },
   { path: "/creative-workshop/pet/installations", name: "petInstallations", component: () => import("@/views/creative-workshop/PetInstallationsView.vue"), meta: { requiresAuth: true, coreSurface: true } },
   { path: "/channel-center", name: "channelCenter", component: () => import("@/views/channels/ChannelHubView.vue"), meta: { requiresAuth: true, coreSurface: true } },
   { path: "/import", name: "chatImport", component: () => import("@/views/chat-import/ChatImportView.vue"), meta: { requiresAuth: true, coreSurface: true } },

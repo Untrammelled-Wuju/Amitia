@@ -16,6 +16,7 @@ type InstallRequest struct {
 	SourceReleaseID string
 	IdempotencyKey  string
 	Metadata        map[string]string
+	StartDisabled   bool
 }
 
 func (r InstallRequest) Validate() error {

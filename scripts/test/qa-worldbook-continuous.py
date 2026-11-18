@@ -1,22 +1,17 @@
 import concurrent.futures
+import argparse
 import copy
 import json
 import pathlib
-import sys
 import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
 
-ROOT = pathlib.Path(__file__).resolve().parents[2]
-OUT = ROOT / 'artifacts/qa-20261105-continuous'
-STATE = OUT / 'state.json'
-EVENTS = OUT / 'events.jsonl'
-
-
 def call(path, body=None):
-    endpoint = json.loads((ROOT / 'AmitiaData/run/endpoint.json').read_text())
-    token = (ROOT / 'AmitiaData/security/local-token').read_text().strip()
+    endpoint = json.loads((DATA_DIR / 'run/endpoint.json').read_text())
+    assert urllib.parse.urlsplit(endpoint['httpBaseURL']).hostname == '127.0.0.1'
+    token = (DATA_DIR / 'security/local-token').read_text().strip()
     request = urllib.request.Request(endpoint['httpBaseURL'] + '/api/device-mesh/v1/business' + path,
                                     data=None if body is None else json.dumps(body).encode(),
                                     headers={'X-Amitia-Local-Token': token, 'Content-Type': 'application/json'})
@@ -125,4 +120,14 @@ def verify(state):
 
 
 if __name__ == '__main__':
-    run(sys.argv[1])
+    parser = argparse.ArgumentParser()
+    parser.add_argument('stage', choices=['setup', 'verify', 'cleanup'])
+    parser.add_argument('data_dir', type=pathlib.Path)
+    args = parser.parse_args()
+    DATA_DIR = args.data_dir.resolve()
+    if not (DATA_DIR / '.qa-worldbook-isolated').is_file():
+        parser.error('需要带 .qa-worldbook-isolated 标记的隔离目录')
+    OUT = DATA_DIR / 'qa-worldbook'
+    STATE = OUT / 'state.json'
+    EVENTS = OUT / 'events.jsonl'
+    run(args.stage)

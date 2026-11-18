@@ -8,6 +8,8 @@ import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_typography.dart';
 import '../services/providers.dart';
 import '../ui_runtime/ui_navigation_registry.dart';
+import '../ui_runtime/ui_provider.dart';
+import '../ui_runtime/ui_provider_host.dart';
 import '../ui_runtime/ui_runtime_controller.dart';
 import 'amitia_icons.dart';
 
@@ -73,37 +75,58 @@ class _MainTabScaffoldState extends ConsumerState<MainTabScaffold> {
     final snapshot = ref.watch(effectiveUIRuntimeSnapshotProvider);
     final navigationItems = UINavigationRegistry.resolveMobile(snapshot);
     final destinations = _resolveDestinations(navigationItems);
+    final builtinNavigation = DecoratedBox(
+      decoration: BoxDecoration(
+        color: context.surfacePrimary,
+        border: Border(
+          top: BorderSide(color: context.borderPrimary, width: 0.5),
+        ),
+      ),
+      child: SafeArea(
+        top: false,
+        child: SizedBox(
+          height: 56,
+          child: Row(
+            children: [
+              for (final destination in destinations)
+                Expanded(
+                  child: _MainTabButton(
+                    destination: destination,
+                    selected:
+                        widget.navigationShell.currentIndex ==
+                        destination.branchIndex,
+                    onTap: () => _switchToTab(destination.branchIndex),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
     return BackButtonListener(
       onBackButtonPressed: _handleBackButton,
       child: Scaffold(
         body: widget.navigationShell,
-        bottomNavigationBar: DecoratedBox(
-          decoration: BoxDecoration(
-            color: context.surfacePrimary,
-            border: Border(
-              top: BorderSide(color: context.borderPrimary, width: 0.5),
-            ),
-          ),
-          child: SafeArea(
-            top: false,
-            child: SizedBox(
-              height: 56,
-              child: Row(
-                children: [
-                  for (final destination in destinations)
-                    Expanded(
-                      child: _MainTabButton(
-                        destination: destination,
-                        selected:
-                            widget.navigationShell.currentIndex ==
-                            destination.branchIndex,
-                        onTap: () => _switchToTab(destination.branchIndex),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
+        bottomNavigationBar: UIProviderHost(
+          capability: UICapability.appNavigation,
+          context: <String, dynamic>{
+            'platform': currentUIPlatform(),
+            'host': 'mobile',
+            'branchIndex': widget.navigationShell.currentIndex,
+            'navigationItems': <Map<String, dynamic>>[
+              for (final item in navigationItems)
+                <String, dynamic>{
+                  'id': item.id,
+                  'label': item.label,
+                  'route': item.route,
+                  'panel': item.panel.name,
+                  'placement': item.placement.name,
+                  'order': item.order,
+                  'group': item.group,
+                },
+            ],
+          },
+          fallback: builtinNavigation,
         ),
       ),
     );

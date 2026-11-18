@@ -20,8 +20,8 @@ SHA256SUMS_PATH = "metadata/SHA256SUMS"
 COMPONENT_LOCK_PATH = "metadata/component-lock.json"
 GUEST_LAYOUT_PATH = "metadata/guest-layout.json"
 MOUNT_CONTRACT_PATH = "metadata/mount-contract.json"
-ROOTFS_PAYLOAD_PATH = "payload/rootfs/rootfs.tar.xz"
-RUNTIME_PAYLOAD_PATH = "payload/runtime/runtime.tar.xz"
+ROOTFS_PAYLOAD_PATH = "payload/rootfs.tar.xz"
+RUNTIME_PAYLOAD_PATH = "payload/runtime.tar.xz"
 
 ALLOWED_TOP_PREFIXES = ("metadata/", "payload/", "licenses/")
 
@@ -423,19 +423,22 @@ def _validate_component_lock(path: str, runtime_version: str, package_id: str) -
     if data.get("packageId") != package_id:
         errors.append("component-lock.json packageId mismatch")
     components = data.get("components")
+    if isinstance(components, dict):
+        components = list(components.values())
     if not isinstance(components, list) or len(components) == 0:
-        errors.append("component-lock.json components must be non-empty list")
+        errors.append("component-lock.json components must be a non-empty object or list")
         return errors
     for c in components:
         if not isinstance(c, dict):
             errors.append("component-lock.json component entry not object")
             return errors
-        if not c.get("id"):
-            errors.append("component-lock.json component missing id")
+        component_id = c.get("componentId") or c.get("id")
+        if not component_id:
+            errors.append("component-lock.json component missing componentId")
         if not c.get("sha256") or len(c.get("sha256", "")) != 64:
-            errors.append(f"component-lock.json component {c.get('id','?')} sha256 invalid")
+            errors.append(f"component-lock.json component {component_id or '?'} sha256 invalid")
         elif _has_placeholder(c.get("sha256", "")):
-            errors.append(f"component-lock.json component {c.get('id','?')} sha256 is placeholder")
+            errors.append(f"component-lock.json component {component_id or '?'} sha256 is placeholder")
     return errors
 
 

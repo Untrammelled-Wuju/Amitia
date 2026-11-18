@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_spacing.dart';
+import '../../../../core/errors/original_error.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/ui_runtime/ui_provider.dart';
 import '../../../../core/ui_runtime/ui_runtime_controller.dart';
@@ -172,7 +173,14 @@ class _UIProviderSettingsPageState extends ConsumerState<UIProviderSettingsPage>
             if (runtime.isLoading && snapshot == null)
               const Center(child: Padding(padding: EdgeInsets.all(80), child: CircularProgressIndicator(strokeWidth: 2)))
             else if (runtime.hasError && snapshot == null)
-              Text('加载 UI Provider 失败：${runtime.error}')
+              ExpansionTile(
+                title: const Text('加载界面提供者失败'),
+                children: [
+                  SelectableText(
+                    '${originalErrorText(runtime.error!)}\n${runtime.stackTrace}',
+                  ),
+                ],
+              )
             else if (snapshot != null)
               for (final group in _groups.entries) ...[
                 Text(group.key, style: Theme.of(context).textTheme.titleMedium),

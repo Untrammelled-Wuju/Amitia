@@ -12,7 +12,7 @@
       <div v-if="!files.length && !loading" class="muted">没有文件或目录</div>
     </template>
     <template v-else-if="tab.kind === 'file'">
-      <div class="toolbar"><span class="path" :title="tab.resourceUri">{{ tab.resourceUri }}</span><button type="button" @click="loadFile(false)">刷新</button></div>
+      <div class="toolbar"><span class="path" :title="tab.resourceUri">{{ tab.resourceUri }}</span><button type="button" @click="loadFile(false)">刷新</button><ExtensionSlot slot-id="workbench.file.actions" :context="fileActionContext(tab.resourceUri)" fallback="none" layout="inline" surface-role="main" bare /></div>
       <pre v-if="content" class="code"><code>{{ content }}</code></pre>
       <div v-else-if="!loading" class="muted">{{ fileIsText ? '文件为空' : '不支持文本预览的文件类型' }}</div>
       <button v-if="fileHasMore && !loading" type="button" class="load-more" @click="loadFile(true)">加载下一部分文件</button>
@@ -74,7 +74,10 @@
         <div v-if="mergeAudit" class="status" role="status">合并审计：{{ mergeAudit.result }} · {{ mergeAudit.appliedHead?.slice(0, 12) || '需人工核对' }}</div>
         <div v-if="worktreeError" class="status error" role="alert"><pre>{{ worktreeError }}</pre></div>
         <div class="section-title">未提交变更</div>
-        <button v-for="entry in changes" :key="entry.uri" type="button" class="entry" @click="openDiff(entry.uri)"><span :class="{ conflict: entry.conflict }">{{ entry.conflict ? '冲突' : entry.untracked ? '?' : `${entry.staging}${entry.worktree}` }}</span><span>{{ relativePath(entry.uri) }}</span></button>
+        <div v-for="entry in changes" :key="entry.uri" class="entry-row">
+          <button type="button" class="entry" @click="openDiff(entry.uri)"><span :class="{ conflict: entry.conflict }">{{ entry.conflict ? '冲突' : entry.untracked ? '?' : `${entry.staging}${entry.worktree}` }}</span><span>{{ relativePath(entry.uri) }}</span></button>
+          <ExtensionSlot slot-id="workbench.review.file.actions" :context="fileActionContext(entry.uri, 'review')" fallback="none" layout="inline" surface-role="main" bare />
+        </div>
         <div v-if="gitStatus.clean" class="muted">工作区没有未提交的更改</div>
         <div class="section-title">提交历史</div>
         <button v-for="commit in commits" :key="commit.hash" type="button" class="commit commit-button" @click="inspectCommit(commit)"><strong>{{ commit.subject }}</strong><small>{{ commit.hash.slice(0, 8) }} · {{ commit.authorName }} · {{ formatDate(commit.committedAt) }}</small></button>
@@ -111,6 +114,7 @@ import WorkbenchBrowserView from './WorkbenchBrowserView.vue';
 import WorkbenchTerminalView from './WorkbenchTerminalView.vue';
 import WorkbenchTasksView from './WorkbenchTasksView.vue';
 import WorkbenchAgentRunsView from './WorkbenchAgentRunsView.vue';
+import ExtensionSlot from '@/components/extension/ExtensionSlot.vue';
 import { parseWorkbenchDocumentChunk, type WorkbenchDocumentContent } from './workbench-document-chunks';
 import { needsWorkbenchWorkspaceData } from './workbench-resource-lifecycle';
 
@@ -185,6 +189,23 @@ function selectWorkspace(event: Event, git: boolean) {
   if (git) changeGitWorkspace(); else changeWorkspace();
 }
 function relativePath(uri: string) { return uri.startsWith(workspaceUri.value) ? uri.slice(workspaceUri.value.length).replace(/^\//, '') : uri; }
+function fileActionContext(uri: string, surface: 'preview' | 'review' = 'preview') {
+  return {
+    conversationId: store.conversationId,
+    characterId: store.characterId,
+    workspaceUri: workspaceUri.value,
+    resourceUri: uri,
+    filePath: relativePath(uri),
+    fileName: uri.split('/').pop() || uri,
+    surface,
+    eventCoordinates: {
+      conversationId: store.conversationId,
+      characterId: store.characterId,
+      workspaceUri: workspaceUri.value,
+      resourceUri: uri,
+    },
+  };
+}
 function formatDate(value: string) { const date = new Date(value); return Number.isNaN(date.getTime()) ? '' : date.toLocaleString(); }
 function diffClass(line: string) { return line.startsWith('+') && !line.startsWith('+++') ? 'added' : line.startsWith('-') && !line.startsWith('---') ? 'removed' : line.startsWith('@@') ? 'hunk' : ''; }
 async function loadMounts() {
@@ -492,7 +513,7 @@ onBeforeUnmount(() => { sequence++; });
 void initialize();
 </script>
 <style scoped>
-.resource-view {display:flex;flex-direction:column;gap:8px;min-height:0;height:100%;overflow:auto;padding:12px;box-sizing:border-box;color:var(--el-text-color-primary)}.toolbar {display:flex;align-items:center;gap:6px;min-width:0}.toolbar input,.toolbar select {flex:1;min-width:0;border:1px solid var(--surface-border);padding:8px;border-radius:7px;background:var(--workbench-bg);color:inherit}.toolbar button,.external,.load-more {border:1px solid var(--surface-border);border-radius:7px;background:transparent;color:inherit;padding:7px 10px;cursor:pointer}.toolbar button:disabled {opacity:.4;cursor:not-allowed}.path {font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--el-text-color-secondary)}.entry {padding:10px 6px;display:flex;gap:10px;align-items:center;width:100%;text-align:left;border:0;border-bottom:1px solid var(--surface-border);background:transparent;color:inherit;cursor:pointer;overflow-wrap:anywhere}.entry span:nth-child(2){flex:1}.entry small{flex-shrink:0;color:var(--el-text-color-secondary)}.entry:hover{background:var(--el-fill-color-light)}.muted{font-size:12px;color:var(--el-text-color-secondary);padding:12px 0}.status{font-size:12px;color:var(--el-text-color-secondary)}.error,.conflict{color:var(--el-color-danger)}.code{flex:1;min-height:0;background:var(--el-fill-color-light);padding:12px;white-space:pre;overflow:auto;font-size:12px;line-height:1.5;border-radius:8px}.summary,.section-title{font-size:13px;font-weight:600;padding:8px 0}.summary small{font-weight:400}.section-title{border-bottom:1px solid var(--surface-border)}.commit{padding:10px 0;display:flex;flex-direction:column;gap:3px;border-bottom:1px solid var(--surface-border);font-size:12px}.commit small{color:var(--el-text-color-secondary)}.commit-button{border:0;width:100%;background:transparent;text-align:left;color:inherit;cursor:pointer}.commit-button:hover{background:var(--el-fill-color-light)}.commit-detail{padding:12px;border:1px solid var(--surface-border);border-radius:7px;display:flex;flex-direction:column;gap:6px}.commit-detail .code{flex:none;max-height:340px}.added{color:var(--el-color-success)}.removed{color:var(--el-color-danger)}.hunk{color:var(--el-color-primary)}iframe{width:100%;flex:1;min-height:220px;border:1px solid var(--surface-border);border-radius:8px}.external{align-self:flex-start}
+.resource-view {display:flex;flex-direction:column;gap:8px;min-height:0;height:100%;overflow:auto;padding:12px;box-sizing:border-box;color:var(--el-text-color-primary)}.toolbar {display:flex;align-items:center;gap:6px;min-width:0}.toolbar input,.toolbar select {flex:1;min-width:0;border:1px solid var(--surface-border);padding:8px;border-radius:7px;background:var(--workbench-bg);color:inherit}.toolbar button,.external,.load-more {border:1px solid var(--surface-border);border-radius:7px;background:transparent;color:inherit;padding:7px 10px;cursor:pointer}.toolbar button:disabled {opacity:.4;cursor:not-allowed}.path {font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--el-text-color-secondary)}.entry-row {display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--surface-border)}.entry {padding:10px 6px;display:flex;gap:10px;align-items:center;width:100%;text-align:left;border:0;border-bottom:1px solid var(--surface-border);background:transparent;color:inherit;cursor:pointer;overflow-wrap:anywhere}.entry-row .entry {flex:1;border-bottom:0}.entry span:nth-child(2){flex:1}.entry small{flex-shrink:0;color:var(--el-text-color-secondary)}.entry:hover{background:var(--el-fill-color-light)}.muted{font-size:12px;color:var(--el-text-color-secondary);padding:12px 0}.status{font-size:12px;color:var(--el-text-color-secondary)}.error,.conflict{color:var(--el-color-danger)}.code{flex:1;min-height:0;background:var(--el-fill-color-light);padding:12px;white-space:pre;overflow:auto;font-size:12px;line-height:1.5;border-radius:8px}.summary,.section-title{font-size:13px;font-weight:600;padding:8px 0}.summary small{font-weight:400}.section-title{border-bottom:1px solid var(--surface-border)}.commit{padding:10px 0;display:flex;flex-direction:column;gap:3px;border-bottom:1px solid var(--surface-border);font-size:12px}.commit small{color:var(--el-text-color-secondary)}.commit-button{border:0;width:100%;background:transparent;text-align:left;color:inherit;cursor:pointer}.commit-button:hover{background:var(--el-fill-color-light)}.commit-detail{padding:12px;border:1px solid var(--surface-border);border-radius:7px;display:flex;flex-direction:column;gap:6px}.commit-detail .code{flex:none;max-height:340px}.added{color:var(--el-color-success)}.removed{color:var(--el-color-danger)}.hunk{color:var(--el-color-primary)}iframe{width:100%;flex:1;min-height:220px;border:1px solid var(--surface-border);border-radius:8px}.external{align-self:flex-start}
 </style>
 
 <style scoped>

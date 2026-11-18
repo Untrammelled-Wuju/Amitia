@@ -39,31 +39,36 @@ def main():
     password = {"passphrase": "isolated empty backup regression"}
     if device_agent:
         assert call("GET", "/api/characters") == []
-        owner = json.loads((root / "device-mesh/identity.json").read_text())["deviceId"]
+        owners = {json.loads((root / "device-mesh/identity.json").read_text())["deviceId"]}
         initial = call("POST", prefix + "/backups", password)
         assert initial["encrypted"] and initial["size"] > 0
         call("DELETE", prefix + "/backups/" + urllib.parse.quote(initial["name"]))
     else:
         assert not call("GET", "/api/device-mesh/v1/business/roles")["roles"]
         assert call("GET", "/api/storage/info")["memoryCount"] == 0
-        owner = call("GET", "/api/device-mesh/v1/coordination/me")["policy"]["deviceId"]
+        coordination = call("GET", "/api/device-mesh/v1/coordination/me")
+        assert coordination["policy"]["coordinated"] is True
+        owners = {coordination["policy"]["deviceId"], coordination["coreId"]}
     memory_id = "qa-historical-" + uuid.uuid4().hex
-    with sqlite3.connect(root / "extensions-v2" / "kernel.db", timeout=5) as db:
-        db.execute(
-            "INSERT INTO kernel_device_owned_resources(owner_id,kind,resource_id,role_id,revision,deleted,body,updated_at) VALUES(?, 'memory', ?, 'qa-retired-role', 1, 0, '{}', '2026-11-06T00:00:00Z')",
-            (owner, memory_id),
-        )
-    try:
-        if not device_agent:
-            assert call("GET", "/api/storage/info")["memoryCount"] == 1
-        call("POST", prefix + "/backups", password, expected=422)
-    finally:
-        with db:
+    for owner in sorted(owners):
+        before = set((root / "backups").glob("*.amitia-backup*"))
+        with sqlite3.connect(root / "extensions-v2" / "kernel.db", timeout=5) as db:
             db.execute(
-                "DELETE FROM kernel_device_owned_resources WHERE owner_id=? AND resource_id=?",
+                "INSERT INTO kernel_device_owned_resources(owner_id,kind,resource_id,role_id,revision,deleted,body,updated_at) VALUES(?, 'memory', ?, 'qa-retired-role', 1, 0, '{}', '2026-11-06T00:00:00Z')",
                 (owner, memory_id),
             )
-        db.close()
+        try:
+            if not device_agent:
+                assert call("GET", "/api/storage/info")["memoryCount"] == 1
+            call("POST", prefix + "/backups", password, expected=422)
+            assert set((root / "backups").glob("*.amitia-backup*")) == before
+        finally:
+            with db:
+                db.execute(
+                    "DELETE FROM kernel_device_owned_resources WHERE owner_id=? AND resource_id=?",
+                    (owner, memory_id),
+                )
+            db.close()
 
     staged = root / "imports" / ".restore"
     for _ in range(2):
@@ -75,6 +80,7 @@ def main():
         prepared = call("POST", preview, password)
         components = {item["id"]: item["itemCount"] for item in prepared["manifest"]["components"]}
         assert components["character.records.v1"] == 0
+        assert components["memory.owned"] == 0
         assert len(list(staged.glob("*.amitia-backup"))) == 1
 
     call("DELETE", prefix + "/restores/pending")

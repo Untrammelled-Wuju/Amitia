@@ -77,19 +77,24 @@ class UIRuntimeController
   }
 
   Future<void> ensureLoaded({bool force = false}) async {
-    if (_loading) return;
+    if (_disposed || _loading) return;
     if (!force && state.valueOrNull != null) return;
     final observedInvalidationRevision = _invalidationRevision;
     _loading = true;
     if (state.valueOrNull == null) state = const AsyncValue.loading();
     final platform = currentUIPlatform();
-    final currentDeviceId = await deviceId;
-    final cacheNamespace = await _cacheNamespace();
+    String? currentDeviceId;
+    String? cacheNamespace;
     try {
+      currentDeviceId = await deviceId;
+      if (_disposed) return;
+      cacheNamespace = await _cacheNamespace();
+      if (_disposed) return;
       final json = await _service.getUISnapshot(
         platform,
         deviceId: currentDeviceId,
       );
+      if (_disposed) return;
       state = AsyncValue.data(UIProviderSnapshot.fromJson(json));
       _onLastKnownGood(false);
       if (observedInvalidationRevision > _appliedInvalidationRevision) {
@@ -97,11 +102,18 @@ class UIRuntimeController
       }
       await _cache.save(cacheNamespace, platform, currentDeviceId, json);
     } catch (error, stack) {
+      if (_disposed) return;
+      if (cacheNamespace == null || currentDeviceId == null) {
+        state = AsyncValue.error(error, stack);
+        _onLastKnownGood(false);
+        return;
+      }
       final cached = await _cache.load(
         cacheNamespace,
         platform,
         currentDeviceId,
       );
+      if (_disposed) return;
       if (cached != null) {
         final offline = Map<String, dynamic>.from(cached);
         final rawContext =

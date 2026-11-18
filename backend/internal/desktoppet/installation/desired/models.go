@@ -12,11 +12,11 @@ import (
 type RuntimeDesiredState struct {
 	ID string
 
-	SpaceID   string
-	DeviceID  string
+	SpaceID   string `gorm:"uniqueIndex:idx_pet_desired_installation"`
+	DeviceID  string `gorm:"uniqueIndex:idx_pet_desired_installation"`
 	RuntimeID string
 
-	InstallationID string
+	InstallationID string `gorm:"uniqueIndex:idx_pet_desired_installation"`
 	PetID          string
 	ReleaseID      string
 

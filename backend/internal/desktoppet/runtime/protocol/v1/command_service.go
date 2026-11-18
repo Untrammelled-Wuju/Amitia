@@ -949,14 +949,25 @@ func (s *commandService) ReconcileDesiredStateOnHello(spaceID, deviceID, runtime
 		return 0, nil
 	}
 
-	var state authoritativeDesiredStateRow
-	query := s.db.Table(desiredTable).Where("space_id = ? AND device_id = ?", spaceID, deviceID)
-	if err := query.Take(&state).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return 0, nil
-		}
+	var states []authoritativeDesiredStateRow
+	if err := s.db.Table(desiredTable).Where("space_id = ? AND device_id = ?", spaceID, deviceID).
+		Order("desired_revision ASC").Find(&states).Error; err != nil {
 		return 0, err
 	}
+	var latestRevision int64
+	for _, state := range states {
+		revision, err := s.reconcileInstallationOnHello(spaceID, deviceID, runtimeID, clientAppliedRevision, connectionGeneration, state)
+		if err != nil {
+			return 0, err
+		}
+		if revision > latestRevision {
+			latestRevision = revision
+		}
+	}
+	return latestRevision, nil
+}
+
+func (s *commandService) reconcileInstallationOnHello(spaceID, deviceID, runtimeID string, clientAppliedRevision, connectionGeneration int64, state authoritativeDesiredStateRow) (int64, error) {
 	if state.DesiredRevision <= 0 {
 		return 0, nil
 	}
@@ -965,7 +976,7 @@ func (s *commandService) ReconcileDesiredStateOnHello(spaceID, deviceID, runtime
 	// on the same authenticated device must still converge to the device's
 	// persisted desired state. The command below is retargeted to the current
 	// connected runtime.
-	coalesceKey := fmt.Sprintf("desired:%s", deviceID)
+	coalesceKey := fmt.Sprintf("desired:%s:%s", deviceID, state.InstallationID)
 	var existing RuntimeCommand
 	err := s.db.Where(
 		"space_id = ? AND device_id = ? AND coalesce_key = ? AND desired_revision = ?",
@@ -1034,7 +1045,7 @@ func (s *commandService) ReconcileDesiredStateOnHello(spaceID, deviceID, runtime
 	if connectionGeneration < 1 {
 		connectionGeneration = 1
 	}
-	idempotencyKey := fmt.Sprintf("reconcile:%s:%d:%d", deviceID, state.DesiredRevision, connectionGeneration)
+	idempotencyKey := fmt.Sprintf("reconcile:%s:%s:%d:%d", deviceID, state.InstallationID, state.DesiredRevision, connectionGeneration)
 	cmd, err := s.CreateDurableCommand(spaceID, deviceID, string(commandType), idempotencyKey, coalesceKey, seq, payload)
 	if err != nil && !errors.Is(err, ErrCommandDuplication) {
 		return 0, err

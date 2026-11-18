@@ -1,0 +1,11 @@
+{
+  "name": "@amitia-test/official-agent-create-plugin",
+  "version": "1.0.1",
+  "type": "module",
+  "exports": {
+    ".": "./index.js"
+  },
+  "dsh": {
+    "manifestVersion": 1
+  }
+}

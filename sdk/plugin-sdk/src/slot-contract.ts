@@ -7,7 +7,7 @@
  * higher-level capabilities.
  */
 export type UISlotScope = "root" | "session-maybe" | "session";
-export type UISlotKind = "single" | "list" | "keyed" | "chain";
+export type UISlotKind = "single" | "list" | "keyed" | "chain" | "hoc";
 
 export interface UISlotObservable<T> {
   getSnapshot(): T;
@@ -159,6 +159,7 @@ export interface UISlotContract<
   /** Common slot-level inject face declared by the parent child spec. */
   inject: Injected;
   scope: Scope;
+  allowRootChild?: boolean;
   kind: Kind;
   keyProps: KeyProps;
   matched: Matched;
@@ -170,9 +171,9 @@ export interface UISlotContract<
  * compatibility surfaces; plugins may add their own keys without modifying
  * the host package.
  */
-export type UIHostPlatform = "windows" | "macos" | "linux" | "web";
-export type UIHostKind = "web" | "desktop";
-export type UIHostOS = "windows" | "macos" | "linux" | "unknown";
+export type UIHostPlatform = "windows" | "macos" | "linux" | "web" | "android" | "ios" | "mobile";
+export type UIHostKind = "web" | "desktop" | "mobile";
+export type UIHostOS = "windows" | "macos" | "linux" | "android" | "ios" | "unknown";
 export type UIHostSurfaceRole = "header" | "status" | "sidebar" | "message" | "composer" | "main" | "overlay";
 
 export interface UIRootOwner extends Record<string, unknown> {
@@ -238,9 +239,11 @@ export interface UIProviderSessionOwner extends UISessionOwner {
 }
 
 type UINoInject = Record<string, never>;
+type UISingle<Owner extends Record<string, unknown>, Scope extends UISlotScope = "root"> = UISlotContract<Owner, unknown, UINoInject, Scope, "single">;
 type UIList<Owner extends Record<string, unknown>, Scope extends UISlotScope = "root"> = UISlotContract<Owner, unknown, UINoInject, Scope, "list">;
 type UIChain<Owner extends Record<string, unknown>, Scope extends UISlotScope = "root"> = UISlotContract<Owner, unknown, UINoInject, Scope, "chain">;
 type UIKeyed<Owner extends Record<string, unknown>, Scope extends UISlotScope = "root"> = UISlotContract<Owner, unknown, UINoInject, Scope, "keyed", Record<string, Owner>>;
+type UIHoc<Owner extends Record<string, unknown>, Scope extends UISlotScope = "root"> = UISlotContract<Owner, unknown, UINoInject, Scope, "hoc">;
 
 export interface UISlotMap {
   root: UISlotContract<UIRootOwner, unknown, UINoInject, "root", "single">;
@@ -250,10 +253,46 @@ export interface UISlotMap {
   "extension.detail.action": UIList<UIExtensionOwner>;
   "extension.settings.page": UIList<UIExtensionOwner>;
   "extension.settings.section": UIList<UIExtensionOwner>;
+  "extension.plugin.tab": UIList<UIRootOwner>;
+  "extension.plugin.item": UIList<UIRootOwner>;
+  "extension.plugin.bundle.activation": UIKeyed<UIRootOwner>;
+  "extension.plugin.bundle.config": UIKeyed<UIRootOwner>;
+  "extension.plugin.row.config": UIKeyed<UIExtensionOwner>;
+  "extension.settings.tab": UIList<UIRootOwner>;
   "chat.header.action": UIList<UISessionOwner, "session-maybe">;
+  "chat.header.leading": UISingle<UIRootOwner>;
+  "chat.header.lineage": UISingle<UISessionOwner, "session">;
+  "chat.header.corner": UISingle<UISessionOwner, "session">;
+  "chat.conversation.root": UISingle<UISessionOwner, "session-maybe">;
+  "chat.conversation.session": UISingle<UISessionOwner, "session">;
+  "chat.conversation.header": UISingle<UISessionOwner, "session-maybe">;
+  "chat.conversation.session.header": UISingle<UISessionOwner, "session">;
+  "chat.conversation.subagent.footer": UIList<UISessionOwner, "session">;
+  "chat.conversation.views": UIList<UISessionOwner, "session">;
+  "chat.composer.root": UIChain<UISessionOwner, "session">;
+  "chat.composer.bar": UISingle<UISessionOwner, "session-maybe">;
+  "chat.composer.attachments": UISingle<UISessionOwner, "session-maybe">;
+  "chat.empty.brand_mark": UISingle<UIRootOwner>;
+  "chat.empty.frame": UIHoc<UIRootOwner>;
+  "chat.empty.options": UIList<UISessionOwner, "session">;
+  "chat.empty.workspace": UISingle<UIRootOwner>;
+  "chat.empty.workspace.directory_flow": UISingle<UIRootOwner>;
+  "chat.empty.agent_preset": UISingle<UISessionOwner, "session-maybe">;
   "chat.sidebar.panel": UIList<UISessionOwner, "session-maybe">;
   "chat.message.action": UIList<UIMessageOwner, "session">;
   "chat.message.renderer": UIChain<UIMessageOwner, "session">;
+  "chat.message.images": UISingle<UIMessageOwner, "session">;
+  "chat.message.user.images": UISingle<UIMessageOwner, "session">;
+  "chat.message.user.text": UIKeyed<UIMessageOwner, "session">;
+  "chat.approval.detail": UISingle<UISessionOwner, "session">;
+  "chat.message.command": UIKeyed<UIMessageOwner, "session">;
+  "chat.conversation.flow": UISingle<UISessionOwner, "session">;
+  "chat.message.markdown.fence": UIHoc<UIMessageOwner, "session">;
+  "chat.message.reasoning.body": UISingle<UIMessageOwner, "session">;
+  "chat.message.text.interaction": UIKeyed<UIMessageOwner, "session">;
+  "chat.message.trajectory.images": UISingle<UISessionOwner, "session">;
+  "chat.message.tool.images": UISingle<UIMessageOwner, "session">;
+  "chat.message.tool.cordis": UIKeyed<UIMessageOwner, "session">;
   "chat.conversation.node": UIList<UIConversationNodeOwner, "session">;
   "chat.message.custom_renderer": UIChain<UIMessageOwner, "session">;
   "chat.message.attachment_renderer": UIChain<UIMessageOwner, "session">;
@@ -261,14 +300,62 @@ export interface UISlotMap {
   "chat.composer.action": UIList<UISessionOwner, "session-maybe">;
   "chat.composer.attachment": UIList<UISessionOwner, "session-maybe">;
   "chat.composer.hint": UIList<UISessionOwner, "session-maybe">;
+  "chat.composer.dock.top": UIList<UISessionOwner, "session">;
+  "chat.composer.dock.bottom": UIList<UISessionOwner, "session">;
+  "chat.composer.left": UIList<UISessionOwner, "session">;
+  "chat.composer.right": UIList<UISessionOwner, "session">;
+  "chat.composer.overlay": UIList<UISessionOwner, "session">;
+  "chat.composer.model": UISingle<UISessionOwner, "session">;
+  "chat.composer.model.label": UISingle<UISessionOwner, "session">;
+  "chat.composer.model.options": UIList<UISessionOwner, "session">;
+  "chat.composer.permission": UISingle<UISessionOwner, "session">;
   "chat.empty_state.card": UIList<UISessionOwner, "session-maybe">;
   "chat.status.item": UIList<UISessionOwner, "session-maybe">;
   "character.detail.tab": UIList<UICharacterOwner>;
   "character.detail.action": UIList<UICharacterOwner>;
   "character.sidebar.card": UIList<UICharacterOwner>;
+  "memory.page.section": UIList<UIRootOwner>;
+  "tasks.page.section": UIList<UIRootOwner>;
   "system.status.item": UIList<UIRootOwner>;
   "system.settings.section": UIList<UIRootOwner>;
   "system.diagnostics.tab": UIList<UIRootOwner>;
+  "app.shell.quota_notice": UIChain<UIRootOwner>;
+  "app.workspace.toast": UIKeyed<UIRootOwner>;
+  "app.shell.bottom": UISingle<UIRootOwner>;
+  "app.rightbar": UISingle<UIRootOwner>;
+  "app.rightbar.session": UISingle<UISessionOwner, "session">;
+  "desktop.context_menu.content": UIKeyed<UIRootOwner>;
+  "desktop.context_menu.icon": UIKeyed<UIRootOwner>;
+  "workbench.file.actions": UIList<UISessionOwner, "session">;
+  "workbench.review.file.actions": UIList<UISessionOwner, "session">;
+  "settings.model.provider": UIKeyed<UIRootOwner>;
+  "settings.model.footer": UIList<UIRootOwner>;
+  "settings.shell": UISingle<UIRootOwner>;
+  "settings.shell.header": UISingle<UIRootOwner>;
+  "settings.shell.action": UIList<UIRootOwner>;
+  "settings.shell.close": UISingle<UIRootOwner>;
+  "settings.shell.launcher": UISingle<UIRootOwner>;
+  "settings.shell.launcher.notifications": UISingle<UIRootOwner>;
+  "settings.onboarding": UIList<UIRootOwner>;
+  "settings.section.icon": UIList<UIRootOwner>;
+  "settings.shell.trigger": UISingle<UIRootOwner>;
+  "settings.model.sign-in": UISingle<UIRootOwner>;
+  "ui.portal.overlay": UIList<UIRootOwner>;
+  "ui.portal.modal": UIList<UIRootOwner>;
+  "ui.portal.drawer": UIList<UIRootOwner>;
+  "ui.portal.toast": UIList<UIRootOwner>;
+  "ui.sidebar.right.pane.tab": UIList<UIRootOwner, "session-maybe">;
+  "ui.sidebar.right.pane.tab.title": UIList<UIRootOwner, "session-maybe">;
+  "ui.sidebar.right.pane.document": UIKeyed<UIRootOwner, "session">;
+  "ui.sidebar.right.pane.document.action": UIKeyed<UIRootOwner, "session">;
+  "ui.sidebar.right.pane.document.actions": UIList<UIRootOwner, "session">;
+  "ui.sidebar.right.pane.document.pdf": UIKeyed<UIRootOwner, "session">;
+  "ui.sidebar.right.pane.document.unpreviewable": UIList<UIRootOwner, "session">;
+  "ui.sidebar.right.pane.files.actions": UIList<UISessionOwner, "session">;
+  "ui.sidebar.right.pane.guide": UIChain<UISessionOwner, "session">;
+  "ui.sidebar.right.pane.guide.actions": UIList<UIRootOwner>;
+  "ui.sidebar.right.pane.guide.entry": UIKeyed<UISessionOwner, "session">;
+  "ui.sidebar.right.pane.tab.menu.item": UIList<UISessionOwner, "session">;
   "desktop.command": UIKeyed<UIDesktopOwner>;
   "desktop.application_menu.item": UIList<UIDesktopOwner>;
   "desktop.context_menu.item": UIList<UIDesktopOwner>;
@@ -523,6 +610,7 @@ export type UISlotStoreProps<S> = {
 };
 
 export type UISlotMatchedProps<K extends UIKnownSlotId> = UISlotKindOf<K> extends "chain" ? { readonly matched: UISlotMatched<K> } : object;
+export type UISlotHocProps<K extends UIKnownSlotId> = UISlotKindOf<K> extends "hoc" ? { readonly children: unknown } : object;
 
 export type UISlotSelectorHook<T> = <Selected = T>(selector?: (value: T) => Selected) => UISlotReadonlyValue<Selected>;
 
@@ -558,13 +646,15 @@ export type UISlotComponentProps<
   & UISlotInjectFace<UISlotInjected<K>>
   & UISlotInjectFace<I>
   & UISlotMatchedProps<K>
+  & UISlotHocProps<K>
   & UISlotLocaleProps<N>;
 
 export type UISlotKindRegisterOptions<K extends UIKnownSlotId, EntryKey extends UISlotEntryKey<K> = UISlotEntryKey<K>> =
   UISlotKindOf<K> extends "keyed" ? { readonly entryKey: EntryKey; readonly priority?: number }
     : UISlotKindOf<K> extends "list" ? { readonly id: string; readonly order?: number; readonly label?: string | (() => string); readonly priority?: number }
       : UISlotKindOf<K> extends "chain" ? { readonly select: (owner: UISlotProps<K>) => UISlotMatched<K> | null; readonly priority?: number }
-        : { readonly priority?: number };
+        : UISlotKindOf<K> extends "hoc" ? { readonly id?: string; readonly entryKey?: EntryKey; readonly order?: number; readonly priority?: number }
+          : { readonly priority?: number };
 
 export type UISlotRegisterOptions<
   K extends UIKnownSlotId,

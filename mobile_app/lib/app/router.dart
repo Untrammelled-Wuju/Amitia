@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'theme/app_theme.dart';
+import '../core/services/providers.dart';
 import '../core/ui_runtime/route_surface_provider_host.dart';
 import '../core/ui_runtime/mobile_extension_slot.dart';
 import '../core/ui_runtime/routing/builtin_route_catalog.dart';
@@ -36,13 +37,33 @@ class AppShell extends ConsumerWidget {
   }
 }
 
-RoutingConfig _routingConfigFor(UIProviderSnapshot? providerSnapshot) {
+const _onboardingExemptLocations = <String>{
+  AppRoutes.onboarding,
+  AppRoutes.privacy,
+  AppRoutes.settingsUIProviders,
+};
+
+String? resolveOnboardingRedirectLocation(
+  String location,
+  OnboardingGateResult gate,
+) {
+  if (gate.completed) {
+    return location == AppRoutes.onboarding ? AppRoutes.conversations : null;
+  }
+  if (_onboardingExemptLocations.contains(location)) return null;
+  return AppRoutes.onboarding;
+}
+
+RoutingConfig _routingConfigFor(
+  UIProviderSnapshot? providerSnapshot, {
+  required Future<OnboardingGateResult> Function() onboardingGate,
+}) {
   return RoutingConfig(
     redirect: (context, state) async {
       final location = state.matchedLocation;
       if (location == '/about') return '/settings/about';
       if (location == '/toolbox') return '/settings/toolbox';
-      return null;
+      return resolveOnboardingRedirectLocation(location, await onboardingGate());
     },
     routes: <RouteBase>[
       GoRoute(path: '/', redirect: (context, state) => AppRoutes.conversations),
@@ -90,6 +111,25 @@ RoutingConfig _routingConfigFor(UIProviderSnapshot? providerSnapshot) {
               child: surface,
             ),
           );
+          final shellWithChrome = Column(
+            children: [
+              MobileExtensionSlot(
+                slotId: 'app.shell.quota_notice',
+                context: {
+                  'route': state.matchedLocation,
+                  'surface': 'shell-quota-notice',
+                },
+              ),
+              Expanded(child: shell),
+              MobileExtensionSlot(
+                slotId: 'app.shell.bottom',
+                context: {
+                  'route': state.matchedLocation,
+                  'surface': 'shell-bottom',
+                },
+              ),
+            ],
+          );
           return ApplicationBackground(
             child: MobileExtensionSlot(
               slotId: 'root',
@@ -98,7 +138,7 @@ RoutingConfig _routingConfigFor(UIProviderSnapshot? providerSnapshot) {
                 'surfaceRole': 'main',
                 'slotFallback': 'default',
               },
-              fallback: shell,
+              fallback: shellWithChrome,
             ),
           );
         },
@@ -113,8 +153,10 @@ RoutingConfig _routingConfigFor(UIProviderSnapshot? providerSnapshot) {
 
 final goRouterProvider = Provider<GoRouter>((ref) {
   final initialSnapshot = ref.read(uiRuntimeProvider).valueOrNull;
+  Future<OnboardingGateResult> onboardingGate() =>
+      ref.read(onboardingGateProvider.future);
   final routingConfig = ValueNotifier<RoutingConfig>(
-    _routingConfigFor(initialSnapshot),
+    _routingConfigFor(initialSnapshot, onboardingGate: onboardingGate),
   );
   ref.onDispose(routingConfig.dispose);
   ref.listen<String>(
@@ -125,6 +167,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       if (previous == next) return;
       routingConfig.value = _routingConfigFor(
         ref.read(uiRuntimeProvider).valueOrNull,
+        onboardingGate: onboardingGate,
       );
     },
   );

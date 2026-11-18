@@ -79,14 +79,15 @@ func (k UIContributionKind) DefaultSandbox() UISandboxType {
 type UISandboxType string
 
 const (
-	SandboxHostNative     UISandboxType = "host_native"
-	SandboxSchemaRenderer UISandboxType = "schema_renderer"
-	SandboxClientModule   UISandboxType = "client_module"
+	SandboxHostNative       UISandboxType = "host_native"
+	SandboxSchemaRenderer   UISandboxType = "schema_renderer"
+	SandboxClientModule     UISandboxType = "client_module"
+	SandboxMobileWebRuntime UISandboxType = "mobile_web_runtime"
 )
 
 func (s UISandboxType) Valid() bool {
 	switch s {
-	case SandboxHostNative, SandboxSchemaRenderer, SandboxClientModule:
+	case SandboxHostNative, SandboxSchemaRenderer, SandboxClientModule, SandboxMobileWebRuntime:
 		return true
 	}
 	return false
@@ -142,9 +143,12 @@ type UIEntryDefinition struct {
 	Type        UISandboxType `json:"type"`
 	Path        string        `json:"path"`
 	SchemaPath  string        `json:"schema_path,omitempty"`
+	StylePath   string        `json:"style_path,omitempty"`
+	StyleHash   string        `json:"style_hash,omitempty"`
 	RuntimeID   string        `json:"runtime_id,omitempty"`
 	EntryName   string        `json:"entry_name,omitempty"`
 	ContentHash string        `json:"content_hash"`
+	ModuleToken string        `json:"module_token,omitempty"`
 }
 
 type UICondition struct {
@@ -379,7 +383,7 @@ var (
 
 func validDispatchKind(kind extension_slots.SlotDispatchKind) bool {
 	switch kind {
-	case extension_slots.DispatchSingle, extension_slots.DispatchList, extension_slots.DispatchKeyed, extension_slots.DispatchChain:
+	case extension_slots.DispatchSingle, extension_slots.DispatchList, extension_slots.DispatchKeyed, extension_slots.DispatchChain, extension_slots.DispatchHoc:
 		return true
 	default:
 		return false
@@ -782,21 +786,21 @@ func durationToRateHz(updateFrequency time.Duration) int {
 
 func allowedSandboxesForKind(kind UIContributionKind) []UISandboxType {
 	if kind.IsCustom() {
-		return []UISandboxType{SandboxSchemaRenderer, SandboxClientModule, SandboxHostNative}
+		return []UISandboxType{SandboxSchemaRenderer, SandboxClientModule, SandboxMobileWebRuntime, SandboxHostNative}
 	}
 	switch kind {
 	case UIContributionSchemaPage, UIContributionSettingsSection, UIContributionPanel,
 		UIContributionCard, UIContributionBadge, UIContributionDetailSectionKind,
 		UIContributionChatSidebarKind:
-		return []UISandboxType{SandboxSchemaRenderer, SandboxClientModule}
+		return []UISandboxType{SandboxSchemaRenderer, SandboxClientModule, SandboxMobileWebRuntime}
 	case UIContributionWebPage, UIContributionMessageRenderer:
-		return []UISandboxType{SandboxSchemaRenderer, SandboxClientModule}
+		return []UISandboxType{SandboxSchemaRenderer, SandboxClientModule, SandboxMobileWebRuntime}
 	case UIContributionAction, UIContributionMenuItem, UIContributionToolbarItem,
 		UIContributionStatusItem, UIContributionMessageAction,
 		UIContributionDesktopCommand:
-		return []UISandboxType{SandboxHostNative}
+		return []UISandboxType{SandboxHostNative, SandboxMobileWebRuntime}
 	case UIContributionComposerAction:
-		return []UISandboxType{SandboxHostNative, SandboxSchemaRenderer, SandboxClientModule}
+		return []UISandboxType{SandboxHostNative, SandboxSchemaRenderer, SandboxClientModule, SandboxMobileWebRuntime}
 	default:
 		return []UISandboxType{kind.DefaultSandbox()}
 	}

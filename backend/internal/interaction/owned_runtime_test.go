@@ -42,6 +42,25 @@ func TestOwnedRuntimeRequiresOwnerSnapshotAndMatchingRole(t *testing.T) {
 	}
 }
 
+func TestOwnedRuntimeAcceptsPromptExtensions(t *testing.T) {
+	scope := coordination.ExecutionScope{SpaceID: "space", RoleID: "role", RoleRevision: 1, ResourceOwnerID: "device", RoleOwnerID: "device"}
+	input := coordination.DataSnapshot{
+		OwnerID: "device",
+		Role:    coordination.Role{ID: "role", Revision: 1, Profile: json.RawMessage(`{"characterId":"role"}`)},
+		RuntimeContext: map[string]json.RawMessage{
+			"promptExtensions": json.RawMessage(`{"source":"promptExtensions","status":"ready","value":{"sections":[{"content":"DSH prompt"}],"count":1}}`),
+		},
+	}
+	ctx, err := WithOwnedContext(t.Context(), scope, input, "conversation", "web")
+	if err != nil {
+		t.Fatal(err)
+	}
+	value, ok := ownedContextFromContext(ctx)
+	if !ok || value.PromptExtensions.Status != LoadStatusReady || len(value.PromptExtensions.Value.Sections) != 1 || value.PromptExtensions.Value.Sections[0].Content != "DSH prompt" {
+		t.Fatalf("prompt extension missing: %+v", value.PromptExtensions)
+	}
+}
+
 func TestOwnedRuntimeRetainsConcurrencyLimitAndReleasesExactlyOnce(t *testing.T) {
 	tracker := NewInMemoryTracker()
 	service := NewRuntimeContextService(tracker, 1)

@@ -1,7 +1,16 @@
 <template>
   <aside class="settings-sidebar" data-amitia-ui="settings.sidebar">
     <header class="settings-sidebar-header">
-      <h1>设置</h1>
+      <ExtensionSlot
+        slot-id="settings.shell.header"
+        :context="settingsContext"
+        fallback="default"
+        layout="inline"
+        surface-role="header"
+        bare
+      >
+        <h1>设置</h1>
+      </ExtensionSlot>
     </header>
     <nav class="settings-navigation" aria-label="设置分类">
       <section
@@ -19,6 +28,15 @@
           data-amitia-ui="settings.tab"
           :aria-current="currentEntry === item.path ? 'page' : undefined"
         >
+          <ExtensionSlot
+            slot-id="settings.section.icon"
+            :context="{ ...settingsContext, sectionId: sectionId(item.path) }"
+            :dispatch-only="sectionId(item.path)"
+            fallback="none"
+            layout="inline"
+            surface-role="sidebar"
+            bare
+          />
           {{ item.label }}
         </RouterLink>
       </section>
@@ -29,10 +47,20 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useRoute } from "vue-router";
+import ExtensionSlot from "@/components/extension/ExtensionSlot.vue";
 import { resolveSettingsEntry, settingsGroups } from "@/navigation/settings-navigation";
 
 const route = useRoute();
 const currentEntry = computed(() => resolveSettingsEntry(route.path));
+const settingsContext = computed(() => ({
+  route: route.fullPath,
+  routeName: String(route.name ?? ""),
+  section: sectionId(route.path),
+}));
+
+function sectionId(path: string): string {
+  return path.split("/").filter(Boolean).at(-1) ?? "settings";
+}
 </script>
 
 <style scoped>

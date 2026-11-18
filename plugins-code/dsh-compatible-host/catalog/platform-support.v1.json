@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "catalogVersion": "v1",
+  "targetDshVersion": "0.2.2-rc.2",
+  "targetClientUiPrimitivesVersion": "0.2.2-rc.2",
+  "sourcePackages": [
+    {
+      "spec": "@deepseek-ai/dsh@0.2.2-rc.2",
+      "packageJsonSha256": "sha256-9d6c0e15213b8d2b463de2a820e1ff5722641944bb561715f53e2ce7f0781adc"
+    },
+    {
+      "spec": "@deepseek-ai/dsh-cordis-client-runner@0.2.2-rc.2",
+      "packageJsonSha256": "sha256-e5ff1b4e163bb6e6b8baafe73b3a0e8d1026f935c4666e670d1d1de36c57545e"
+    }
+  ],
+  "platforms": [
+    {
+      "platform": "windows",
+      "declaration": "supported",
+      "evidence": "pending",
+      "phase": "P18",
+      "reason": "尚无真实 Electron/Core 端到端记录"
+    },
+    {
+      "platform": "macos",
+      "declaration": "supported",
+      "evidence": "partial",
+      "phase": "P18",
+      "reason": "已有桌面运行链，尚未完成目标 DSH 全量旅程"
+    },
+    {
+      "platform": "linux",
+      "declaration": "supported",
+      "evidence": "pending",
+      "phase": "P18",
+      "reason": "尚无真实 Electron/Core 端到端记录"
+    },
+    {
+      "platform": "web",
+      "declaration": "development",
+      "evidence": "partial",
+      "phase": "P18",
+      "reason": "开发面可用于验证，不纳入 v1 发布平台"
+    },
+    {
+      "platform": "android",
+      "declaration": "supported",
+      "evidence": "partial",
+      "phase": "MOB-P7",
+      "reason": "管理页与 WebView Runtime 已实现，真机全量旅程未闭环"
+    },
+    {
+      "platform": "ios",
+      "declaration": "not-declared",
+      "evidence": "pending",
+      "phase": "MOB-P7",
+      "reason": "安装平台清单未加入 iOS，等待真机验证"
+    },
+    {
+      "platform": "mobile",
+      "declaration": "development",
+      "evidence": "partial",
+      "phase": "MOB-P7",
+      "reason": "通用移动入口用于验证，不单独作为发布平台"
+    }
+  ]
+}

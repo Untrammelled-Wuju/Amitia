@@ -86,6 +86,24 @@ function settings(overrides: Partial<RuntimeSettingsInfo> = {}): RuntimeSettings
 
 describe("DesktopPetManager runtime settings", () => {
 
+  it("does not close another pet when receiving a scoped disable", async () => {
+    const manager = makeManager();
+    const internal = manager as never as {
+      activeInstallationId: string;
+      disableInternal: ReturnType<typeof vi.fn>;
+      applyDesiredStateCommand: (command: unknown) => Promise<void>;
+    };
+    internal.activeInstallationId = "install-a";
+    internal.disableInternal = vi.fn(async () => undefined);
+
+    await internal.applyDesiredStateCommand({
+      installationId: "install-b",
+      payload: { installationId: "install-b", ensureAbsent: true },
+    });
+
+    expect(internal.disableInternal).not.toHaveBeenCalled();
+  });
+
   it("fails closed when authoritative settings flags are missing or malformed", async () => {
     const manager = makeManager();
     const internal = manager as never as {

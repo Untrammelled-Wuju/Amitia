@@ -56,6 +56,60 @@ func TestBuildUIContributionOpAllowsWebSandboxRuntimeBinding(t *testing.T) {
 	}
 }
 
+func TestBuildUIContributionOpAllowsMobileWebRuntimeSlot(t *testing.T) {
+	definition := ui_contribution.UIContributionDefinition{
+		ContributionID:  "mobile-chat-sidebar",
+		ExtensionID:     "com.example/mobile-slot",
+		ModuleID:        "mobile-slot-ui",
+		Kind:            ui_contribution.UIContributionPanel,
+		Slot:            ui_contribution.UISlotReference{SlotID: "chat.sidebar.panel", ContractVersion: 1},
+		ContractVersion: 1,
+		Entry: ui_contribution.UIEntryDefinition{
+			Type:        ui_contribution.SandboxMobileWebRuntime,
+			Path:        "modules/mobile/index.mjs",
+			StylePath:   "modules/mobile/index.css",
+			ContentHash: "sha256-module",
+			StyleHash:   "sha256-style",
+		},
+		Sandbox:   ui_contribution.UISandboxPolicy{Type: ui_contribution.SandboxMobileWebRuntime},
+		Integrity: ui_contribution.ContributionIntegrity{DefinitionHash: "sha256-definition"},
+	}
+	definitionData, err := json.Marshal(definition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	definitionMap := map[string]any{}
+	if err := json.Unmarshal(definitionData, &definitionMap); err != nil {
+		t.Fatal(err)
+	}
+	host := ui_contribution.NewUIHost()
+	installer := &TypedContributionInstaller{container: &Container{UIHost: host}}
+	contribution := domain.ContributionDefinition{
+		ID:          "mobile-chat-sidebar",
+		ExtensionID: "com.example/mobile-slot",
+		ModuleID:    "mobile-slot-ui",
+		Kind:        domain.ContributionKindUIPage,
+		Adapter:     domain.ContributionAdapterUI,
+		Definition:  definitionMap,
+	}
+	op, err := installer.buildInstallOp(context.Background(), contribution, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := op.doInstall(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := host.GetContribution("mobile-chat-sidebar")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.Entry.Type != ui_contribution.SandboxMobileWebRuntime ||
+		stored.Entry.StylePath != "modules/mobile/index.css" ||
+		stored.Entry.StyleHash != "sha256-style" {
+		t.Fatalf("unexpected stored mobile contribution: %+v", stored.Entry)
+	}
+}
+
 func TestBuildUIContributionOpKeepsHostRuntimeGate(t *testing.T) {
 	definition := ui_contribution.UIContributionDefinition{
 		ContributionID:  "host-runtime-page",
