@@ -17,6 +17,7 @@ function fixture(options = {}) {
     command: async (input) => {
       commands.push(input);
       if (input.action === "conversation-create") return { conversationId: "conversation-42" };
+      if (input.action === "agent-preset-write") return { key: input.targetId, preset: input.preset, scope: input.scope };
       if (input.action === "conversation-list") {
         return {
           items: [{
@@ -53,6 +54,12 @@ function fixture(options = {}) {
       }
       if (input.action === "conversation-archive") {
         return { conversationId: input.conversationId, archived: input.archived };
+      }
+      if (input.action === "conversation-reorder") {
+        return { conversationIds: [input.conversationId, input.beforeConversationId].filter(Boolean), projectId: input.projectId };
+      }
+      if (input.action === "project-reorder") {
+        return { projectIds: [input.projectId] };
       }
       if (input.action === "project-catalog") return { items: [], nextCursor: "" };
       if (input.action === "project-workspaces") {
@@ -288,7 +295,8 @@ test("maps official DSH panels to verified Amitia routes", async () => {
   const secondNavigation = services.layout.beginNavigation();
   assert.equal(firstNavigation.aborted, true);
   assert.equal(secondNavigation.aborted, false);
-  assert.throws(() => services.layout.selectPanel("custom-panel"), /P12.*custom-panel/);
+  await services.layout.selectPanel("custom-panel");
+  assert.deepEqual(navigations, ["/chat", "/extensions", "/tasks", "/main-panel/custom-panel"]);
 });
 
 test("creates and opens an Amitia conversation through generic host APIs", async () => {
@@ -316,6 +324,21 @@ test("projects the real Session and Workspace catalogs into DSH snapshots", asyn
     sessionId: "dsh-session-reserved",
   });
   assert.equal(id, "conversation-42");
+});
+
+test("sessions.create 落 agentPreset 到新会话作用域", async () => {
+  const { services, commands } = fixture();
+  await services.sessions.refresh();
+  await services.workspaces.refresh();
+  const id = await services.sessions.create({
+    workspaceId: "project-1:workspace-1",
+    agentPreset: "reviewer",
+  });
+  assert.equal(id, "conversation-42");
+  assert.deepEqual(
+    commands.find((entry) => entry.action === "agent-preset-write"),
+    { action: "agent-preset-write", targetId: "conversation-42", preset: "reviewer", scope: "session" },
+  );
 });
 
 test("searches visible Amitia conversations through the generic host API", async () => {
@@ -701,7 +724,7 @@ test("renames and deletes DSH workspaces through the mapped Amitia project", asy
   );
 });
 
-test("archives DSH sessions through Amitia archives and keeps insertSessionBefore unsupported", async () => {
+test("archives DSH sessions through Amitia archives and reorders through conversation-reorder", async () => {
   const { services, commands } = fixture();
   await services.workspaces.archiveSession("conversation-1", { stopActivity: true });
   await services.workspaces.unarchiveSession("conversation-1");
@@ -715,9 +738,12 @@ test("archives DSH sessions through Amitia archives and keeps insertSessionBefor
   );
   await assert.rejects(() => services.workspaces.archiveSession(""), /DSH workspaces\.archiveSession requires a session id/);
   await assert.rejects(() => services.workspaces.unarchiveSession(""), /DSH workspaces\.unarchiveSession requires a session id/);
-  assert.throws(
-    () => services.workspaces.insertSessionBefore("conversation-1", "conversation-2"),
-    /DSH workspaces\.insertSessionBefore is unavailable \(P13\)/,
+  await services.workspaces.refresh();
+  await services.workspaces.insertSessionBefore("project-1:workspace-1", "conversation-1", "");
+  const reorder = commands.find((entry) => entry.action === "conversation-reorder");
+  assert.deepEqual(
+    reorder && { conversationId: reorder.conversationId, before: reorder.beforeConversationId, projectId: reorder.projectId },
+    { conversationId: "conversation-1", before: "", projectId: "project-1" },
   );
 });
 

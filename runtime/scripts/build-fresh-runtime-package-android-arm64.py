@@ -281,6 +281,7 @@ def main():
     parser.add_argument("--qdrant-archive", required=True)
     parser.add_argument("--surrealdb", required=True)
     parser.add_argument("--plugin-market-package", required=True)
+    parser.add_argument("--bundled-plugin", action="append", default=[], type=Path)
     parser.add_argument("--plugin-host-dir")
     parser.add_argument("--task-host-dir")
     parser.add_argument("--llama-runtime-dir")
@@ -315,6 +316,9 @@ def main():
         raise ValueError("Node executable is unavailable")
     if not plugin_market_package.is_file() or plugin_market_package.suffix != ".amitiax":
         raise ValueError("plugin market package is unavailable")
+    for package in args.bundled_plugin:
+        if not package.is_file() or package.suffix != ".amitiax":
+            raise ValueError(f"bundled plugin package is unavailable: {package}")
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="amitia-runtime-fresh-", dir=output.parent) as temporary:
         stage = Path(temporary)
@@ -324,10 +328,12 @@ def main():
         extract_binary(Path(args.qdrant_archive), "qdrant", program / "qdrant/bin/qdrant")
         copy(Path(args.surrealdb), program / "surrealdb/surreal")
         for host, source_root in (("plugin-host", plugin_host_dir), ("task-host", task_host_dir)):
-            shutil.copytree(source_root / "dist", program / host / "dist")
-            shutil.copytree(project / "sdk" / "plugin-sdk" / "dist", program / host / "dist" / "sdk" / "plugin-sdk")
+            shutil.copytree(source_root / "dist", program / host / "dist", dirs_exist_ok=True)
+            shutil.copytree(project / "sdk" / "plugin-sdk" / "dist", program / host / "dist" / "sdk" / "plugin-sdk", dirs_exist_ok=True)
             copy(source_root / "package.json", program / host / "package.json")
         copy(plugin_market_package, program / "bundled-plugins" / "plugin-market" / plugin_market_package.name)
+        for package in args.bundled_plugin:
+            copy(package, program / "bundled-plugins" / package.name)
         for script in ("amitia-node-prepare.sh", "amitia-node-probe.sh"):
             copy(project / "runtime/scripts/node" / script, program / "scripts/node" / script)
         if not (llama_runtime_dir / "llama-server").is_file():

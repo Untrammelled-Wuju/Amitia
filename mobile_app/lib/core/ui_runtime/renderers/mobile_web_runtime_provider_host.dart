@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:developer' as developer;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -140,6 +141,13 @@ class _MobileWebRuntimeProviderHostState
       final controller = WebViewController()
         ..setJavaScriptMode(JavaScriptMode.unrestricted)
         ..setBackgroundColor(Colors.transparent)
+        ..setOnConsoleMessage(
+          (message) => developer.log(
+            message.message,
+            name: 'amitia.ui.web-runtime.${widget.entry.contributionId}',
+            level: message.level.name == 'error' ? 1000 : 500,
+          ),
+        )
         ..addJavaScriptChannel(
           'AmitiaNativeBridge',
           onMessageReceived: (message) => _handleBridge(message.message),

@@ -37,7 +37,7 @@ func (e *Engine) Edit(ctx context.Context, authority Request, edit EditRequest) 
 	allowed := map[string]bool{}
 	switch edit.Kind {
 	case "conversation":
-		allowed = map[string]bool{"title": true, "archived": true, "pinned": true, "projectId": true, "lastReadTurnSequence": true, "modelConfigId": true, "reasoningEffort": true, "reasoningEnabled": true, "permissionMode": true, "messageStyle": true}
+		allowed = map[string]bool{"title": true, "archived": true, "pinned": true, "projectId": true, "order": true, "lastReadTurnSequence": true, "modelConfigId": true, "reasoningEffort": true, "reasoningEnabled": true, "permissionMode": true, "messageStyle": true}
 		if err := validateSettingsChanges(edit.Changes); err != nil {
 			return coordination.Acknowledgement{}, err
 		}
@@ -45,7 +45,7 @@ func (e *Engine) Edit(ctx context.Context, authority Request, edit EditRequest) 
 		if edit.ExpectedScope == nil {
 			return coordination.Acknowledgement{}, errors.New("项目修改缺少原数据归属，请重新加载")
 		}
-		allowed = map[string]bool{"title": true, "pinned": true, "hidden": true, "workspaces": true, "primaryWorkspaceId": true}
+		allowed = map[string]bool{"title": true, "pinned": true, "hidden": true, "workspaces": true, "primaryWorkspaceId": true, "order": true}
 	case "message":
 		allowed = map[string]bool{"content": true}
 	case "memory":
@@ -163,6 +163,12 @@ func (e *Engine) Edit(ctx context.Context, authority Request, edit EditRequest) 
 				if json.Unmarshal(value, &revision) != nil || revision < 1 {
 					return coordination.Acknowledgement{}, errors.New("记忆历史版本参数无效")
 				}
+			}
+		}
+		if key == "order" {
+			var order int64
+			if json.Unmarshal(value, &order) != nil || order < 0 {
+				return coordination.Acknowledgement{}, errors.New("排序位置无效")
 			}
 		}
 		if key == "lastReadTurnSequence" {

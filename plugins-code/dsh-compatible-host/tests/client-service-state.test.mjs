@@ -40,6 +40,17 @@ function stateCommand(state, calls = []) {
       if (state.sendError) throw state.sendError;
       return { accepted: true, messageId: "message-sent" };
     }
+    if (input.action === "attachment-read") {
+      if (String(input.path).startsWith("/etc/")) throw new Error("attachment-read 只允许读取附件落盘目录");
+      return { path: input.path, size: 4, mediaType: "image/png", bytesBase64: "AAAA" };
+    }
+    if (input.action === "conversation-update") {
+      return { conversationId: input.conversationId, title: input.title };
+    }
+    if (input.action === "conversation-interrupt") {
+      if (state.interruptError) throw state.interruptError;
+      return { interrupted: true, conversationId: input.conversationId };
+    }
     throw new Error(`unexpected command ${input.action}`);
   };
 }
@@ -125,23 +136,15 @@ test("sessions.binding 读取宿主会话投影、待提交队列与翻页状态
   assert.equal(binding.session.getSnapshot().historyLoadStatus, "idle");
   unsubscribe();
 
-  assert.throws(
-    () => binding.session.rename("新标题"),
-    (error) => {
-      assert.match(error.message, /sessions\.rename/);
-      assert.match(error.message, /新标题/);
-      assert.equal(error.missingHostAction, "conversation-update（入参 { conversationId, title }）");
-      return true;
-    },
-  );
-  assert.throws(
-    () => binding.session.cancel(),
-    (error) => {
-      assert.match(error.message, /sessions\.cancel/);
-      assert.match(error.message, /conversation-interrupt/);
-      return true;
-    },
-  );
+  const attachment = await binding.session.readAttachment({ type: "file", attachment: { attachmentId: "artifact-1", name: "a.png", bytes: 4, mediaType: "image/png", uri: "/tmp/amitia-dsh-attachments/abc-a.png" } });
+  assert.deepEqual(attachment, { attachmentId: "artifact-1", name: "a.png", mediaType: "image/png", size: 4, bytesBase64: "AAAA" });
+  await assert.rejects(() => binding.session.readAttachment({ attachment: { attachmentId: "x" } }), /需要带可读路径的附件引用/);
+
+  const renamed = await binding.session.rename("新标题");
+  assert.deepEqual(renamed, { conversationId: "session-1", title: "新标题" });
+  await assert.rejects(() => binding.session.rename("  "), /需要非空标题/);
+  const cancelled = await binding.session.cancel();
+  assert.deepEqual(cancelled, { interrupted: true, conversationId: "session-1" });
   assert.throws(
     () => binding.session.projections.faceOf(""),
     /projections\.faceOf requires a projection key/,
@@ -272,9 +275,10 @@ test("layout.panelInfo 跟随真实路由与右侧面板状态", async () => {
 });
 
 test("layout 在宿主缺少右侧面板能力时抛出带方法名与入参的缺口错误", async () => {
+  const navigations = [];
   const services = createDshClientRuntimeServices({
     command: stateCommand({ conversations: [], workspaces: [], projects: [] }),
-    navigate: () => {},
+    navigate: (target) => { navigations.push(target); },
     hostActions: {},
   });
   assert.throws(
@@ -294,10 +298,9 @@ test("layout 在宿主缺少右侧面板能力时抛出带方法名与入参的�
       return true;
     },
   );
-  assert.throws(
-    () => services.layout.selectPanel("custom-panel"),
-    /P12.*custom-panel/,
-  );
+  await services.layout.selectPanel("custom-panel");
+  assert.deepEqual(navigations, ["/main-panel/custom-panel"]);
+  assert.equal(services.layout.panelInfo.getSnapshot().activePanelId, "custom-panel");
   await services.dispose();
 });
 

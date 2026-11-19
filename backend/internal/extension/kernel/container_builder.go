@@ -178,6 +178,9 @@ type ContainerBuilder struct {
 	conversationWorkspace       ConversationWorkspaceResolver
 	conversationTurnController  ConversationTurnController
 	conversationArchiver        ConversationArchiver
+	conversationReorderer       ConversationReorderer
+	conversationTurns           ConversationTurnsReader
+	conversationUpdater         ConversationUpdater
 	conversationPinner          ConversationPinner
 	conversationForker          ConversationForker
 	modelDefaultsProvider       ModelDefaultsProvider
@@ -187,6 +190,7 @@ type ContainerBuilder struct {
 	projectLister               ProjectLister
 	projectCreator              ProjectCreator
 	projectUpdater              ProjectUpdater
+	projectReorderer            ProjectReorderer
 	projectDeleter              ProjectDeleter
 	vectorStore                 ExtensionVectorStore
 }
@@ -432,6 +436,21 @@ func (b *ContainerBuilder) WithConversationArchiver(archiver ConversationArchive
 	return b
 }
 
+func (b *ContainerBuilder) WithConversationReorderer(reorderer ConversationReorderer) *ContainerBuilder {
+	b.conversationReorderer = reorderer
+	return b
+}
+
+func (b *ContainerBuilder) WithConversationTurns(reader ConversationTurnsReader) *ContainerBuilder {
+	b.conversationTurns = reader
+	return b
+}
+
+func (b *ContainerBuilder) WithConversationUpdater(updater ConversationUpdater) *ContainerBuilder {
+	b.conversationUpdater = updater
+	return b
+}
+
 func (b *ContainerBuilder) WithConversationPinner(pinner ConversationPinner) *ContainerBuilder {
 	b.conversationPinner = pinner
 	return b
@@ -469,6 +488,11 @@ func (b *ContainerBuilder) WithProjectCreator(creator ProjectCreator) *Container
 
 func (b *ContainerBuilder) WithProjectUpdater(updater ProjectUpdater) *ContainerBuilder {
 	b.projectUpdater = updater
+	return b
+}
+
+func (b *ContainerBuilder) WithProjectReorderer(reorderer ProjectReorderer) *ContainerBuilder {
+	b.projectReorderer = reorderer
 	return b
 }
 
@@ -1555,6 +1579,9 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		ConversationMessageAppender: b.conversationMessageAppender,
 		ConversationTurnController:  b.conversationTurnController,
 		ConversationArchiver:        b.conversationArchiver,
+		ConversationReorderer:       b.conversationReorderer,
+		ConversationTurns:           b.conversationTurns,
+		ConversationUpdater:         b.conversationUpdater,
 		ConversationPinner:          b.conversationPinner,
 		ConversationForker:          b.conversationForker,
 		ModelDefaults:               b.modelDefaultsProvider,
@@ -1564,6 +1591,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		ProjectLister:               b.projectLister,
 		ProjectCreator:              b.projectCreator,
 		ProjectUpdater:              b.projectUpdater,
+		ProjectReorderer:            b.projectReorderer,
 		ProjectDeleter:              b.projectDeleter,
 		ExtensionDataSources:        b.extensionDataSources,
 		ResourceLinks:               resourceLinks,

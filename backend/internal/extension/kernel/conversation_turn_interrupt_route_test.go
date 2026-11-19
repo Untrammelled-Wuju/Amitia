@@ -29,6 +29,10 @@ func (r *recordingConversationTurnController) InterruptConversationTurn(_ contex
 	return r.result, r.err
 }
 
+func (r *recordingConversationTurnController) SteerConversationTurn(_ context.Context, request ConversationTurnSteerRequest) (ConversationTurnSteerResult, error) {
+	return ConversationTurnSteerResult{Accepted: true, TurnID: request.TurnID}, nil
+}
+
 func (r *recordingConversationTurnController) AwaitConversationTurnIdle(_ context.Context, request ConversationTurnInterruptRequest) (ConversationTurnAwaitResult, error) {
 	r.awaitCalled = true
 	r.request = request

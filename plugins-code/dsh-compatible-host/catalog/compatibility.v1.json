@@ -26,9 +26,9 @@
     "uiSlotMappedCount": 120,
     "uiSlotPendingCount": 0,
     "hostServiceDelegatedCount": 27,
-    "hostServiceImplementedCount": 21,
-    "hostServicePartialCount": 7,
-    "hostServiceProviderPendingCount": 1,
+    "hostServiceImplementedCount": 25,
+    "hostServicePartialCount": 4,
+    "hostServiceProviderPendingCount": 0,
     "hostServiceUnavailableCount": 13,
     "officialReferencePackageCount": 416
   },
@@ -66,22 +66,22 @@
     {
       "id": "DSH-HOST-SERVICE-004",
       "capability": "agents",
-      "status": "partial",
+      "status": "implemented",
       "phase": "P11",
       "mapping": "composite",
       "route": "amitia-service",
       "provider": "container",
-      "reason": "会话创建与 turnBoundary 投影已接；setFactory 缺 host.agent.factory，announce 缺 session-start 事件语义"
+      "reason": "turnBoundaryOf、currentInitiator/requireInitiator/withInitiator/withoutInitiator、setFactory、create/resume、register/enter、announce、get/list 全部接入；announce 在容器 cordis 上下文上串行派发 agent/created，未绑定容器时原样报不可用"
     },
     {
       "id": "DSH-HOST-SERVICE-005",
       "capability": "approval",
       "status": "implemented",
       "phase": "P11",
-      "mapping": "host",
+      "mapping": "composite",
       "route": "amitia-service",
       "provider": "container",
-      "reason": "request 走 host.approval.request，把 {approved:true|false} 映射为 allowed-once/rejected，非法结果抛原始错误；setPolicy/overrideOf 为本地策略表"
+      "reason": "request 走 host.approval.request 并映射 allowed-once/rejected，setPolicy 按 agent 作用域保存策略，overrideOf 读取同一作用域"
     },
     {
       "id": "DSH-HOST-SERVICE-006",
@@ -178,40 +178,40 @@
       "capability": "directoryPicker",
       "status": "partial",
       "phase": "P11",
-      "mapping": "pending",
+      "mapping": "partial",
       "route": "official-package",
-      "provider": "amitia",
-      "reason": "list/createDirectory 走 host.directory.list/create（已实测）；pick 依赖渲染进程 window.amitiaDesktop.selectDirectory 原生对话框，宿主侧无对应方法"
+      "provider": "amitia-wired",
+      "reason": "list/create 走 host.directory.*，pick 走 host.directory.pick → 已注册 ui.directory.pick 的渲染宿主 → window.amitiaDesktop.selectDirectory；桌面端已注册该端点，移动端未注册时原样返回 ui_host: directory pick host unavailable；原生对话框点选尚未自动化实测"
     },
     {
       "id": "DSH-HOST-SERVICE-016",
       "capability": "directoryPickerController",
-      "status": "partial",
+      "status": "implemented",
       "phase": "P11",
-      "mapping": "pending",
+      "mapping": "implemented",
       "route": "official-package",
-      "provider": "amitia",
-      "reason": "控制器复用具同一 source；pick 依赖原生对话框 IPC，非桌面端无该桥"
+      "provider": "amitia-landed",
+      "reason": "capability() 报 native 并给出 pick；pick/list/createDirectory 全部委派宿主目录接口（host.directory.pick/list/create），未知动词不伪造方法"
     },
     {
       "id": "DSH-HOST-SERVICE-017",
       "capability": "fileReferences",
       "status": "implemented",
       "phase": "P11",
-      "mapping": "host.workspace.read",
+      "mapping": "implemented",
       "route": "official-package",
-      "provider": "amitia",
-      "reason": "已接 host.workspace.read 的 search/stat/read/read_bytes，按当前工作区枚举文件引用"
+      "provider": "amitia-landed",
+      "reason": "list/search/stat/read 已复用 host.workspace.read 的 file_list/file_search/file_stat/file_read_text"
     },
     {
       "id": "DSH-HOST-SERVICE-018",
       "capability": "fs",
       "status": "implemented",
       "phase": "P11",
-      "mapping": "host",
+      "mapping": "composite",
       "route": "amitia-service",
       "provider": "container",
-      "reason": "读、写、rename/move/copy/delete 走 host.workspace.read/write；watch 为 file_stat 轮询；editText 走 read+字面量替换+write；patchText 按 PatchHunk 定位替换后写回"
+      "reason": "resolve/processPath/processPathFromHostPath/fileUrl/contains/stat/lstat/listDir/readText/readBytes/readByteRange/writeText/editText/patchText/moveFile/deleteFile/watch 全部接入 host.workspace.read/write，watch 为快照差分的轮询"
     },
     {
       "id": "DSH-HOST-SERVICE-019",
@@ -251,7 +251,7 @@
       "mapping": "composite",
       "route": "amitia-service",
       "provider": "container",
-      "reason": "适配器注册与 host.model.invoke 出帧已接；resolveCallConfig 走 host.model.defaults（当前启用模型温度/最大 token/上下文窗口）；fileRequestText 仍缺附件引用文本"
+      "reason": "invoke、stream、listModels、prepareCall、resolveModelInfo、providerRetryPolicy、discoverModels、resolveCallConfig、fileRequestText（官方 fileHandleText）已接入；未注册适配器的 provider 明确失败，附件可读路径只认 ref.uri 的 file:// 或绝对路径"
     },
     {
       "id": "DSH-HOST-SERVICE-023",
@@ -328,10 +328,10 @@
       "capability": "schedule",
       "status": "implemented",
       "phase": "P11",
-      "mapping": "host",
+      "mapping": "composite",
       "route": "amitia-service",
       "provider": "container",
-      "reason": "create/list/cancel/run/view/history/edit/deleteInactive 全部走 host.schedule.*；list 返回 {items,shown,total,limit,offset} 并按 active 过滤；create 后回读目录确认条目"
+      "reason": "catalog/create/list/view/edit/cancel/run/deleteInactive/history/deliveryLimits 全部接入 host.schedule.*"
     },
     {
       "id": "DSH-HOST-SERVICE-031",
@@ -348,10 +348,10 @@
       "capability": "sessionFileReferences",
       "status": "implemented",
       "phase": "P11",
-      "mapping": "host.workspace.read",
+      "mapping": "implemented",
       "route": "official-package",
-      "provider": "amitia",
-      "reason": "按会话作用域复用 host.workspace.read 生成会话文件引用"
+      "provider": "amitia-landed",
+      "reason": "同上并带 sessionId 作用域，复用 host.workspace.read 的文件枚举与读取"
     },
     {
       "id": "DSH-HOST-SERVICE-033",
@@ -401,7 +401,7 @@
       "mapping": "composite",
       "route": "amitia-service",
       "provider": "container",
-      "reason": "listSessions、readSession、listEvents、readSurface、readTitle、readTitleSnapshot、readTitleSnapshots 已接入 Amitia 会话目录与持久化事件；observeSession、inspectSession、searchSessions、searchEvents、filterSessions、filterEvents、traceSession、traceEvent、readEvent 缺少对应的 Amitia 通用能力"
+      "reason": "listSessions、readSession、listEvents、readSurface、readTitle、readTitleSnapshot、readTitleSnapshots、readEvent（request.before/after 窗口）、observeSession（持久化观察租约）、filterSessions（id/cwd/created-at/parent/availability）、filterEvents（seq/time/type/surface/text）、traceSession（parentSession 血缘）、searchSessions（跨会话按事件命中分组并按最强命中排序）、searchEvents（会话内事件命中与片段、游标分页）、traceEvent（按 surfaceOp 替换链与 sourceEventSeqs 求替换/来源/派生事件）、inspectSession（传入只读会话视图：header/events/surfaceEvents/messages/readSurface/title，写入直接报只读）已接入；sessions.rename 走 host.conversation.update（复用 conversation title 编辑键），转向走 host.conversation.turn.steer（复用 conversationstream Manager 的 Steer 通道）；消息表面改为按 host.conversation.turns 的文本/推理/工具调用块折叠为 DSH Message 与 parts"
     },
     {
       "id": "DSH-HOST-SERVICE-038",
@@ -421,17 +421,17 @@
       "mapping": "composite",
       "route": "amitia-service",
       "provider": "container",
-      "reason": "list/binding/prompt/create 走宿主；fork 已接 host.conversation.fork（mesh 层复制会话与消息，实测 messageCount=9 并可删除）；prepare 仍缺 host.conversation.prepare（Amitia 创建即写入会话目录，无预分配语义）"
+      "reason": "create/prepare（draft 预分配，首条消息前不进目录，宿主 fabric 提供 publish/drop）/fork（整段派生，拒绝无法映射的 atSeq）/list/flush/registerMessageProjection（宿主折叠注册表，同类型不可重复，返回释放函数）已接入 Amitia 会话目录与消息表面；enter、announce 仍缺 DSH SessionStore 的 append/公布原语"
     },
     {
       "id": "DSH-HOST-SERVICE-040",
       "capability": "sessionSkillCatalog",
       "status": "implemented",
       "phase": "P11",
-      "mapping": "pending",
+      "mapping": "implemented",
       "route": "official-package",
-      "provider": "amitia",
-      "reason": "host.skill.list 已实现，ctx.skills 目录改由宿主技能目录派生"
+      "provider": "amitia-landed",
+      "reason": "合并 host.skill.list 与会话本地注册，按当前会话作用域过滤"
     },
     {
       "id": "DSH-HOST-SERVICE-041",
@@ -498,10 +498,10 @@
       "capability": "skills",
       "status": "implemented",
       "phase": "P11",
-      "mapping": "host",
+      "mapping": "implemented",
       "route": "official-package",
-      "provider": "amitia",
-      "reason": "list/snapshot 合并宿主 host.skill.list 与本地注册表；register/registerProvider/get 为本地注册表；refresh 拉取失败时原始错误进 snapshot().error"
+      "provider": "amitia-landed",
+      "reason": "list/get/read 走 host.skill.list 与本地 provider 注册表，返回 name/skillId/description/version/enabled"
     },
     {
       "id": "DSH-HOST-SERVICE-048",
@@ -521,7 +521,7 @@
       "mapping": "implemented",
       "route": "official-package",
       "provider": "amitia-landed",
-      "reason": "seam 由官方 @deepseek-ai/dsh-storage 提供，JSON 后端已实测落盘 dsh-data/storage/workspace.json（0.1.99 真实运行）"
+      "reason": "seam 由官方 @deepseek-ai/dsh-storage 提供，JSON 后端已实测落盘 dsh-data/storage/workspace.json（0.1.99 真实运行）；0.2.59 服务面审计确认该键由官方包在容器内注册，不在本插件 services 对象里"
     },
     {
       "id": "DSH-HOST-SERVICE-050",
@@ -546,12 +546,12 @@
     {
       "id": "DSH-HOST-SERVICE-052",
       "capability": "subagents",
-      "status": "partial",
+      "status": "implemented",
       "phase": "P11",
       "mapping": "composite",
       "route": "amitia-service",
       "provider": "container",
-      "reason": "子代理发送与命名部分接入；命名表缺 host.session.subagent.names，派生缺 host.conversation.fork"
+      "reason": "startActivation、listDescendants、interrupt、interruptByUser、resolveName、prompt（文本片段按会话作用域追加，source=dsh-subagent）、sendMessage（按 forkOrigin 血缘判定树根，同树投递 source=dsh-subagent-steer）、rootOf（按会话血缘解析树根并返回活动 agent）、namesOf（按根 lead + 名字路径返回 self/parent，缺名回退会话 id）已接入；血缘缓存由 startActivation/prompt/sendMessage 刷新"
     },
     {
       "id": "DSH-HOST-SERVICE-053",
@@ -648,10 +648,10 @@
       "capability": "userQuestions",
       "status": "implemented",
       "phase": "P11",
-      "mapping": "host",
+      "mapping": "composite",
       "route": "amitia-service",
       "provider": "container",
-      "reason": "ask/askTimed 走 host.ui.dialog（message + options + dialogId），返回选中项；空结果抛原始错误；超时返回 timed-out 状态"
+      "reason": "ask/askTimed 走 host.ui.dialog，带超时返回 timeout 且保留原始错误"
     },
     {
       "id": "DSH-HOST-SERVICE-063",
@@ -696,22 +696,22 @@
     {
       "id": "DSH-HOST-SERVICE-067",
       "capability": "workspaceController",
-      "status": "pending",
+      "status": "implemented",
       "phase": "P11",
-      "mapping": "pending",
+      "mapping": "implemented",
       "route": "official-package",
-      "provider": "amitia",
-      "reason": "官方 @deepseek-ai/dsh-api-workspace-controller 注入 remoteAccess / typert / workspaceRegistry 三个宿主服务；Amitia 扩展运行时没有 typert remote 栈与 dsh-workspace 存储层，需要先实现 compat 存储与 remote 服务端"
+      "provider": "amitia-landed",
+      "reason": "list/create/rename/delete/initializeDefault 接 host.project.*（路径取 primary workspace 的 rootUri，sessionIds 按会话 projectId 分组并按持久顺序字段排序）；archiveSession/unarchiveSession/pinSession/unpinSession 按会话作用域快照调 host.conversation.archive/pin；insertBefore 调 host.project.reorder、insertSessionBefore 调 host.conversation.reorder，顺序值写在项目与会话文档的 order 字段，取相邻项中点，间隙不足时统一重排"
     },
     {
       "id": "DSH-HOST-SERVICE-068",
       "capability": "workspaceFiles",
       "status": "implemented",
       "phase": "P11",
-      "mapping": "host.workspace.read",
+      "mapping": "implemented",
       "route": "official-package",
-      "provider": "amitia",
-      "reason": "已接 host.workspace.read 的 file_list/search/stat/read/read_bytes"
+      "provider": "amitia-landed",
+      "reason": "list/search/stat/read/readBytes 走 host.workspace.read；changes 以 file_list/file_stat 轮询产出 DSH ready/change 帧（文件按 stat.version 判变；目录按直接子项逐个 stat 的 version 判变，并发 8，目录项按类型标记，目标消失发 absent 帧）"
     },
     {
       "id": "DSH-HOST-SERVICE-069",
@@ -721,14 +721,14 @@
       "mapping": "implemented",
       "route": "official-package",
       "provider": "amitia-landed",
-      "reason": "由官方 @deepseek-ai/dsh-workspace 提供，0.1.99 已激活并完成默认工作区初始化落盘"
+      "reason": "由官方 @deepseek-ai/dsh-workspace 提供，0.1.99 已激活并完成默认工作区初始化落盘；0.2.59 服务面审计确认该键由官方包在容器内注册，不在本插件 services 对象里，故 workspaceController 改为在 host-services 内直接映射 project 服务"
     }
   ],
   "clientServices": [
     {
       "id": "DSH-CLIENT-SERVICE-001",
       "capability": "layout",
-      "status": "partial",
+      "status": "implemented",
       "phase": "P13",
       "mapping": "composite"
     },
@@ -742,7 +742,7 @@
     {
       "id": "DSH-CLIENT-SERVICE-003",
       "capability": "sessions",
-      "status": "partial",
+      "status": "implemented",
       "phase": "P13",
       "mapping": "composite"
     },
@@ -777,7 +777,7 @@
     {
       "id": "DSH-CLIENT-SERVICE-008",
       "capability": "workspaces",
-      "status": "partial",
+      "status": "implemented",
       "phase": "P13",
       "mapping": "composite"
     }

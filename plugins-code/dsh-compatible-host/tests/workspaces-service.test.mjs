@@ -76,6 +76,27 @@ function fixture(options = {}) {
         if (target && typeof input.title === "string") target.title = input.title;
         return { projectId: input.projectId, revision: 2 };
       }
+      if (input.action === "conversation-reorder") {
+        const target = state.workspaces.find((item) => item.projectId === input.projectId);
+        const moving = String(input.conversationId || "");
+        if (target) {
+          const rest = target.sessionIds.filter((id) => id !== moving);
+          const index = input.beforeConversationId ? rest.indexOf(input.beforeConversationId) : rest.length;
+          rest.splice(index < 0 ? rest.length : index, 0, moving);
+          target.sessionIds = rest;
+        }
+        return { conversationIds: target ? [...target.sessionIds] : [moving], projectId: input.projectId };
+      }
+      if (input.action === "project-reorder") {
+        const moving = state.projects.find((item) => item.projectId === input.projectId);
+        if (moving) {
+          const rest = state.projects.filter((item) => item !== moving);
+          const index = input.beforeProjectId ? rest.findIndex((item) => item.projectId === input.beforeProjectId) : rest.length;
+          rest.splice(index < 0 ? rest.length : index, 0, moving);
+          state.projects.splice(0, state.projects.length, ...rest);
+        }
+        return { projectIds: state.projects.map((item) => item.projectId) };
+      }
       if (input.action === "project-delete") {
         const projectIndex = state.projects.findIndex((item) => item.projectId === input.projectId);
         if (projectIndex >= 0) state.projects.splice(projectIndex, 1);
@@ -300,19 +321,27 @@ test("workspaces.pinSession 与 unpinSession 通过 conversation-pin 落库", as
   assert.equal(commands.some((entry) => entry.action === "project-update"), false);
 });
 
-test("workspaces.insertSessionBefore 明确失败并带上缺少 action 与完整入参", async () => {
+test("workspaces.insertSessionBefore 通过 conversation-reorder 落库并刷新工作区视图", async () => {
+  const { services, commands } = fixture({
+    conversations: [
+      { sessionId: "session-1", title: "One", displayTitle: "One", updatedAt: 1_760_000_000_000, running: false, blank: false, projectId: "project-1", workspaceId: "workspace-1", cwd: "/tmp/one", formatStatus: "current" },
+      { sessionId: "session-2", title: "Two", displayTitle: "Two", updatedAt: 1_760_000_000_100, running: false, blank: false, projectId: "project-1", workspaceId: "workspace-1", cwd: "/tmp/one", formatStatus: "current", order: 2048 },
+    ],
+    workspaces: [{ workspaceId: "workspace-1", projectId: "project-1", path: "/tmp/one", title: "One", sessionIds: ["session-1", "session-2"], createdAt: NOW, updatedAt: NOW }],
+  });
+  await services.workspaces.refresh();
+  const view = await services.workspaces.insertSessionBefore("workspace-1", "session-2", "session-1");
+  const reorder = commands.find((entry) => entry.action === "conversation-reorder");
+  assert.equal(reorder.conversationId, "session-2");
+  assert.equal(reorder.beforeConversationId, "session-1");
+  assert.equal(reorder.projectId, "project-1");
+  assert.match(reorder.requestId, /^workspaces\.insertSessionBefore:session-2:session-1:/);
+  assert.deepEqual(view.sessionIds, ["session-2", "session-1"]);
+});
+
+test("workspaces.insertSessionBefore 与 insertBefore 拒绝未知工作区映射", async () => {
   const { services, commands } = fixture();
-  assert.throws(
-    () => services.workspaces.insertSessionBefore("workspace-1", "session-1", "session-2"),
-    (error) => {
-      assert.match(error.message, /DSH workspaces\.insertSessionBefore is unavailable \(P13\)/);
-      assert.match(error.message, /缺少 host action：conversation-reorder/);
-      assert.equal(error.code, "DSH_OPERATION_UNAVAILABLE");
-      assert.equal(error.missingHostAction.includes("conversation-reorder"), true);
-      assert.deepEqual(error.request, { workspaceId: "workspace-1", sessionId: "session-1", beforeSessionId: "session-2" });
-      assert.match(error.message, /"beforeSessionId":"session-2"/);
-      return true;
-    },
-  );
-  assert.equal(commands.some((entry) => /^(project-|conversation-)/.test(entry.action)), false);
+  await assert.rejects(() => services.workspaces.insertSessionBefore("workspace-missing", "session-1"), /has no verified Amitia ProjectId mapping/);
+  await assert.rejects(() => services.workspaces.insertBefore("workspace-missing"), /has no verified Amitia ProjectId mapping/);
+  assert.equal(commands.some((entry) => entry.action === "conversation-reorder" || entry.action === "project-reorder"), false);
 });

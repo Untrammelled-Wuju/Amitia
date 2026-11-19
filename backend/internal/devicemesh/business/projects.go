@@ -22,6 +22,7 @@ type Project struct {
 	UpdatedAt          string             `json:"updatedAt"`
 	PinnedAt           *string            `json:"pinnedAt,omitempty"`
 	HiddenAt           *string            `json:"hiddenAt,omitempty"`
+	Order              int64              `json:"order"`
 }
 
 type ProjectWorkspace struct {
@@ -44,6 +45,37 @@ type ProjectResponse struct {
 	Scope           coordination.ExecutionScope  `json:"executionScope"`
 	Saved           bool                         `json:"saved"`
 	Acknowledgement coordination.Acknowledgement `json:"acknowledgement"`
+}
+
+func (e *Engine) nextProjectOrder(ctx context.Context, request Request) (int64, error) {
+	view, err := e.Query(ctx, request, coordination.DataQuery{Management: true, ResourceKind: "project", Limit: 512})
+	if err != nil {
+		return 0, err
+	}
+	maxOrder := int64(0)
+	for _, row := range view.Snapshot.Resources {
+		if row.Kind != "project" {
+			continue
+		}
+		var project Project
+		if err := json.Unmarshal(row.Body, &project); err != nil {
+			continue
+		}
+		if order := ProjectSortOrder(project.Order, project.CreatedAt); order > maxOrder {
+			maxOrder = order
+		}
+	}
+	return maxOrder + 1024, nil
+}
+
+func ProjectSortOrder(order int64, createdAt string) int64 {
+	if order > 0 {
+		return order
+	}
+	if parsed, err := time.Parse(time.RFC3339Nano, createdAt); err == nil {
+		return parsed.UnixMilli()
+	}
+	return 1
 }
 
 func (e *Engine) CreateProject(ctx context.Context, request Request, input CreateProjectInput) (ProjectResponse, error) {
@@ -123,7 +155,11 @@ func (e *Engine) CreateProject(ctx context.Context, request Request, input Creat
 		return saved.Response, nil
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	response := ProjectResponse{Project: Project{ID: id, Title: title, Workspaces: workspaces, PrimaryWorkspaceID: primaryWorkspaceID, CreatedAt: now, UpdatedAt: now}, Scope: scope, Saved: true, Acknowledgement: coordination.Acknowledgement{RequestID: scope.RequestID, OwnerID: scope.ResourceOwnerID, Versions: map[string]int64{"project/" + id: 1, "checkpoint/" + receiptID: 1}}}
+	nextOrder, err := e.nextProjectOrder(ctx, request)
+	if err != nil {
+		return ProjectResponse{}, err
+	}
+	response := ProjectResponse{Project: Project{ID: id, Title: title, Workspaces: workspaces, PrimaryWorkspaceID: primaryWorkspaceID, CreatedAt: now, UpdatedAt: now, Order: nextOrder}, Scope: scope, Saved: true, Acknowledgement: coordination.Acknowledgement{RequestID: scope.RequestID, OwnerID: scope.ResourceOwnerID, Versions: map[string]int64{"project/" + id: 1, "checkpoint/" + receiptID: 1}}}
 	commit := coordination.Commit{Scope: scope, Mutations: []coordination.Mutation{{Kind: "project", ID: id, RoleID: scope.RoleID, Body: body(response.Project)}, {Kind: "checkpoint", ID: receiptID, RoleID: scope.RoleID, Body: body(map[string]any{"hash": fingerprint, "response": response})}}}
 	ack, err := e.commit(ctx, commit)
 	if err != nil {

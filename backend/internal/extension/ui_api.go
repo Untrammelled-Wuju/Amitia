@@ -137,6 +137,7 @@ func (api *UIAPI) RegisterRoutes(extensions *gin.RouterGroup, parent *gin.Router
 
 	if container.UIHostNotifier != nil {
 		handler.SetDialogResolver(container.UIHostNotifier)
+		handler.SetDirectoryPickResolver(container.UIHostNotifier)
 		handler.SetClientRuntimeCommandResolver(container.UIHostNotifier)
 		handler.SetProviderChangeBroadcaster(func(eventType string, extra map[string]interface{}) {
 			container.UIHostNotifier.BroadcastExtensionChange(eventType, "builtin.amitia.ui", extra)

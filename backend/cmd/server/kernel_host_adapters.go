@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -191,10 +194,13 @@ func (r *kernelConversationReader) ReadConversation(ctx context.Context, convers
 		}
 		var batch struct {
 			Items []struct {
-				ConversationID string `json:"conversationId"`
-				Role           string `json:"role"`
-				CreatedAt      string `json:"createdAt"`
-				Content        string `json:"content"`
+				ID             string                        `json:"id"`
+				ConversationID string                        `json:"conversationId"`
+				Role           string                        `json:"role"`
+				RequestID      string                        `json:"requestId"`
+				CreatedAt      string                        `json:"createdAt"`
+				Content        string                        `json:"content"`
+				Attachments    []conversationAttachmentInput `json:"attachments"`
 			} `json:"items"`
 			Total int `json:"total"`
 		}
@@ -210,11 +216,25 @@ func (r *kernelConversationReader) ReadConversation(ctx context.Context, convers
 			if utf8.RuneCountInString(content) > maxMessageContentLength {
 				content = truncateRunes(content, maxMessageContentLength)
 			}
-			entry, err := json.Marshal(map[string]any{"conversationId": msg.ConversationID, "role": msg.Role, "timestamp": msg.CreatedAt, "contentSummary": content})
+			attachments, err := materializeConversationAttachments(msg.Attachments)
 			if err != nil {
 				return nil, false, err
 			}
-			items = append(items, entry)
+			entry := map[string]any{"conversationId": msg.ConversationID, "role": msg.Role, "timestamp": msg.CreatedAt, "contentSummary": content}
+			if msg.ID != "" {
+				entry["id"] = msg.ID
+			}
+			if requestID := strings.TrimSpace(msg.RequestID); requestID != "" {
+				entry["requestId"] = requestID
+			}
+			if len(attachments) > 0 {
+				entry["attachments"] = attachments
+			}
+			encoded, err := json.Marshal(entry)
+			if err != nil {
+				return nil, false, err
+			}
+			items = append(items, encoded)
 			if len(items) == limit {
 				break
 			}
@@ -226,6 +246,108 @@ func (r *kernelConversationReader) ReadConversation(ctx context.Context, convers
 		skip = 0
 	}
 	return items, offset+len(items) < total, nil
+}
+
+func (r *kernelConversationReader) ReadConversationTurns(ctx context.Context, conversationID string, limit int) ([]json.RawMessage, error) {
+	host := kernel.GetHostAPIScope(ctx)
+	if conversationID == "" {
+		conversationID = host.ConversationID
+	}
+	if conversationID == "" {
+		return []json.RawMessage{}, nil
+	}
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	request, err := ownedHostChatRequest(ctx, r.engine, r.coreID, conversationID, host.CharacterID, uuid.NewString())
+	if err != nil {
+		return nil, err
+	}
+	result, err := r.engine.Query(ctx, request, coordination.DataQuery{
+		Management:     true,
+		RuntimeTurns:   true,
+		ConversationID: conversationID,
+		ResourceKind:   "checkpoint",
+		Limit:          limit,
+	})
+	if err != nil {
+		return nil, err
+	}
+	type turnRecord struct {
+		sequence int64
+		encoded  json.RawMessage
+	}
+	records := make([]turnRecord, 0, len(result.Snapshot.Resources))
+	for _, resource := range result.Snapshot.Resources {
+		if resource.Deleted {
+			continue
+		}
+		var saved struct {
+			ConversationID string                              `json:"conversationId"`
+			Status         string                              `json:"status"`
+			Runtime        *conversationstream.ActiveTurnState `json:"runtime"`
+		}
+		if err := json.Unmarshal(resource.Body, &saved); err != nil {
+			return nil, fmt.Errorf("decode conversation turn %s: %w", resource.ID, err)
+		}
+		if saved.Runtime == nil || saved.ConversationID != conversationID {
+			continue
+		}
+		blocks := make([]map[string]any, 0, len(saved.Runtime.Blocks))
+		for _, block := range saved.Runtime.Blocks {
+			entry := map[string]any{
+				"blockId":       block.BlockID,
+				"blockSequence": block.BlockSequence,
+				"type":          block.Type,
+				"status":        block.Status,
+			}
+			if block.CallID != "" {
+				entry["callId"] = block.CallID
+			}
+			if block.Revision > 0 {
+				entry["revision"] = block.Revision
+			}
+			if block.Content != "" {
+				entry["content"] = block.Content
+			}
+			if block.StartedAt != "" {
+				entry["startedAt"] = block.StartedAt
+			}
+			if len(block.Payload) > 0 {
+				entry["payload"] = block.Payload
+			}
+			blocks = append(blocks, entry)
+		}
+		turn := map[string]any{
+			"turnId":       saved.Runtime.TurnID,
+			"turnSequence": saved.Runtime.TurnSequence,
+			"status":       saved.Runtime.Status,
+			"blocks":       blocks,
+		}
+		if saved.Status != "" {
+			turn["checkpointStatus"] = saved.Status
+		}
+		if saved.Runtime.RequestID != "" {
+			turn["requestId"] = saved.Runtime.RequestID
+		}
+		if saved.Runtime.StartedAt != "" {
+			turn["startedAt"] = saved.Runtime.StartedAt
+		}
+		if saved.Runtime.LastModifiedAt != "" {
+			turn["lastModifiedAt"] = saved.Runtime.LastModifiedAt
+		}
+		encoded, err := json.Marshal(turn)
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, turnRecord{sequence: saved.Runtime.TurnSequence, encoded: encoded})
+	}
+	sort.SliceStable(records, func(i, j int) bool { return records[i].sequence < records[j].sequence })
+	turns := make([]json.RawMessage, 0, len(records))
+	for _, record := range records {
+		turns = append(turns, record.encoded)
+	}
+	return turns, nil
 }
 
 func (r *kernelConversationReader) SearchConversations(ctx context.Context, query string, limit int) ([]json.RawMessage, bool, error) {
@@ -389,8 +511,10 @@ func (a *conversationCreatorAdapter) ListConversations(ctx context.Context, limi
 		PinnedAt       string `json:"pinnedAt,omitempty"`
 		CreatedAt      string `json:"createdAt"`
 		MessageCount   int    `json:"messageCount"`
+		Order          int64  `json:"order"`
 		FormatStatus   string `json:"formatStatus"`
 		AgentAvailable bool   `json:"agentAvailable"`
+		ParentSession  string `json:"parentSession,omitempty"`
 	}
 	sessions := make([]catalogSession, 0, len(selected))
 	workspacesByID := map[string]*catalogWorkspace{}
@@ -436,9 +560,21 @@ func (a *conversationCreatorAdapter) ListConversations(ctx context.Context, limi
 		if value, ok := body["messageCount"].(float64); ok {
 			messageCount = int(value)
 		}
+		if messageCount == 0 {
+			counted, countErr := a.countConversationMessages(ctx, id, ownedChatDocumentString(body, "characterId"))
+			if countErr != nil {
+				return nil, countErr
+			}
+			messageCount = counted
+		}
 		running := body["isGenerating"] == true
 		archivedAt := ownedChatDocumentString(body, "archivedAt")
 		pinnedAt := ownedChatDocumentString(body, "pinnedAt")
+		orderValue, _ := body["order"].(float64)
+		parentSession := ""
+		if origin, ok := body["forkOrigin"].(map[string]any); ok {
+			parentSession = ownedChatDocumentString(origin, "conversationId")
+		}
 		if archivedAt != "" {
 			archived = append(archived, id)
 		}
@@ -461,8 +597,10 @@ func (a *conversationCreatorAdapter) ListConversations(ctx context.Context, limi
 			PinnedAt:       pinnedAt,
 			CreatedAt:      createdAt,
 			MessageCount:   messageCount,
+			Order:          int64(orderValue),
 			FormatStatus:   "current",
 			AgentAvailable: running,
+			ParentSession:  parentSession,
 		}
 		sessions = append(sessions, session)
 		if workspaceKey != "" {
@@ -505,13 +643,6 @@ func (a *conversationCreatorAdapter) ListConversations(ctx context.Context, limi
 	}, nil
 }
 
-func conversationCreateOperation(draft bool) string {
-	if draft {
-		return "conversation/prepare"
-	}
-	return "conversation/create"
-}
-
 func (a *conversationCreatorAdapter) CreateConversation(ctx context.Context, request kernel.ConversationCreateRequest) (json.RawMessage, error) {
 	if a == nil || a.engine == nil {
 		return nil, fmt.Errorf("chat service is not configured")
@@ -525,7 +656,7 @@ func (a *conversationCreatorAdapter) CreateConversation(ctx context.Context, req
 		return nil, err
 	}
 	result, err := a.engine.ManageChat(ctx, ownedRequest, coordination.ChatManagementRequest{
-		Operation:           conversationCreateOperation(request.Draft),
+		Operation:           "conversation/create",
 		ConversationOwnerID: ownedRequest.ExpectedScope.ResourceOwnerID,
 		ConversationID:      request.ConversationID,
 		RequestID:           request.RequestID,
@@ -617,6 +748,40 @@ func (a *conversationCreatorAdapter) ArchiveConversation(ctx context.Context, re
 		ConversationOwnerID: ownedRequest.ExpectedScope.ResourceOwnerID,
 		RequestID:           requestID,
 		Archived:            &archived,
+	})
+	if err != nil {
+		return nil, err
+	}
+	raw, err := json.Marshal(result)
+	if err != nil {
+		return nil, err
+	}
+	return raw, nil
+}
+
+func (a *conversationCreatorAdapter) ReorderConversation(ctx context.Context, request kernel.ConversationReorderRequest) (json.RawMessage, error) {
+	if a == nil || a.engine == nil {
+		return nil, fmt.Errorf("chat service is not configured")
+	}
+	host := kernel.GetHostAPIScope(ctx)
+	if request.ConversationID == "" || request.ConversationID != host.ConversationID {
+		return nil, coordination.ErrWrongOwner
+	}
+	requestID := strings.TrimSpace(request.RequestID)
+	if requestID == "" {
+		requestID = uuid.NewString()
+	}
+	ownedRequest, err := ownedHostChatRequest(ctx, a.engine, a.coreID, request.ConversationID, host.CharacterID, requestID)
+	if err != nil {
+		return nil, err
+	}
+	result, err := a.engine.ManageChat(ctx, ownedRequest, coordination.ChatManagementRequest{
+		Operation:            "conversation/reorder",
+		ConversationID:       request.ConversationID,
+		BeforeConversationID: request.BeforeConversationID,
+		ProjectID:            request.ProjectID,
+		ConversationOwnerID:  ownedRequest.ExpectedScope.ResourceOwnerID,
+		RequestID:            requestID,
 	})
 	if err != nil {
 		return nil, err
@@ -762,6 +927,35 @@ func (a *conversationTurnControllerAdapter) InterruptConversationTurn(ctx contex
 	return result, nil
 }
 
+func (a *conversationTurnControllerAdapter) SteerConversationTurn(ctx context.Context, request kernel.ConversationTurnSteerRequest) (kernel.ConversationTurnSteerResult, error) {
+	view, err := a.resolveConversationTurnView(ctx, kernel.ConversationTurnInterruptRequest{
+		ConversationID: request.ConversationID,
+		TurnID:         request.TurnID,
+	})
+	if err != nil {
+		return kernel.ConversationTurnSteerResult{}, err
+	}
+	runtimeKey := business.RuntimeKey(view.Scope, view.ConversationID)
+	manager := business.RuntimeManager()
+	if manager == nil {
+		return kernel.ConversationTurnSteerResult{}, fmt.Errorf("conversation runtime manager is not configured")
+	}
+	turnID := strings.TrimSpace(request.TurnID)
+	if turnID == "" {
+		snapshot := manager.RuntimeSnapshot(runtimeKey)
+		if snapshot.ActiveTurn != nil {
+			turnID = snapshot.ActiveTurn.TurnID
+		}
+	}
+	if turnID == "" {
+		return kernel.ConversationTurnSteerResult{}, fmt.Errorf("当前会话没有可转向的轮次")
+	}
+	if !manager.Steer(runtimeKey, turnID, request.Input) {
+		return kernel.ConversationTurnSteerResult{}, fmt.Errorf("会话轮次 %s 已结束或不可转向", turnID)
+	}
+	return kernel.ConversationTurnSteerResult{Accepted: true, TurnID: turnID}, nil
+}
+
 func (a *conversationTurnControllerAdapter) AwaitConversationTurnIdle(ctx context.Context, request kernel.ConversationTurnInterruptRequest) (kernel.ConversationTurnAwaitResult, error) {
 	view, err := a.resolveConversationTurnView(ctx, request)
 	if err != nil {
@@ -880,8 +1074,9 @@ func (a *projectAdapter) ListProjects(ctx context.Context, limit int, cursor str
 		return nil, err
 	}
 	projects := make([]map[string]any, 0, len(result.Snapshot.Resources))
+	orders := map[string]int64{}
 	for _, row := range result.Snapshot.Resources {
-		if row.Kind != "project" {
+		if row.Kind != "project" || row.Deleted {
 			continue
 		}
 		var project business.Project
@@ -891,9 +1086,82 @@ func (a *projectAdapter) ListProjects(ctx context.Context, limit int, cursor str
 		if project.ID != row.ID {
 			return nil, fmt.Errorf("项目数据格式无效: project id %q does not match resource id %q", project.ID, row.ID)
 		}
-		projects = append(projects, map[string]any{"id": project.ID, "title": project.Title, "workspaces": project.Workspaces, "primaryWorkspaceId": project.PrimaryWorkspaceID, "hiddenAt": project.HiddenAt, "createdAt": project.CreatedAt, "updatedAt": project.UpdatedAt, "pinnedAt": project.PinnedAt, "revision": row.Revision, "ownerId": row.OwnerID, "roleId": row.RoleID})
+		if project.HiddenAt != nil && strings.TrimSpace(*project.HiddenAt) != "" {
+			continue
+		}
+		projects = append(projects, map[string]any{"id": project.ID, "title": project.Title, "workspaces": project.Workspaces, "primaryWorkspaceId": project.PrimaryWorkspaceID, "hiddenAt": project.HiddenAt, "createdAt": project.CreatedAt, "updatedAt": project.UpdatedAt, "pinnedAt": project.PinnedAt, "order": project.Order, "revision": row.Revision, "ownerId": row.OwnerID, "roleId": row.RoleID})
+		orders[project.ID] = business.ProjectSortOrder(project.Order, project.CreatedAt)
 	}
+	sort.SliceStable(projects, func(i, j int) bool {
+		left, right := projects[i], projects[j]
+		leftID, _ := left["id"].(string)
+		rightID, _ := right["id"].(string)
+		if orders[leftID] != orders[rightID] {
+			return orders[leftID] < orders[rightID]
+		}
+		leftCreated, _ := left["createdAt"].(string)
+		rightCreated, _ := right["createdAt"].(string)
+		if leftCreated != rightCreated {
+			return leftCreated < rightCreated
+		}
+		return leftID < rightID
+	})
 	return map[string]any{"projects": projects, "executionScope": result.Scope, "nextCursor": result.Snapshot.NextCursors["project"]}, nil
+}
+
+func (a *projectAdapter) ReorderProject(ctx context.Context, request kernel.ProjectReorderRequest) (json.RawMessage, error) {
+	listing, err := a.ListProjects(ctx, 512, "")
+	if err != nil {
+		return nil, err
+	}
+	payload, ok := listing.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("项目列表格式无效")
+	}
+	rawProjects, _ := payload["projects"].([]map[string]any)
+	entries := make([]orderPlanEntry, 0, len(rawProjects))
+	for _, item := range rawProjects {
+		id, _ := item["id"].(string)
+		order, _ := item["order"].(int64)
+		createdAt, _ := item["createdAt"].(string)
+		entries = append(entries, orderPlanEntry{ID: id, Order: business.ProjectSortOrder(order, createdAt)})
+	}
+	plan, err := planSparseOrder(entries, request.ProjectID, request.BeforeProjectID, orderPlanStep)
+	if err != nil {
+		return nil, err
+	}
+	requestID := strings.TrimSpace(request.RequestID)
+	if requestID == "" {
+		requestID = uuid.NewString()
+	}
+	for index, change := range plan {
+		order := change.Order
+		if _, err := a.UpdateProject(ctx, kernel.ProjectUpdateRequest{ProjectID: change.ID, Order: &order, RequestID: fmt.Sprintf("%s#%d", requestID, index)}); err != nil {
+			return nil, err
+		}
+	}
+	orders := make(map[string]int64, len(entries))
+	for _, entry := range entries {
+		orders[entry.ID] = entry.Order
+	}
+	for _, change := range plan {
+		orders[change.ID] = change.Order
+	}
+	ordered := append([]orderPlanEntry(nil), entries...)
+	for index := range ordered {
+		ordered[index].Order = orders[ordered[index].ID]
+	}
+	sort.SliceStable(ordered, func(i, j int) bool {
+		if ordered[i].Order != ordered[j].Order {
+			return ordered[i].Order < ordered[j].Order
+		}
+		return ordered[i].ID < ordered[j].ID
+	})
+	ids := make([]string, 0, len(ordered))
+	for _, entry := range ordered {
+		ids = append(ids, entry.ID)
+	}
+	return json.Marshal(map[string]any{"projectIds": ids})
 }
 
 func (a *projectAdapter) CreateProject(ctx context.Context, request kernel.ProjectCreateRequest) (json.RawMessage, error) {
@@ -958,17 +1226,50 @@ func (a *projectAdapter) editProject(ctx context.Context, projectID, requestID s
 	return raw, nil
 }
 
+func (a *kernelConversationReader) UpdateConversation(ctx context.Context, request kernel.ConversationUpdateRequest) (json.RawMessage, error) {
+	if strings.TrimSpace(request.Title) == "" {
+		return nil, fmt.Errorf("会话标题不能为空")
+	}
+	ownedRequest, err := ownedHostScopeRequest(ctx, a.engine, a.coreID, "", request.RequestID)
+	if err != nil {
+		return nil, err
+	}
+	resource, scope, err := a.engine.ReadResource(ctx, ownedRequest, "conversation", request.ConversationID)
+	if err != nil {
+		return nil, err
+	}
+	if resource == nil || resource.Deleted {
+		return nil, coordination.ErrResourceVersion
+	}
+	encodedTitle, err := json.Marshal(request.Title)
+	if err != nil {
+		return nil, err
+	}
+	acknowledgement, err := a.engine.Edit(ctx, ownedRequest, business.EditRequest{
+		ExpectedScope:    &scope,
+		RoleID:           ownedRequest.RoleID,
+		RequestID:        ownedRequest.RequestID,
+		Kind:             "conversation",
+		ID:               request.ConversationID,
+		ExpectedRevision: resource.Revision,
+		Changes:          map[string]json.RawMessage{"title": encodedTitle},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(map[string]any{
+		"conversationId":  request.ConversationID,
+		"title":           request.Title,
+		"revision":        resource.Revision + 1,
+		"acknowledgement": acknowledgement,
+		"executionScope":  scope,
+	})
+}
+
 func (a *projectAdapter) UpdateProject(ctx context.Context, request kernel.ProjectUpdateRequest) (json.RawMessage, error) {
-	changes := map[string]json.RawMessage{}
-	for key, value := range map[string]any{"title": request.Title, "pinned": request.Pinned, "hidden": request.Hidden, "primaryWorkspaceId": request.PrimaryWorkspaceID} {
-		if value == nil {
-			continue
-		}
-		encoded, err := json.Marshal(value)
-		if err != nil {
-			return nil, err
-		}
-		changes[key] = encoded
+	changes, err := projectUpdateChanges(request)
+	if err != nil {
+		return nil, err
 	}
 	if request.Workspaces != nil {
 		encoded, err := json.Marshal(projectWorkspacesInput(request.Workspaces))
@@ -981,6 +1282,37 @@ func (a *projectAdapter) UpdateProject(ctx context.Context, request kernel.Proje
 		return nil, fmt.Errorf("没有需要修改的内容")
 	}
 	return a.editProject(ctx, request.ProjectID, request.RequestID, changes)
+}
+
+func projectUpdateChanges(request kernel.ProjectUpdateRequest) (map[string]json.RawMessage, error) {
+	changes := map[string]json.RawMessage{}
+	setChange := func(key string, value any) error {
+		encoded, err := json.Marshal(value)
+		if err != nil {
+			return err
+		}
+		changes[key] = encoded
+		return nil
+	}
+	for _, field := range []struct {
+		key   string
+		value any
+		apply bool
+	}{
+		{"title", derefString(request.Title), request.Title != nil},
+		{"pinned", derefBool(request.Pinned), request.Pinned != nil},
+		{"hidden", derefBool(request.Hidden), request.Hidden != nil},
+		{"primaryWorkspaceId", derefString(request.PrimaryWorkspaceID), request.PrimaryWorkspaceID != nil},
+		{"order", derefInt64(request.Order), request.Order != nil},
+	} {
+		if !field.apply {
+			continue
+		}
+		if err := setChange(field.key, field.value); err != nil {
+			return nil, err
+		}
+	}
+	return changes, nil
 }
 
 func (a *projectAdapter) DeleteProject(ctx context.Context, request kernel.ProjectDeleteRequest) (json.RawMessage, error) {
@@ -1413,4 +1745,137 @@ func (a *kernelDirectoryAdapter) CreateDirectory(ctx context.Context, request ke
 		return "", err
 	}
 	return target, nil
+}
+
+func derefString(value *string) any {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+func derefBool(value *bool) any {
+	if value == nil {
+		return false
+	}
+	return *value
+}
+
+func derefInt64(value *int64) any {
+	if value == nil {
+		return int64(0)
+	}
+	return *value
+}
+
+type conversationAttachmentInput struct {
+	Kind string `json:"kind"`
+	Name string `json:"name"`
+	MIME string `json:"mimeType"`
+	Data string `json:"data"`
+	Hash string `json:"sha256"`
+}
+
+func materializeConversationAttachments(inputs []conversationAttachmentInput) ([]map[string]any, error) {
+	if len(inputs) == 0 {
+		return nil, nil
+	}
+	root := filepath.Join(os.TempDir(), "amitia-dsh-attachments")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		return nil, fmt.Errorf("创建附件缓存目录失败: %w", err)
+	}
+	result := make([]map[string]any, 0, len(inputs))
+	for _, input := range inputs {
+		payload, err := base64.StdEncoding.DecodeString(input.Data)
+		if err != nil {
+			return nil, fmt.Errorf("附件 %q 解码失败: %w", input.Name, err)
+		}
+		if len(payload) == 0 {
+			return nil, fmt.Errorf("附件 %q 内容为空", input.Name)
+		}
+		digest := sha256.Sum256(payload)
+		hash := hex.EncodeToString(digest[:])
+		if input.Hash != "" && input.Hash != hash {
+			return nil, fmt.Errorf("附件 %q 完整性校验失败: 期望 %s 实际 %s", input.Name, input.Hash, hash)
+		}
+		fileName := sanitizeAttachmentFileName(input.Name, hash)
+		absolutePath := filepath.Join(root, hash[:16]+"-"+fileName)
+		if _, statErr := os.Stat(absolutePath); statErr != nil {
+			if !os.IsNotExist(statErr) {
+				return nil, fmt.Errorf("读取附件缓存失败: %w", statErr)
+			}
+			tempFile, createErr := os.CreateTemp(root, "attach-*.tmp")
+			if createErr != nil {
+				return nil, fmt.Errorf("创建附件副本失败: %w", createErr)
+			}
+			tempPath := tempFile.Name()
+			if _, writeErr := tempFile.Write(payload); writeErr != nil {
+				tempFile.Close()
+				os.Remove(tempPath)
+				return nil, fmt.Errorf("写入附件副本失败: %w", writeErr)
+			}
+			if closeErr := tempFile.Close(); closeErr != nil {
+				os.Remove(tempPath)
+				return nil, fmt.Errorf("关闭附件副本失败: %w", closeErr)
+			}
+			if chmodErr := os.Chmod(tempPath, 0o444); chmodErr != nil {
+				os.Remove(tempPath)
+				return nil, fmt.Errorf("设置附件副本只读失败: %w", chmodErr)
+			}
+			if renameErr := os.Rename(tempPath, absolutePath); renameErr != nil {
+				os.Remove(tempPath)
+				return nil, fmt.Errorf("发布附件副本失败: %w", renameErr)
+			}
+		}
+		result = append(result, map[string]any{
+			"id":           hash,
+			"kind":         input.Kind,
+			"filename":     input.Name,
+			"mimeType":     input.MIME,
+			"sizeBytes":    int64(len(payload)),
+			"sha256":       hash,
+			"absolutePath": absolutePath,
+		})
+	}
+	return result, nil
+}
+
+func sanitizeAttachmentFileName(name, fallback string) string {
+	trimmed := strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(name, "/", "_"), "\\", "_"))
+	trimmed = strings.TrimLeft(trimmed, ".")
+	if trimmed == "" {
+		return fallback[:16]
+	}
+	if len(trimmed) > 120 {
+		trimmed = trimmed[len(trimmed)-120:]
+	}
+	return trimmed
+}
+
+func (a *conversationCreatorAdapter) countConversationMessages(ctx context.Context, conversationID string, role string) (int, error) {
+	request, err := ownedHostChatRequest(ctx, a.engine, a.coreID, conversationID, role, uuid.NewString())
+	if err != nil {
+		return 0, err
+	}
+	result, err := a.engine.ManageChat(ctx, request, coordination.ChatManagementRequest{
+		Operation:           "search",
+		ConversationOwnerID: request.ExpectedScope.ResourceOwnerID,
+		ConversationID:      conversationID,
+		Page:                1,
+		PageSize:            1,
+	})
+	if err != nil {
+		return 0, err
+	}
+	raw, err := json.Marshal(result)
+	if err != nil {
+		return 0, err
+	}
+	var batch struct {
+		Total int `json:"total"`
+	}
+	if err := json.Unmarshal(raw, &batch); err != nil {
+		return 0, err
+	}
+	return batch.Total, nil
 }

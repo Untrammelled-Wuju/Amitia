@@ -83,7 +83,7 @@ test("keeps production aliases inside the official target catalog", () => {
 });
 
 test("routes every host service gap to an explicit provider decision", () => {
-  assert.equal(gaps.host.length, 48);
+  assert.equal(gaps.host.length, 40);
   const counts = { delegated: 0, pending: 0, unavailable: 0 };
   const abiServices = new Map(abi.host.services.map((entry) => [entry.id, entry]));
   for (const gap of gaps.host) {
@@ -101,7 +101,7 @@ test("routes every host service gap to an explicit provider decision", () => {
     assert.equal(service.provider, gap.provider);
     counts[gap.status] += 1;
   }
-  assert.deepEqual(counts, { delegated: 27, pending: 8, unavailable: 13 });
+  assert.deepEqual(counts, { delegated: 27, pending: 0, unavailable: 13 });
   assert.equal(DSH_CATALOG_SUMMARY.hostServiceDelegatedCount, counts.delegated);
   assert.equal(DSH_CATALOG_SUMMARY.hostServiceProviderPendingCount, counts.pending);
   assert.equal(DSH_CATALOG_SUMMARY.hostServiceUnavailableCount, counts.unavailable);

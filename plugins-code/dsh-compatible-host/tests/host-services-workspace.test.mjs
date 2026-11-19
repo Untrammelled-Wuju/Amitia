@@ -113,19 +113,15 @@ test("workspaceFiles 缺少 sessionId 时明确失败且不调用宿主", async 
   assert.equal(host.calls.length, 0);
 });
 
-test("workspaceFiles.changes 明确失败并指明缺少变更订阅接口", () => {
+test("workspaceFiles.changes 在缺失 path 与 sessionId 时原样报错", async () => {
   const host = createHost();
   const services = createAmitiaDshHostServices(host);
-  assert.throws(() => services.workspaceFiles.changes(), (error) => {
-    assert.equal(error.code, "DSH_HOST_OPERATION_UNAVAILABLE");
-    assert.match(error.message, /DSH workspaceFiles\.changes 不可用/);
-    assert.match(error.message, /期望能力 工作区目录与文件变更帧/);
-    assert.match(error.message, /宿主缺少接口 host\.workspace\.watch/);
-    assert.equal(error.details.operation, "workspaceFiles.changes");
-    assert.equal(error.missingHostInterface.startsWith("host.workspace.watch"), true);
-    return true;
-  });
-  assert.equal(host.calls.length, 0);
+  await assert.rejects(async () => {
+    for await (const frame of services.workspaceFiles.changes()) void frame;
+  }, /需要 sessionId/);
+  await assert.rejects(async () => {
+    for await (const frame of services.workspaceFiles.changes({ sessionId: "session-1" })) void frame;
+  }, /需要 path/);
 });
 
 test("fileReferences 复用会话工作区读取并保持宿主返回体", async () => {

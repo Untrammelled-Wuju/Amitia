@@ -33,6 +33,11 @@ type DialogResolver interface {
 	ResolveDialogWithHost(dialogID string, hostClientID string, hostSessionID string, result string) bool
 }
 
+type DirectoryPickResolver interface {
+	ResolveDirectoryPick(requestID string, hostClientID string, hostSessionID string, path string) bool
+	FailDirectoryPick(requestID string, hostClientID string, hostSessionID string, err error) bool
+}
+
 type ClientRuntimeCommandResolver interface {
 	ResolveClientRuntimeCommand(commandID string, result map[string]interface{}, commandErr string) bool
 }
@@ -64,6 +69,7 @@ type HTTPHandler struct {
 	authorizer            *permission.UISessionAuthorizer
 	schemaLookup          func(extensionID, contributionID string) (json.RawMessage, bool)
 	dialogResolver        DialogResolver
+	directoryPickResolver DirectoryPickResolver
 	clientRuntimeResolver ClientRuntimeCommandResolver
 	clipboardResolver     ClipboardResolver
 	hostRegistry          *host_registry.Registry
@@ -118,6 +124,10 @@ func (h *HTTPHandler) SetDialogResolver(r DialogResolver) {
 	h.dialogResolver = r
 }
 
+func (h *HTTPHandler) SetDirectoryPickResolver(r DirectoryPickResolver) {
+	h.directoryPickResolver = r
+}
+
 func (h *HTTPHandler) SetClientRuntimeCommandResolver(r ClientRuntimeCommandResolver) {
 	h.clientRuntimeResolver = r
 }
@@ -158,6 +168,7 @@ func (h *HTTPHandler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/extension/action/", h.handleAction)
 	mux.HandleFunc("/api/extension/composer/action/", h.handleComposerAction)
 	mux.HandleFunc("/api/extensions/ui/dialog-response", h.handleDialogResponse)
+	mux.HandleFunc("/api/extensions/ui/directory-pick-response", h.handleDirectoryPickResponse)
 	mux.HandleFunc("/api/extensions/ui/client-runtime-response", h.handleClientRuntimeResponse)
 	mux.HandleFunc("/api/extensions/ui/client-runtime-state", h.handleClientRuntimeState)
 	mux.HandleFunc("/api/extensions/ui/client-runtime-session-ack", h.handleClientRuntimeSessionAck)
@@ -1593,14 +1604,15 @@ func validHostClientID(value string) bool {
 
 func normalizeUIHostFeatures(raw []string) []host_registry.EndpointFeature {
 	allowed := map[host_registry.EndpointFeature]struct{}{
-		host_registry.EndpointFeatureUINotify:       {},
-		host_registry.EndpointFeatureUIDialog:       {},
-		host_registry.EndpointFeatureUINavigate:     {},
-		host_registry.EndpointFeatureUIStyle:        {},
-		host_registry.EndpointFeatureClipboardRead:  {},
-		host_registry.EndpointFeatureClipboardWrite: {},
-		host_registry.EndpointFeatureDesktopMenu:    {},
-		host_registry.EndpointFeatureDesktopTray:    {},
+		host_registry.EndpointFeatureUINotify:        {},
+		host_registry.EndpointFeatureUIDialog:        {},
+		host_registry.EndpointFeatureUIDirectoryPick: {},
+		host_registry.EndpointFeatureUINavigate:      {},
+		host_registry.EndpointFeatureUIStyle:         {},
+		host_registry.EndpointFeatureClipboardRead:   {},
+		host_registry.EndpointFeatureClipboardWrite:  {},
+		host_registry.EndpointFeatureDesktopMenu:     {},
+		host_registry.EndpointFeatureDesktopTray:     {},
 	}
 	seen := map[host_registry.EndpointFeature]struct{}{}
 	result := make([]host_registry.EndpointFeature, 0, len(raw))
@@ -1649,6 +1661,45 @@ func (h *HTTPHandler) handleDialogResponse(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "dialogId": req.DialogID})
+}
+
+func (h *HTTPHandler) handleDirectoryPickResponse(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	if h.directoryPickResolver == nil {
+		writeError(w, http.StatusServiceUnavailable, "directory_pick_resolver_unavailable", "directory pick resolver not configured")
+		return
+	}
+	var req struct {
+		RequestID     string `json:"requestId"`
+		Path          string `json:"path"`
+		Error         string `json:"error"`
+		HostClientID  string `json:"hostClientId"`
+		HostSessionID string `json:"hostSessionId"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "payload_invalid", err.Error())
+		return
+	}
+	if req.RequestID == "" {
+		writeError(w, http.StatusBadRequest, "missing_param", "requestId is required")
+		return
+	}
+	if req.Error != "" {
+		if !h.directoryPickResolver.FailDirectoryPick(req.RequestID, req.HostClientID, req.HostSessionID, errors.New(req.Error)) {
+			writeError(w, http.StatusNotFound, "directory_pick_not_found", "no pending directory pick with id: "+req.RequestID)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "requestId": req.RequestID, "cancelled": true})
+		return
+	}
+	if !h.directoryPickResolver.ResolveDirectoryPick(req.RequestID, req.HostClientID, req.HostSessionID, req.Path) {
+		writeError(w, http.StatusNotFound, "directory_pick_not_found", "no pending directory pick with id: "+req.RequestID)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "requestId": req.RequestID})
 }
 
 func (h *HTTPHandler) handleClientRuntimeResponse(w http.ResponseWriter, r *http.Request) {

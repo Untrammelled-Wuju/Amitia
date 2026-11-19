@@ -26,7 +26,7 @@ function assertSeamFailure(run, { method, capability, missing }) {
   }, method);
 }
 
-test("directoryPicker 的浏览与建目录走宿主目录接口，选择保持缺口", async () => {
+test("directoryPicker 的浏览、建目录与交互式选择都走宿主目录接口", async () => {
   const host = createHost();
   const services = createAmitiaDshHostServices(host);
   const listing = await services.directoryPicker.list("/tmp");
@@ -35,44 +35,82 @@ test("directoryPicker 的浏览与建目录走宿主目录接口，选择保持�
   const created = await services.directoryPicker.createDirectory("/tmp", "proj");
   assert.equal(created.method, "host.directory.create");
   assert.deepEqual(created.input, { path: "/tmp", name: "proj" });
-  assertSeamFailure(() => services.directoryPicker.pick(), {
-    method: "directoryPicker.pick",
-    capability: "交互式选择宿主目录",
-    missing: "host.directory.pick",
-  });
-  assert.equal(host.calls.length, 2);
+  const picked = await services.directoryPicker.pick();
+  assert.equal(picked, null);
+  assert.equal(host.calls.length, 3);
+  assert.equal(host.calls[2].method, "host.directory.pick");
+  assert.deepEqual(host.calls[2].input, {});
 });
 
-test("directoryPickerController 任意方法都明确失败并带上实际方法名", () => {
-  const host = createHost();
-  const services = createAmitiaDshHostServices(host);
-  assertSeamFailure(() => services.directoryPickerController.select(), {
-    method: "directoryPickerController.select",
-    capability: "directoryPickerController",
-    missing: "host.directory.pick",
+test("directoryPicker.pick 返回宿主路径，取消返回 null，宿主错误原样抛出", async () => {
+  const selected = createAmitiaDshHostServices({
+    async call(method) {
+      assert.equal(method, "host.directory.pick");
+      return { path: "/Users/untrammelled/Desktop/Project/U-AI" };
+    },
   });
-  assertSeamFailure(() => services.directoryPickerController.confirm("id"), {
-    method: "directoryPickerController.confirm",
-    capability: "directoryPickerController",
-    missing: "host.directory.pick",
+  assert.equal(await selected.directoryPicker.pick(), "/Users/untrammelled/Desktop/Project/U-AI");
+  const cancelled = createAmitiaDshHostServices({
+    async call() {
+      return { path: "" };
+    },
   });
-  assert.equal(host.calls.length, 0);
+  assert.equal(await cancelled.directoryPicker.pick(), null);
+  const original = new Error("ui_host: directory pick host unavailable");
+  const failing = createAmitiaDshHostServices({
+    async call() {
+      throw original;
+    },
+  });
+  await assert.rejects(failing.directoryPicker.pick(), (error) => {
+    assert.equal(error, original);
+    return true;
+  });
 });
 
-test("workspaceController 任意方法都明确失败并指明缺少控制器语义", () => {
-  const host = createHost();
+test("directoryPickerController 以 native 能力暴露 pick 并委派目录浏览与创建", async () => {
+  const calls = [];
+  const host = {
+    async call(method, input = {}) {
+      calls.push({ method, input });
+      if (method === "host.directory.pick") return { path: "/tmp/picked" };
+      if (method === "host.directory.list") return { path: input.path ?? "", entries: [], ancestry: [] };
+      if (method === "host.directory.create") return { path: `${input.path}/${input.name}` };
+      return { method, input };
+    },
+  };
   const services = createAmitiaDshHostServices(host);
-  assertSeamFailure(() => services.workspaceController.open(), {
-    method: "workspaceController.open",
-    capability: "workspaceController",
-    missing: "storageDomain / sessionPersistence",
-  });
-  assertSeamFailure(() => services.workspaceController.switchTo("workspace-1"), {
-    method: "workspaceController.switchTo",
-    capability: "workspaceController",
-    missing: "storageDomain / sessionPersistence",
-  });
-  assert.equal(host.calls.length, 0);
+  const capability = services.directoryPickerController.capability();
+  assert.equal(capability.kind, "native");
+  assert.equal(await capability.pick(), "/tmp/picked");
+  assert.equal(await services.directoryPickerController.pick(), "/tmp/picked");
+  const listing = await services.directoryPickerController.list("/tmp");
+  assert.equal(listing.path, "/tmp");
+  const created = await services.directoryPickerController.createDirectory("/tmp", "child");
+  assert.equal(created.path, "/tmp/child");
+  assert.equal(services.directoryPickerController.select, undefined);
+  assert.deepEqual(calls.map((entry) => entry.method), ["host.directory.pick", "host.directory.pick", "host.directory.list", "host.directory.create"]);
+});
+
+test("workspaceController 增删改查走 host.project.*，顺序方法走 host.project.reorder 与会话重排", async () => {
+  const calls = [];
+  const projects = [{ id: "project-1", title: "U-AI", primaryWorkspaceId: "ws-1", workspaces: [{ id: "ws-1", rootUri: "file:///tmp/plan" }], createdAt: "2026-11-01T00:00:00Z", updatedAt: "2026-11-01T00:00:00Z" }];
+  const host = {
+    calls,
+    async call(method, input = {}) {
+      calls.push({ method, input });
+      if (method === "host.project.list") return { projects };
+      if (method === "host.conversation.list") return { items: [], hasMore: false };
+      return {};
+    },
+  };
+  const services = createAmitiaDshHostServices(host);
+  const listed = await services.workspaceController.list();
+  assert.equal(listed[0].path, "/tmp/plan");
+  assert.ok(calls.some((call) => call.method === "host.project.list"));
+  const reordered = await services.workspaceController.insertBefore({ workspaceId: "project-1" });
+  assert.deepEqual(reordered.workspaceIds, ["project-1"]);
+  assert.ok(calls.some((call) => call.method === "host.project.reorder" && call.input.projectId === "project-1" && call.input.beforeProjectId === ""));
 });
 
 test("sessionSkillCatalog 从 host.skill.list 拉取技能目录", async () => {

@@ -1,4 +1,4 @@
-import { instantiateClient, rawError, setDshActiveSession } from "./index.mjs";
+import { applyWebIndexInjections, instantiateClient, rawError, setDshActiveSession } from "./index.mjs";
 
 async function resolveStatusPayload(response) {
   if (response && typeof response === "object" && Array.isArray(response.packages)) return response;
@@ -96,6 +96,12 @@ export default {
       const packages = Array.isArray(status?.packages) ? status.packages : [];
       const active = [];
       const failures = [];
+      try {
+        await applyWebIndexInjections();
+      } catch (error) {
+        failures.push(`web-index-injection: ${rawError(error)}`);
+        console.error(`[dsh-shell] 宿主索引注入失败\n[original-error] ${rawError(error)}`);
+      }
       for (const plugin of packages) {
         if (!plugin.enabled) continue;
         try {

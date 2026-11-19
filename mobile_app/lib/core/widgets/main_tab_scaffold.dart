@@ -141,7 +141,7 @@ class _MainTabScaffoldState extends ConsumerState<MainTabScaffold> {
       ),
     ];
     const providerTabs = <(int, String, String, AmitiaIconGlyph)>[
-      (1, AppRoutes.tasks, '任务', AmitiaIconGlyph.tasks),
+      (1, AppRoutes.tasks, '任务', AmitiaIconGlyph.reminder),
       (2, AppRoutes.memoryHub, '记忆', AmitiaIconGlyph.memory),
       (3, AppRoutes.extensions, '扩展', AmitiaIconGlyph.extensions),
       (4, AppRoutes.me, '我的', AmitiaIconGlyph.profile),
@@ -152,6 +152,7 @@ class _MainTabScaffoldState extends ConsumerState<MainTabScaffold> {
         (candidate) => candidate?.matches(route) == true,
         orElse: () => null,
       );
+      final icon = route == AppRoutes.me ? item?.icon : null;
       destinations.add(
         _MainTabDestination(
           branchIndex: branchIndex,
@@ -160,8 +161,8 @@ class _MainTabScaffoldState extends ConsumerState<MainTabScaffold> {
               : item.tabLabel.isEmpty
               ? item.label
               : item.tabLabel,
-          glyph: item == null ? fallbackGlyph : null,
-          icon: item?.icon,
+          glyph: icon == null ? fallbackGlyph : null,
+          icon: icon,
         ),
       );
     }

@@ -20,10 +20,18 @@ import (
 
 const (
 	dialogResponseTimeout       = 25 * time.Second
+	directoryPickTimeout        = 5 * time.Minute
 	clientRuntimeCommandTimeout = 20 * time.Second
 )
 
 type pendingDialog struct {
+	resultCh      chan string
+	errCh         chan error
+	hostClientID  string
+	hostSessionID string
+}
+
+type pendingDirectoryPick struct {
 	resultCh      chan string
 	errCh         chan error
 	hostClientID  string
@@ -71,6 +79,7 @@ type SSEUIHostNotifier struct {
 	hostRegistry                 *host_registry.Registry
 	mu                           sync.Mutex
 	pendingDialogs               map[string]*pendingDialog
+	pendingDirectoryPicks        map[string]*pendingDirectoryPick
 	pendingClientRuntimeCommands map[string]*pendingClientRuntimeCommand
 	clientRuntimeSessions        map[string]*clientRuntimeSessionState
 	clientRuntimeDB              *sql.DB
@@ -81,6 +90,7 @@ func NewSSEUIHostNotifier(hub *sse.Hub, registry *host_registry.Registry) *SSEUI
 		hub:                          hub,
 		hostRegistry:                 registry,
 		pendingDialogs:               make(map[string]*pendingDialog),
+		pendingDirectoryPicks:        make(map[string]*pendingDirectoryPick),
 		pendingClientRuntimeCommands: make(map[string]*pendingClientRuntimeCommand),
 		clientRuntimeSessions:        make(map[string]*clientRuntimeSessionState),
 	}
@@ -192,6 +202,102 @@ func (n *SSEUIHostNotifier) Navigate(ctx context.Context, extensionID string, ta
 	envelopeMap["hostSessionId"] = host.HostSessionID
 	n.hub.SendToClient(host.HostClientID, "ui_navigate", envelopeMap)
 	return nil
+}
+
+func (n *SSEUIHostNotifier) PickDirectory(ctx context.Context, extensionID string, requestID string, title string, startPath string) (string, error) {
+	if requestID == "" {
+		requestID = fmt.Sprintf("directory-pick-%s", uuid.NewString())
+	}
+	pp := &pendingDirectoryPick{
+		resultCh: make(chan string, 1),
+		errCh:    make(chan error, 1),
+	}
+	if n.hostRegistry == nil {
+		return "", ErrDirectoryPickHostUnavailable
+	}
+	target, err := n.hostRegistry.FindTargetHostString(ctx, uiHostSpaceID(ctx), host_registry.EndpointFeatureUIDirectoryPick, "", "")
+	if err != nil {
+		return "", err
+	}
+	if target == nil || n.hub == nil || !n.hub.ClientExists(target.HostClientID) {
+		return "", ErrDirectoryPickHostUnavailable
+	}
+	pp.hostClientID = target.HostClientID
+	pp.hostSessionID = target.HostSessionID
+
+	n.mu.Lock()
+	n.pendingDirectoryPicks[requestID] = pp
+	n.mu.Unlock()
+
+	payload := map[string]interface{}{
+		"requestId": requestID,
+		"title":     title,
+		"startPath": startPath,
+	}
+	envelope := NewSSEEventEnvelope("ui_directory_pick", extensionID, payload, dialogEventTTL)
+	envelopeMap := envelope.ToMap()
+	envelopeMap["hostClientId"] = target.HostClientID
+	envelopeMap["hostSessionId"] = target.HostSessionID
+	n.hub.SendToClient(target.HostClientID, "ui_directory_pick", envelopeMap)
+
+	defer func() {
+		n.mu.Lock()
+		delete(n.pendingDirectoryPicks, requestID)
+		n.mu.Unlock()
+	}()
+
+	select {
+	case path := <-pp.resultCh:
+		return path, nil
+	case err := <-pp.errCh:
+		return "", err
+	case <-timeoutpolicy.After(directoryPickTimeout):
+		return "", fmt.Errorf("directory pick %s timed out waiting for host response", requestID)
+	case <-ctx.Done():
+		return "", ctx.Err()
+	}
+}
+
+func (n *SSEUIHostNotifier) ResolveDirectoryPick(requestID string, hostClientID string, hostSessionID string, path string) bool {
+	n.mu.Lock()
+	pp, ok := n.pendingDirectoryPicks[requestID]
+	n.mu.Unlock()
+	if !ok {
+		return false
+	}
+	if pp.hostSessionID != "" && pp.hostSessionID != hostSessionID {
+		return false
+	}
+	if pp.hostClientID != "" && pp.hostClientID != hostClientID {
+		return false
+	}
+	select {
+	case pp.resultCh <- path:
+		return true
+	default:
+		return false
+	}
+}
+
+func (n *SSEUIHostNotifier) FailDirectoryPick(requestID string, hostClientID string, hostSessionID string, err error) bool {
+	n.mu.Lock()
+	pp, ok := n.pendingDirectoryPicks[requestID]
+	n.mu.Unlock()
+	if !ok {
+		return false
+	}
+	if pp.hostSessionID != "" && pp.hostSessionID != hostSessionID {
+		return false
+	}
+	if pp.hostClientID != "" && pp.hostClientID != hostClientID {
+		return false
+	}
+	select {
+	case pp.errCh <- err:
+		return true
+	default:
+		return false
+	}
 }
 
 func (n *SSEUIHostNotifier) ResolveDialog(dialogID string, result string) bool {

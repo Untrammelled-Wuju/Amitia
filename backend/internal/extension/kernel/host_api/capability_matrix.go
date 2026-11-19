@@ -31,7 +31,7 @@ var CapabilityMatrix = []CapabilityEntry{
 		Name:       "Conversation",
 		Route:      string(MethodConversationList) + "/host.conversation.read/" + string(MethodConversationSearch) + "/" + string(MethodConversationCreate) + "/" + string(MethodConversationDelete),
 		Resolution: ResolutionReuseExisting,
-		Reason:     "Existing Gateway 已注册；会话读取与创建复用 Owner 会话管理事务",
+		Reason:     "Existing Gateway 已注册；会话读取与创建复用 Owner 会话管理事务，create 的 draft 参数复用同一写入路径做预分配（首条消息前不进目录）",
 	},
 	{
 		Name:       "Conversation Message",
@@ -57,13 +57,13 @@ var CapabilityMatrix = []CapabilityEntry{
 		Resolution: ResolutionReuseExisting,
 		Reason:     "Existing Gateway 已注册；G12 #20-#21 直接复用",
 	},
-		{
+	{
 		Name:       "Model Defaults",
 		Route:      string(MethodModelDefaults),
 		Resolution: ResolutionReuseExisting,
 		Reason:     "复用当前启用的聊天模型配置（温度、最大 token、上下文窗口），不新建设置存储",
 	},
-{
+	{
 		Name:       "Provider/Model",
 		Route:      string(MethodProviderInvoke) + "/" + string(MethodModelInvoke),
 		Resolution: ResolutionCompose,
@@ -173,7 +173,7 @@ var CapabilityMatrix = []CapabilityEntry{
 	},
 	{
 		Name:       "Project",
-		Route:      string(MethodProjectList) + "/" + string(MethodProjectCreate) + "/" + string(MethodProjectUpdate) + "/" + string(MethodProjectDelete),
+		Route:      string(MethodProjectList) + "/" + string(MethodProjectCreate) + "/" + string(MethodProjectUpdate) + "/" + string(MethodProjectReorder) + "/" + string(MethodProjectDelete),
 		Resolution: ResolutionReuseExisting,
 		Reason:     "复用设备归属业务层 Query/CreateProject/Edit 项目通道，未新建第二套项目系统",
 	},
@@ -184,22 +184,34 @@ var CapabilityMatrix = []CapabilityEntry{
 		Reason:     "复用设备归属业务层 Edit 的 conversation archived 键，与侧边栏归档同一写入路径",
 	},
 	{
+		Name:       "Conversation Turns",
+		Route:      string(MethodConversationTurns),
+		Resolution: ResolutionReuseExisting,
+		Reason:     "复用设备归属业务层已持久化的轮次检查点（runtime.blocks），把文本、推理与工具调用块按原顺序暴露给兼容层折叠；不新建第二套消息存储，权限沿用 conversation.read",
+	},
+	{
+		Name:       "Conversation Update",
+		Route:      string(MethodConversationUpdate) + "/" + string(MethodConversationTurnSteer),
+		Resolution: ResolutionReuseExisting,
+		Reason:     "改名复用设备归属业务层 Edit 的 conversation title 键（与侧边栏重命名同一写入路径）；转向复用 conversationstream Manager 已有的 Steer 通道，与中断/等待同一运行时控制面，不新建第二套会话写入",
+	},
+	{
+		Name:       "Conversation Order",
+		Route:      string(MethodConversationReorder),
+		Resolution: ResolutionReuseExisting,
+		Reason:     "复用会话文档的 order 稀疏排序字段与设备归属业务层会话管理通道，按工作区内相邻项取中点；间隙不足时统一重排，不新建第二套排序系统",
+	},
+	{
 		Name:       "Skill Catalog",
 		Route:      string(MethodSkillList),
 		Resolution: ResolutionReuseExisting,
 		Reason:     "复用扩展内核已有的 agent_skill 目录，按当前会话作用域列出技能；技能目录属于会话上下文，权限沿用 conversation.read，不新建第二套技能系统",
 	},
-		{
+	{
 		Name:       "Conversation Fork",
 		Route:      string(MethodConversationFork),
 		Resolution: ResolutionNewMinimal,
 		Reason:     "会话派生需要复制消息到新会话（含附件），复用 chat 服务的存储层新增 ForkConversation，不复用只读接口",
-	},
-	{
-		Name:       "Conversation Prepare",
-		Route:      string(MethodConversationPrepare),
-		Resolution: ResolutionReuseExisting,
-		Reason:     "会话预分配复用已有的 mesh 会话存储，只写入 draft 标记且首条消息前不进会话目录，不新建第二套会话系统",
 	},
 	{
 		Name:       "Conversation Pin",
@@ -209,9 +221,9 @@ var CapabilityMatrix = []CapabilityEntry{
 	},
 	{
 		Name:       "Directory",
-		Route:      string(MethodDirectoryList) + "/" + string(MethodDirectoryCreate),
+		Route:      string(MethodDirectoryList) + "/" + string(MethodDirectoryCreate) + "/" + string(MethodDirectoryPick),
 		Resolution: ResolutionNewMinimal,
-		Reason:     "DSH directoryPicker seam 需要宿主列目录与建目录；沿用 workspace.read/workspace.write 权限，仅接受绝对路径并拒绝父目录逃逸",
+		Reason:     "DSH directoryPicker seam 需要宿主列目录、建目录与交互式选目录；list/create 沿用 workspace.read/workspace.write 权限，pick 复用渲染进程已有的系统目录选择器与 ui.dialog 的 SSE 往返通道，仅桌面端注册该端点",
 	},
 }
 
@@ -234,7 +246,7 @@ func AllRegisteredMethods() []string {
 		// Clipboard
 		string(MethodClipboardWrite), string(MethodClipboardRead),
 		// Data
-		string(MethodCharacterRead), string(MethodCharacterList), string(MethodConversationList), string(MethodConversationRead), string(MethodConversationSearch), string(MethodConversationScope), string(MethodMemoryQuery),
+		string(MethodCharacterRead), string(MethodCharacterList), string(MethodConversationList), string(MethodConversationRead), string(MethodConversationSearch), string(MethodConversationTurns), string(MethodConversationScope), string(MethodMemoryQuery),
 		// Provider / Tool / Runtime / mediated network
 		string(MethodProviderInvoke), string(MethodToolExecute), string(MethodPluginPreview), string(MethodPluginInstall), string(MethodPluginUninstall), string(MethodPluginList), string(MethodRuntimeHealth), string(MethodNetworkRequest),
 		string(MethodWorkspaceRead), string(MethodWorkspaceWrite),
@@ -249,7 +261,7 @@ func AllRegisteredMethods() []string {
 		string(MethodConversationTurnAwait),
 		string(MethodConversationCreate),
 		string(MethodConversationDelete),
-		string(MethodConversationArchive), string(MethodConversationPin), string(MethodConversationFork), string(MethodConversationPrepare), string(MethodDirectoryList), string(MethodDirectoryCreate), string(MethodSkillList),
+		string(MethodConversationArchive), string(MethodConversationPin), string(MethodConversationFork), string(MethodConversationReorder), string(MethodConversationUpdate), string(MethodConversationTurnSteer), string(MethodProjectReorder), string(MethodDirectoryList), string(MethodDirectoryCreate), string(MethodDirectoryPick), string(MethodSkillList),
 		string(MethodProjectList), string(MethodProjectCreate), string(MethodProjectUpdate), string(MethodProjectDelete),
 		string(MethodVectorUpsert), string(MethodVectorSearch), string(MethodVectorDelete),
 		string(MethodNetworkTCPOpen), string(MethodNetworkTCPRead), string(MethodNetworkTCPWrite), string(MethodNetworkTCPClose),

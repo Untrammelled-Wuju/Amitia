@@ -51,18 +51,18 @@ export const HOST_SERVICE_ROUTES = Object.freeze({
   }),
   directoryPicker: Object.freeze({
     route: "official-package",
-    provider: "amitia",
-    note: "seam 由官方 @deepseek-ai/dsh-host-directory-picker 提供；provider 需选择目录，待映射 Amitia 的目录选择能力",
+    provider: "amitia-wired",
+    note: "list/create 走 host.directory.*，pick 走 host.directory.pick → 已注册 ui.directory.pick 的渲染宿主 → window.amitiaDesktop.selectDirectory；桌面端已注册该端点，移动端未注册时原样返回 ui_host: directory pick host unavailable；原生对话框点选尚未自动化实测",
   }),
   directoryPickerController: Object.freeze({
     route: "official-package",
-    provider: "amitia",
-    note: "由官方 @deepseek-ai/dsh-api-workspace-controller 提供，依赖 directoryPicker 的题目同一能力",
+    provider: "amitia-landed",
+    note: "capability() 报 native 并给出 pick；pick/list/createDirectory 全部委派宿主目录接口（host.directory.pick/list/create），未知动词不伪造方法",
   }),
   fileReferences: Object.freeze({
     route: "official-package",
-    provider: "amitia",
-    note: "seam 由官方 @deepseek-ai/dsh-file-reference 提供；provider 需遍历工作目录，待映射既有 host.workspace.read",
+    provider: "amitia-landed",
+    note: "list/search/stat/read 已复用 host.workspace.read 的 file_list/file_search/file_stat/file_read_text",
   }),
   goals: Object.freeze({
     route: "official-package",
@@ -116,8 +116,8 @@ export const HOST_SERVICE_ROUTES = Object.freeze({
   }),
   sessionFileReferences: Object.freeze({
     route: "official-package",
-    provider: "amitia",
-    note: "由官方 @deepseek-ai/dsh-api-session-controller 提供，依赖 fileReferences 的工作目录枚举",
+    provider: "amitia-landed",
+    note: "同上并带 sessionId 作用域，复用 host.workspace.read 的文件枚举与读取",
   }),
   sessionLogDeepSeek: Object.freeze({
     route: "official-package",
@@ -146,8 +146,8 @@ export const HOST_SERVICE_ROUTES = Object.freeze({
   }),
   sessionSkillCatalog: Object.freeze({
     route: "official-package",
-    provider: "amitia",
-    note: "由官方 @deepseek-ai/dsh-api-session-controller 从 ctx.skills 派生，技能 provider 待映射 Amitia 技能目录",
+    provider: "amitia-landed",
+    note: "合并 host.skill.list 与会话本地注册，按当前会话作用域过滤",
   }),
   sessionTelemetry: Object.freeze({
     route: "official-package",
@@ -181,8 +181,8 @@ export const HOST_SERVICE_ROUTES = Object.freeze({
   }),
   skills: Object.freeze({
     route: "official-package",
-    provider: "amitia",
-    note: "seam 由官方 @deepseek-ai/dsh-skill 提供分层注册表；provider 取 Amitia 技能目录时待映射，filesystem provider 可走既有 fs",
+    provider: "amitia-landed",
+    note: "list/get/read 走 host.skill.list 与本地 provider 注册表，返回 name/skillId/description/version/enabled",
   }),
   spillStore: Object.freeze({
     route: "official-package",
@@ -192,7 +192,7 @@ export const HOST_SERVICE_ROUTES = Object.freeze({
   storage: Object.freeze({
     route: "official-package",
     provider: "amitia-landed",
-    note: "seam 由官方 @deepseek-ai/dsh-storage 提供，JSON 后端已实测落盘 dsh-data/storage/workspace.json（0.1.99 真实运行）",
+    note: "seam 由官方 @deepseek-ai/dsh-storage 提供，JSON 后端已实测落盘 dsh-data/storage/workspace.json（0.1.99 真实运行）；0.2.59 服务面审计确认该键由官方包在容器内注册，不在本插件 services 对象里",
   }),
   storageDomain: Object.freeze({
     route: "official-package",
@@ -261,18 +261,18 @@ export const HOST_SERVICE_ROUTES = Object.freeze({
   }),
   workspaceController: Object.freeze({
     route: "official-package",
-    provider: "amitia",
-    note: "由官方 @deepseek-ai/dsh-api-workspace-controller 提供，实测仅依赖 storageDomain 与 sessionPersistence 两个 seam",
+    provider: "amitia-landed",
+    note: "list/create/rename/delete/initializeDefault 接 host.project.*（路径取 primary workspace 的 rootUri，sessionIds 按会话 projectId 分组并按持久顺序字段排序）；archiveSession/unarchiveSession/pinSession/unpinSession 按会话作用域快照调 host.conversation.archive/pin；insertBefore 调 host.project.reorder、insertSessionBefore 调 host.conversation.reorder，顺序值写在项目与会话文档的 order 字段，取相邻项中点，间隙不足时统一重排",
   }),
   workspaceFiles: Object.freeze({
     route: "official-package",
-    provider: "amitia",
-    note: "由官方 @deepseek-ai/dsh-api-workspace-files 提供，枚举与浏览待映射 host.workspace.read 的 file_list/browse/file_search",
+    provider: "amitia-landed",
+    note: "list/search/stat/read/readBytes 走 host.workspace.read；changes 以 file_list/file_stat 轮询产出 DSH ready/change 帧（文件按 stat.version 判变；目录按直接子项逐个 stat 的 version 判变，并发 8，目录项按类型标记，目标消失发 absent 帧）",
   }),
   workspaceRegistry: Object.freeze({
     route: "official-package",
     provider: "amitia-landed",
-    note: "由官方 @deepseek-ai/dsh-workspace 提供，0.1.99 已激活并完成默认工作区初始化落盘",
+    note: "由官方 @deepseek-ai/dsh-workspace 提供，0.1.99 已激活并完成默认工作区初始化落盘；0.2.59 服务面审计确认该键由官方包在容器内注册，不在本插件 services 对象里，故 workspaceController 改为在 host-services 内直接映射 project 服务",
   }),
 });
 

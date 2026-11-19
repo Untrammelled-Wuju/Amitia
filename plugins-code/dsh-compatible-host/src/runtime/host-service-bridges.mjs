@@ -467,12 +467,14 @@ function sessionHeader(record) {
     });
   }
   const cwd = text(record?.cwd);
+  const parentSession = text(record?.parentSession) || text(record?.forkOrigin?.conversationId);
   return {
     version: SESSION_STATE_VERSION,
     id,
     createdAt,
     isSeeded: false,
     ...(cwd ? { cwd } : {}),
+    ...(parentSession ? { parentSession } : {}),
   };
 }
 
@@ -505,6 +507,7 @@ function foldSessionTitle(events) {
 
 export function createSessionQueryService(options) {
   const { call, isLive, sessionView } = options;
+  const activeProjections = () => (typeof options.projections === "function" ? options.projections() : []);
   const unavailableMethod = (method, detail, missing) => () => {
     throw unavailableMissing(`sessionQuery.${method}`, detail, missing);
   };
@@ -561,29 +564,33 @@ export function createSessionQueryService(options) {
     return { header, view };
   };
 
-  return {
-    async listSessions(signal) {
-      const records = [];
-      let previousFirst = null;
-      for (let page = 0, offset = 0; page < CONVERSATION_PAGE_GUARD; page += 1, offset += CONVERSATION_PAGE_LIMIT) {
-        signal?.throwIfAborted();
-        const sessions = await readConversationPage(offset);
-        if (sessions.length === 0) return records;
-        const first = text(sessions[0]?.sessionId);
-        if (first !== "" && first === previousFirst) {
-          throw fail("Amitia host.conversation.list 的 offset 没有推进分页", {
-            code: "DSH_CONVERSATION_PAGES_NOT_ADVANCING",
-            offset,
-          });
-        }
-        previousFirst = first;
-        for (const session of sessions) records.push(sessionRecord(session, isLive));
-        if (sessions.length < CONVERSATION_PAGE_LIMIT) return records;
+  const listAllSessions = async (signal) => {
+    const records = [];
+    let previousFirst = null;
+    for (let page = 0, offset = 0; page < CONVERSATION_PAGE_GUARD; page += 1, offset += CONVERSATION_PAGE_LIMIT) {
+      signal?.throwIfAborted();
+      const sessions = await readConversationPage(offset);
+      if (sessions.length === 0) return records;
+      const first = text(sessions[0]?.sessionId);
+      if (first !== "" && first === previousFirst) {
+        throw fail("Amitia host.conversation.list 的 offset 没有推进分页", {
+          code: "DSH_CONVERSATION_PAGES_NOT_ADVANCING",
+          offset,
+        });
       }
-      throw fail(`Amitia host.conversation.list 在 ${CONVERSATION_PAGE_GUARD} 页内没有结束`, {
-        code: "DSH_CONVERSATION_PAGE_LIMIT_EXCEEDED",
-        limit: CONVERSATION_PAGE_GUARD,
-      });
+      previousFirst = first;
+      for (const session of sessions) records.push(sessionRecord(session, isLive));
+      if (sessions.length < CONVERSATION_PAGE_LIMIT) return records;
+    }
+    throw fail(`Amitia host.conversation.list 在 ${CONVERSATION_PAGE_GUARD} 页内没有结束`, {
+      code: "DSH_CONVERSATION_PAGE_LIMIT_EXCEEDED",
+      limit: CONVERSATION_PAGE_GUARD,
+    });
+  };
+
+  return {
+    listSessions(signal) {
+      return listAllSessions(signal);
     },
     async readSession(sessionId) {
       const { header, view } = await readView(sessionId);
@@ -635,33 +642,645 @@ export function createSessionQueryService(options) {
       }
       return results;
     },
-    observeSession: unavailableMethod("observeSession", "Amitia 没有会话级事件观察流与中断 Turn 平衡语义", "host.session.observe（必须提供持续事件流与 Turn 结算）"),
-    inspectSession: unavailableMethod("inspectSession", "容器不持有 DSH Session 对象，无法把内存会话交给读取函数", "host.session.handle（需要可传入回调的 DSH Session 实例，现有接口只返回快照）"),
-    searchSessions: unavailableMethod("searchSessions", "Amitia host.conversation.search 只返回会话摘要匹配，没有 DSH SessionSearchPage 的命中评分与游标结构", "host.conversation.search 的命中评分与游标语义（现有接口只返回 { items, hasMore }）"),
-    searchEvents: unavailableMethod("searchEvents", "Amitia 没有跨会话事件全文检索能力", "host.event.search（跨会话事件检索）"),
-    filterSessions: unavailableMethod("filterSessions", "Amitia 会话目录没有 DSH SessionResultFilter 的 cwd 前缀、标题区间与时间区间谓词", "host.conversation.filter（会话目录只支持 limit/offset 分页）"),
-    filterEvents: unavailableMethod("filterEvents", "Amitia 没有按 DSH SessionEventResultFilter 折叠事件面的查询能力", "host.session.filter_events（按事件面折叠的过滤查询）"),
-    traceSession: unavailableMethod("traceSession", "Amitia 会话没有 fork 血缘，无法生成 DSH SessionLineageTrace", "host.session.lineage（会话派生血缘）"),
-    traceEvent: unavailableMethod("traceEvent", "Amitia 会话事件没有 fork 来源引用，无法生成 DSH SessionEventTraceObservation", "host.session.event_trace（事件来源引用）"),
-    async readEvent(sessionId, seq) {
-      const target = Number(seq);
-      if (!Number.isFinite(target)) {
-        throw fail(`DSH sessionQuery.readEvent 需要数字 seq：${JSON.stringify({ sessionId: sessionId ?? null, seq: seq ?? null })}`, {
-          code: "DSH_SESSION_EVENT_SEQ_INVALID",
+    async observeSession(sessionId, options = {}) {
+      if (options === null || typeof options !== "object") {
+        throw fail(`DSH sessionQuery.observeSession 的 options 必须是对象：${JSON.stringify(options ?? null)}`, {
+          code: "DSH_SESSION_OBSERVATION_OPTIONS_INVALID",
           sessionId: sessionId ?? null,
-          seq: seq ?? null,
         });
       }
-      const { view } = await readView(sessionId);
-      const event = view.events.find((item) => Number(item.seq) === target);
-      if (!event) {
-        throw fail(`Amitia 会话 ${text(sessionId)} 没有序号为 ${target} 的事件`, {
+      const { header, view } = await readView(sessionId);
+      const events = view.events.slice();
+      const cursor = events.length === 0 ? -1 : Number(events.at(-1).seq);
+      let disposed = false;
+      const lease = () => {
+        if (disposed) throw new Error(`session observation "${header.id}" is disposed`);
+        return {
+          source: "persisted",
+          header,
+          inheritedEventCount: 0,
+          events,
+          cursor,
+          retain: () => lease(),
+          [Symbol.dispose]: () => {
+            disposed = true;
+          },
+        };
+      };
+      return lease();
+    },
+    async inspectSession(sessionId, read, signal) {
+      if (typeof read !== "function") {
+        throw fail(`DSH sessionQuery.inspectSession 需要读取回调：${JSON.stringify(read ?? null)}`, {
+          code: "DSH_SESSION_INSPECT_READ_REQUIRED",
+          sessionId: sessionId ?? null,
+        });
+      }
+      signal?.throwIfAborted?.();
+      const { header, view } = await readView(sessionId);
+      const events = view.events.slice();
+      const session = Object.freeze({
+        id: header.id,
+        header,
+        events: Object.freeze(events),
+        inheritedEventCount: 0,
+        capturedThroughSeq: events.length === 0 ? null : Number(events.at(-1).seq),
+        surfaceEvents: () => view.surfaceEvents.slice(),
+        messages: () => Array.from((view.messages ?? new Map()).values()),
+        readSurface: () => ({
+          session: header,
+          inheritedEventCount: 0,
+          capturedThroughSeq: events.length === 0 ? null : Number(events.at(-1).seq),
+          events: view.surfaceEvents.slice(),
+        }),
+        title: () => foldSessionTitle(events),
+        append() {
+          throw fail("DSH inspectSession 交给读取函数的是只读会话视图，不能追加事件", {
+            code: "DSH_SESSION_INSPECT_READ_ONLY",
+            sessionId: header.id,
+          });
+        },
+      });
+      return read(session);
+    },
+    async searchSessions(request, exec = {}) {
+      exec?.signal?.throwIfAborted?.();
+      if (request === null || typeof request !== "object") {
+        throw fail(`DSH sessionQuery.searchSessions 的 request 必须是对象：${JSON.stringify(request ?? null)}`, {
+          code: "DSH_SESSION_SEARCH_REQUEST_INVALID",
+          request: request ?? null,
+        });
+      }
+      const tokens = tokenizeSearchQuery("searchSessions", request.query);
+      const limit = readSearchLimit("searchSessions", request.limit);
+      const offset = readSearchOffset("searchSessions", request.cursor);
+      const sessionClauses = materializeSessionFilters(request.sessionFilters ?? []);
+      const eventClauses = materializeEventFilters(request.eventFilters ?? []);
+      const records = (await listAllSessions(exec?.signal)).filter((record) => sessionClauses.every((clause) => clause(record)));
+      const scored = [];
+      for (const record of records) {
+        exec?.signal?.throwIfAborted?.();
+        const view = await sessionView(record.header.id);
+        let best = null;
+        for (const document of sessionEventDocuments(record.header, view)) {
+          if (!eventClauses.every((clause) => clause(document))) continue;
+          const score = scoreSearchText(tokens, document.text);
+          if (score === 0) continue;
+          const hit = {
+            sessionId: document.sessionId,
+            seq: document.seq,
+            type: document.type,
+            time: document.time,
+            surface: document.surface,
+            snippet: buildSearchSnippet(tokens, document.text),
+          };
+          if (!best || score > best.score || (score === best.score && hit.time > best.hit.time)) best = { score, hit };
+        }
+        if (best) scored.push({ score: best.score, hit: { ...record, bestMatch: best.hit } });
+      }
+      scored.sort((left, right) => right.score - left.score
+        || right.hit.bestMatch.time - left.hit.bestMatch.time
+        || left.hit.header.id.localeCompare(right.hit.header.id));
+      return searchPage(scored.map((entry) => entry.hit), offset, limit, "searchSessions");
+    },
+    async searchEvents(request, exec = {}) {
+      exec?.signal?.throwIfAborted?.();
+      if (request === null || typeof request !== "object") {
+        throw fail(`DSH sessionQuery.searchEvents 的 request 必须是对象：${JSON.stringify(request ?? null)}`, {
+          code: "DSH_SESSION_SEARCH_REQUEST_INVALID",
+          request: request ?? null,
+        });
+      }
+      const sessionId = text(request.sessionId);
+      if (!sessionId) {
+        throw fail(`DSH sessionQuery.searchEvents 需要 sessionId：${JSON.stringify(request)}`, {
+          code: "DSH_SESSION_ID_REQUIRED",
+          request,
+        });
+      }
+      const tokens = tokenizeSearchQuery("searchEvents", request.query);
+      const limit = readSearchLimit("searchEvents", request.limit);
+      const offset = readSearchOffset("searchEvents", request.cursor);
+      const clauses = materializeEventFilters(request.filters ?? []);
+      const { header, view } = await readView(sessionId);
+      const scored = [];
+      for (const document of sessionEventDocuments(header, view)) {
+        if (!clauses.every((clause) => clause(document))) continue;
+        const score = scoreSearchText(tokens, document.text);
+        if (score === 0) continue;
+        scored.push({
+          score,
+          hit: {
+            sessionId: document.sessionId,
+            seq: document.seq,
+            type: document.type,
+            time: document.time,
+            surface: document.surface,
+            snippet: buildSearchSnippet(tokens, document.text),
+          },
+        });
+      }
+      scored.sort((left, right) => right.score - left.score
+        || right.hit.time - left.hit.time
+        || right.hit.seq - left.hit.seq);
+      const page = searchPage(scored.map((entry) => entry.hit), offset, limit, "searchEvents");
+      return { session: header, ...page };
+    },
+    async filterSessions(filters, signal) {
+      const clauses = materializeSessionFilters(filters);
+      const records = await this.listSessions(signal);
+      return records.filter((record) => clauses.every((clause) => clause(record)));
+    },
+    async filterEvents(sessionId, filters) {
+      const clauses = materializeEventFilters(filters);
+      const { header, view } = await readView(sessionId);
+      return sessionEventDocuments(header, view).filter((document) => clauses.every((clause) => clause(document)));
+    },
+    async traceSession(sessionId, signal) {
+      const id = text(sessionId);
+      if (!id) {
+        throw fail("DSH sessionQuery.traceSession 需要 sessionId", { code: "DSH_SESSION_ID_REQUIRED", sessionId: sessionId ?? null });
+      }
+      const records = await this.listSessions(signal);
+      return traceSessionLineage(records, id);
+    },
+    async traceEvent(request, signal) {
+      signal?.throwIfAborted?.();
+      if (request === null || typeof request !== "object") {
+        throw fail(`DSH sessionQuery.traceEvent 的 request 必须是对象：${JSON.stringify(request ?? null)}`, {
+          code: "DSH_SESSION_SEARCH_REQUEST_INVALID",
+          request: request ?? null,
+        });
+      }
+      const sessionId = text(request.sessionId);
+      if (!sessionId) {
+        throw fail(`DSH sessionQuery.traceEvent 需要 sessionId：${JSON.stringify(request)}`, {
+          code: "DSH_SESSION_ID_REQUIRED",
+          request,
+        });
+      }
+      const seq = Number(request.seq);
+      if (!Number.isSafeInteger(seq) || seq < 0) {
+        throw fail(`DSH sessionQuery.traceEvent 需要非负整数 seq：${JSON.stringify(request)}`, {
+          code: "DSH_SESSION_EVENT_SEQ_INVALID",
+          request,
+        });
+      }
+      const { header, view } = await readView(sessionId);
+      const events = view.events.slice();
+      const targetEvent = events.find((event) => Number(event.seq) === seq);
+      if (!targetEvent) {
+        throw fail(`session ${JSON.stringify(sessionId)} has no event seq ${seq}`, {
           code: "DSH_SESSION_EVENT_NOT_FOUND",
-          sessionId: text(sessionId),
-          seq: target,
+          sessionId,
+          seq,
         });
       }
-      return event;
+      const current = new Set(view.surfaceEvents.map((event) => Number(event.seq)));
+      const recordOf = (event) => ({
+        sessionId: header.id,
+        seq: Number(event.seq),
+        type: event.type,
+        time: event.time,
+        surface: isSurfaceEventType(event.type)
+          ? (current.has(Number(event.seq)) ? "current" : "shadowed")
+          : "log-only",
+      });
+      const replacers = new Map();
+      for (const event of events) {
+        const op = event.surfaceOp;
+        if (op === null || op === undefined || op === "append" || typeof op !== "object") continue;
+        const start = Number(op.startSeq);
+        const end = Number(op.endSeq);
+        if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end)) continue;
+        for (let index = start; index <= end; index += 1) {
+          if (!replacers.has(index)) replacers.set(index, Number(event.seq));
+        }
+      }
+      const replacementChain = [];
+      const visited = new Set([seq]);
+      let cursor = replacers.get(seq);
+      while (cursor !== undefined) {
+        if (visited.has(cursor)) {
+          throw fail(`session ${JSON.stringify(sessionId)} event ${seq} replacement chain contains a cycle at seq ${cursor}`, {
+            code: "DSH_SESSION_EVENT_TRACE_CYCLE",
+            sessionId,
+            seq,
+            replacementChain,
+          });
+        }
+        visited.add(cursor);
+        replacementChain.push(cursor);
+        cursor = replacers.get(cursor);
+      }
+      const targetOp = targetEvent.surfaceOp;
+      const replacedEventSeqs = targetOp !== null && targetOp !== undefined && typeof targetOp === "object"
+        ? Array.from({ length: Math.max(0, Number(targetOp.endSeq) - Number(targetOp.startSeq) + 1) }, (_value, index) => Number(targetOp.startSeq) + index)
+        : [];
+      const sourceEventSeqs = Array.isArray(targetEvent.sourceEventSeqs) ? targetEvent.sourceEventSeqs.map((value) => Number(value)) : [];
+      const derivedEventSeqs = events
+        .filter((event) => Array.isArray(event.sourceEventSeqs) && event.sourceEventSeqs.map((value) => Number(value)).includes(seq))
+        .map((event) => Number(event.seq));
+      return {
+        session: header,
+        target: recordOf(targetEvent),
+        ...(replacementChain.length === 0 ? {} : { replacedBy: replacementChain[0] }),
+        replacementChain,
+        replacedEventSeqs,
+        sourceEventSeqs,
+        derivedEventSeqs,
+      };
+    },
+    async readEvent(request, signal) {
+      const sessionId = text(request?.sessionId);
+      const seq = Number(request?.seq);
+      const before = readWindowSize("before", request?.before);
+      const after = readWindowSize("after", request?.after);
+      signal?.throwIfAborted?.();
+      if (!sessionId) {
+        throw fail(`DSH sessionQuery.readEvent 需要 sessionId：${JSON.stringify(request ?? null)}`, {
+          code: "DSH_SESSION_ID_REQUIRED",
+          request: request ?? null,
+        });
+      }
+      if (!Number.isSafeInteger(seq) || seq < 0) {
+        throw fail(`DSH sessionQuery.readEvent 需要非负整数 seq：${JSON.stringify(request ?? null)}`, {
+          code: "DSH_SESSION_EVENT_SEQ_INVALID",
+          request: request ?? null,
+        });
+      }
+      const { header, view } = await readView(sessionId);
+      const index = view.events.findIndex((item) => Number(item.seq) === seq);
+      if (index < 0) {
+        throw fail(`Amitia 会话 ${sessionId} 没有序号为 ${seq} 的事件`, {
+          code: "DSH_SESSION_EVENT_NOT_FOUND",
+          sessionId,
+          seq,
+        });
+      }
+      const startIndex = Math.max(0, index - before);
+      const endIndex = Math.min(view.events.length - 1, index + after);
+      return {
+        session: header,
+        inheritedEventCount: 0,
+        target: view.events[index],
+        events: view.events.slice(startIndex, endIndex + 1),
+        startSeq: Number(view.events[startIndex].seq),
+        endSeq: Number(view.events[endIndex].seq),
+      };
     },
   };
+}
+
+const SESSION_QUERY_READ_WINDOW_MAX = 50;
+
+function invalidSessionFilter(detail) {
+  return fail(`session ${detail}`, { code: "DSH_SESSION_FILTER_INVALID" });
+}
+
+function validateRange(name, range) {
+  if (!range || typeof range !== "object" || Array.isArray(range)) {
+    throw invalidSessionFilter(`${name} filter requires a range object`);
+  }
+  if (range.from !== undefined && !Number.isFinite(range.from)) {
+    throw invalidSessionFilter(`${name} filter from must be finite`);
+  }
+  if (range.to !== undefined && !Number.isFinite(range.to)) {
+    throw invalidSessionFilter(`${name} filter to must be finite`);
+  }
+  if (range.from !== undefined && range.to !== undefined && range.from > range.to) {
+    throw invalidSessionFilter(`${name} filter from must be less than or equal to to`);
+  }
+  return range;
+}
+
+function matchesRange(value, range) {
+  return (range.from === undefined || value >= range.from) && (range.to === undefined || value <= range.to);
+}
+
+function stringFilterValues(name, values, allowed) {
+  if (!Array.isArray(values)) throw invalidSessionFilter(`${name} filter values must be an array`);
+  const copy = values.slice();
+  for (const value of copy) {
+    if (typeof value !== "string") throw invalidSessionFilter(`${name} filter values must be strings`);
+    if (allowed && !allowed.includes(value)) {
+      throw invalidSessionFilter(`${name} filter values must be one of ${allowed.join(", ")}`);
+    }
+  }
+  return copy;
+}
+
+function nullableStringFilterValues(name, values) {
+  if (!Array.isArray(values)) throw invalidSessionFilter(`${name} filter values must be an array`);
+  return values.map((value) => {
+    if (value !== null && typeof value !== "string") {
+      throw invalidSessionFilter(`${name} filter values must be strings or null`);
+    }
+    return value;
+  });
+}
+
+function compileSessionTextFilter(raw) {
+  const trimmed = text(raw);
+  if (trimmed === "") throw invalidSessionFilter("text filter must contain non-whitespace text");
+  const pattern = trimmed
+    .split(/\s+/u)
+    .map((part) => part.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"))
+    .join("\\s+");
+  return new RegExp(pattern, "iu");
+}
+
+function materializeSessionFilters(filters) {
+  if (!Array.isArray(filters)) throw invalidSessionFilter("filters must be an array");
+  return filters.map((filter) => {
+    switch (filter?.kind) {
+      case "id": {
+        const values = stringFilterValues("id", filter.values);
+        return (record) => values.includes(record.header.id);
+      }
+      case "cwd": {
+        const values = nullableStringFilterValues("cwd", filter.values);
+        return (record) => values.includes(record.header.cwd ?? null);
+      }
+      case "created-at": {
+        const range = validateRange("created-at", filter);
+        return (record) => matchesRange(record.header.createdAt, range);
+      }
+      case "parent": {
+        const values = nullableStringFilterValues("parent", filter.values);
+        return (record) => values.includes(record.header.parentSession ?? null);
+      }
+      case "availability": {
+        const values = stringFilterValues("availability", filter.values, ["live", "persisted"]);
+        return (record) => values.some((value) => (value === "live" ? record.live : record.persisted));
+      }
+      default:
+        throw invalidSessionFilter(`filter kind ${JSON.stringify(filter?.kind ?? null)} is unknown`);
+    }
+  });
+}
+
+function materializeEventFilters(filters) {
+  if (!Array.isArray(filters)) throw invalidSessionFilter("filters must be an array");
+  return filters.map((filter) => {
+    switch (filter?.kind) {
+      case "seq": {
+        const range = validateRange("seq", filter);
+        return (document) => matchesRange(document.seq, range);
+      }
+      case "time": {
+        const range = validateRange("time", filter);
+        return (document) => matchesRange(document.time, range);
+      }
+      case "type": {
+        const values = stringFilterValues("type", filter.values);
+        return (document) => values.includes(document.type);
+      }
+      case "surface": {
+        const values = stringFilterValues("surface", filter.values, ["current", "shadowed", "log-only"]);
+        return (document) => values.includes(document.surface);
+      }
+      case "text": {
+        const pattern = compileSessionTextFilter(filter.text);
+        return (document) => pattern.test(document.text);
+      }
+      default:
+        throw invalidSessionFilter(`filter kind ${JSON.stringify(filter?.kind ?? null)} is unknown`);
+    }
+  });
+}
+
+function readWindowSize(name, value) {
+  if (value === undefined) return 0;
+  if (!Number.isInteger(value) || value < 0 || value > SESSION_QUERY_READ_WINDOW_MAX) {
+    throw fail(`${name} must be an integer between 0 and ${SESSION_QUERY_READ_WINDOW_MAX}`, {
+      code: "DSH_SESSION_EVENT_WINDOW_INVALID",
+      window: name,
+      value: value ?? null,
+    });
+  }
+  return value;
+}
+
+function cloneSessionRecord(record) {
+  return { header: { ...record.header }, live: record.live, persisted: record.persisted };
+}
+
+function traceSessionLineage(records, sessionId) {
+  const byId = new Map(records.map((record) => [record.header.id, record]));
+  const target = byId.get(sessionId);
+  if (!target) {
+    throw fail(`session ${JSON.stringify(sessionId)} not found`, {
+      code: "DSH_SESSION_NOT_FOUND",
+      sessionId,
+    });
+  }
+  const ancestors = [];
+  const ancestrySeen = new Set([sessionId]);
+  let unresolvedParentId;
+  let parentId = target.header.parentSession;
+  while (parentId !== undefined) {
+    if (ancestrySeen.has(parentId)) {
+      throw fail(`session lineage contains a cycle at ${JSON.stringify(parentId)}`, {
+        code: "DSH_SESSION_INVALID_LINEAGE",
+        sessionId,
+        parentId,
+      });
+    }
+    ancestrySeen.add(parentId);
+    const parent = byId.get(parentId);
+    if (!parent) {
+      unresolvedParentId = parentId;
+      break;
+    }
+    ancestors.push(parent);
+    parentId = parent.header.parentSession;
+  }
+  const childrenByParent = new Map();
+  for (const record of records) {
+    const parent = record.header.parentSession;
+    if (parent === undefined) continue;
+    const children = childrenByParent.get(parent) ?? [];
+    children.push(record);
+    childrenByParent.set(parent, children);
+  }
+  for (const children of childrenByParent.values()) {
+    children.sort((left, right) => left.header.createdAt - right.header.createdAt || left.header.id.localeCompare(right.header.id));
+  }
+  const seen = new Set([sessionId]);
+  const buildDescendants = (id) => (childrenByParent.get(id) ?? [])
+    .filter((child) => {
+      if (seen.has(child.header.id)) return false;
+      seen.add(child.header.id);
+      return true;
+    })
+    .map((child) => ({ record: cloneSessionRecord(child), children: buildDescendants(child.header.id) }));
+  const common = {
+    target: cloneSessionRecord(target),
+    ancestors: ancestors.map(cloneSessionRecord),
+    descendants: buildDescendants(sessionId),
+  };
+  if (unresolvedParentId !== undefined) {
+    return { ...common, complete: false, unresolvedParentId };
+  }
+  return { ...common, complete: true, root: cloneSessionRecord(ancestors.at(-1) ?? target) };
+}
+
+function joinSessionEventText(parts) {
+  return parts.map((part) => text(part)).filter((part) => part !== "").join("\n");
+}
+
+function sessionContentText(content) {
+  if (!Array.isArray(content)) return "";
+  const parts = [];
+  for (const block of content) {
+    if (!block || typeof block !== "object") continue;
+    if (block.type === "text") parts.push(text(block.text));
+    else if (block.type === "tool-call") parts.push(text(block.name), text(block.arguments));
+  }
+  return joinSessionEventText(parts);
+}
+
+function sessionTurnEndText(reason) {
+  switch (reason?.kind) {
+    case "error": return joinSessionEventText(["error", text(reason?.error?.message)]);
+    case "aborted": return "aborted";
+    case "max-tokens":
+    case "interrupted": return reason.kind;
+    default: return "";
+  }
+}
+
+function sessionEventText(event) {
+  const data = event?.data && typeof event.data === "object" ? event.data : {};
+  switch (event?.type) {
+    case "user/message": return sessionContentText(data.content);
+    case "assistant/message": return sessionContentText(data.message?.content);
+    case "tool/call": return joinSessionEventText([data.name, data.arguments]);
+    case "tool/result": return joinSessionEventText([
+      sessionContentText(data.message?.content),
+      text(data.error?.name),
+      text(data.error?.code),
+    ]);
+    case "todo/write": {
+      const todos = Array.isArray(data.todos) ? data.todos : [];
+      return joinSessionEventText(todos.flatMap((todo) => [text(todo?.status), text(todo?.content)]));
+    }
+    case "turn/end": return sessionTurnEndText(data.reason);
+    default: return "";
+  }
+}
+
+const SESSION_SEARCH_LIMIT_DEFAULT = 20;
+const SESSION_SEARCH_LIMIT_MAX = 100;
+const SESSION_SEARCH_SNIPPET_LENGTH = 160;
+
+function tokenizeSearchQuery(method, query) {
+  const raw = typeof query === "string" ? query : "";
+  const tokens = raw.trim().split(/\s+/).filter((token) => token !== "");
+  if (tokens.length === 0) {
+    throw fail(`DSH sessionQuery.${method} 需要非空检索词：${JSON.stringify(query ?? null)}`, {
+      code: "DSH_SESSION_SEARCH_QUERY_EMPTY",
+      query: query ?? null,
+    });
+  }
+  if (tokens.some((token) => token.length > SESSION_SEARCH_SNIPPET_LENGTH)) {
+    throw fail(`DSH sessionQuery.${method} 的检索词过长：${JSON.stringify(query)}`, {
+      code: "DSH_SESSION_SEARCH_QUERY_INVALID",
+      query,
+    });
+  }
+  return tokens;
+}
+
+function readSearchLimit(method, value) {
+  if (value === undefined) return SESSION_SEARCH_LIMIT_DEFAULT;
+  if (!Number.isSafeInteger(value) || value < 1) {
+    throw fail(`DSH sessionQuery.${method} 的 limit 必须是正整数：${JSON.stringify(value ?? null)}`, {
+      code: "DSH_SESSION_SEARCH_LIMIT_INVALID",
+      limit: value ?? null,
+    });
+  }
+  return Math.min(value, SESSION_SEARCH_LIMIT_MAX);
+}
+
+function readSearchOffset(method, cursor) {
+  if (cursor === undefined || cursor === null || cursor === "") return 0;
+  let parsed = null;
+  try {
+    parsed = JSON.parse(Buffer.from(String(cursor), "base64url").toString("utf8"));
+  } catch (error) {
+    throw fail(`DSH sessionQuery.${method} 的 cursor 无法解析：${JSON.stringify(cursor)}`, {
+      code: "DSH_SESSION_SEARCH_CURSOR_INVALID",
+      cursor: cursor ?? null,
+      reason: String(error?.message ?? error),
+    });
+  }
+  if (!parsed || !Number.isSafeInteger(parsed.offset) || parsed.offset < 0) {
+    throw fail(`DSH sessionQuery.${method} 的 cursor 内容无效：${JSON.stringify(parsed ?? null)}`, {
+      code: "DSH_SESSION_SEARCH_CURSOR_INVALID",
+      cursor: cursor ?? null,
+      value: parsed ?? null,
+    });
+  }
+  return parsed.offset;
+}
+
+function searchPage(items, offset, limit, method) {
+  const slice = items.slice(offset, offset + limit);
+  if (offset > 0 && offset >= items.length) {
+    throw fail(`DSH sessionQuery.${method} 的 cursor 超出结果范围：${JSON.stringify({ offset, total: items.length })}`, {
+      code: "DSH_SESSION_SEARCH_CURSOR_INVALID",
+      offset,
+      total: items.length,
+    });
+  }
+  const nextOffset = offset + slice.length;
+  if (nextOffset >= items.length) return { items: slice };
+  return { items: slice, nextCursor: Buffer.from(JSON.stringify({ offset: nextOffset }), "utf8").toString("base64url") };
+}
+
+function scoreSearchText(tokens, text) {
+  const haystack = String(text ?? "").toLowerCase();
+  let score = 0;
+  for (const token of tokens) {
+    const needle = token.toLowerCase();
+    let index = haystack.indexOf(needle);
+    while (index >= 0) {
+      score += 1;
+      index = haystack.indexOf(needle, index + needle.length);
+    }
+  }
+  return score;
+}
+
+function buildSearchSnippet(tokens, text) {
+  const source = String(text ?? "");
+  const haystack = source.toLowerCase();
+  let matchIndex = -1;
+  for (const token of tokens) {
+    const index = haystack.indexOf(token.toLowerCase());
+    if (index >= 0 && (matchIndex < 0 || index < matchIndex)) matchIndex = index;
+  }
+  if (matchIndex < 0) return source.slice(0, SESSION_SEARCH_SNIPPET_LENGTH);
+  const start = Math.max(0, matchIndex - Math.floor(SESSION_SEARCH_SNIPPET_LENGTH / 3));
+  return source.slice(start, start + SESSION_SEARCH_SNIPPET_LENGTH);
+}
+
+function sessionEventDocuments(header, view) {
+  const current = new Set(view.surfaceEvents.map((event) => Number(event.seq)));
+  const documents = [];
+  for (const event of view.events) {
+    const eventText = sessionEventText(event);
+    if (eventText.length === 0) continue;
+    documents.push({
+      sessionId: header.id,
+      seq: Number(event.seq),
+      type: event.type,
+      time: event.time,
+      surface: isSurfaceEventType(event.type) ? (current.has(Number(event.seq)) ? "current" : "shadowed") : "log-only",
+      text: eventText,
+    });
+  }
+  return documents;
 }

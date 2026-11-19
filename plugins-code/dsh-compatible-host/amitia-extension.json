@@ -8,7 +8,7 @@
     "description": {
       "default": "在一个普通 Amitia 插件中安装 DSH 插件，并将 DSH 能力映射为 Amitia 通用插件贡献。"
     },
-    "version": "0.2.42",
+    "version": "0.2.98",
     "license": "AGPL-3.0-only",
     "homepage": "https://amitia.untrammelled.top",
     "categories": [
@@ -130,15 +130,23 @@
                     "diagnose",
                     "invoke",
                     "client-source",
+                    "client-locale",
+                    "web-index-injection",
+                    "web-inline-script",
                     "jobs-list",
                     "jobs-kill",
                     "conversation-list",
                     "conversation-scope",
                     "conversation-read",
+                    "attachment-read",
+                    "session-projection",
+                    "conversation-turns",
+                    "conversation-steer",
+                    "conversation-update",
+                    "conversation-interrupt",
                     "conversation-message-send",
                     "conversation-search",
                     "conversation-create",
-                    "conversation-prepare",
                     "conversation-delete",
                     "conversation-archive",
                     "conversation-fork",
@@ -152,6 +160,10 @@
                     "project-workspaces",
                     "project-create",
                     "project-update",
+                    "project-reorder",
+                    "conversation-reorder",
+                    "agent-preset-write",
+                    "agent-preset-read",
                     "project-delete",
                     "workspace-files-stat",
                     "workspace-files-read",
@@ -224,14 +236,26 @@
                 "projectId": {
                   "type": "string"
                 },
+                "targetId": {
+                  "type": "string"
+                },
+                "preset": {
+                  "type": "string"
+                },
+                "scope": {
+                  "type": "string"
+                },
+                "beforeProjectId": {
+                  "type": "string"
+                },
+                "beforeConversationId": {
+                  "type": "string"
+                },
                 "conversationId": {
                   "type": "string"
                 },
                 "boundarySequence": {
                   "type": "integer"
-                },
-                "title": {
-                  "type": "string"
                 },
                 "content": {
                   "type": "string"
@@ -255,6 +279,9 @@
                 },
                 "peerId": {
                   "type": "string"
+                },
+                "draft": {
+                  "type": "boolean"
                 },
                 "requestId": {
                   "type": "string"
@@ -320,6 +347,15 @@
                   "type": "string"
                 },
                 "commandLine": {
+                  "type": "string"
+                },
+                "input": {
+                  "type": "string"
+                },
+                "turnId": {
+                  "type": "string"
+                },
+                "code": {
                   "type": "string"
                 }
               },
@@ -2704,6 +2740,54 @@
               ]
             }
           }
+        },
+        {
+          "id": "dsh-compatible-mobile-navigation",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "DSH 插件管理入口"
+          },
+          "description": {
+            "default": "在移动端扩展页面的扩展入口中注册 DSH 插件管理页面。"
+          },
+          "spec": {
+            "providerId": "dsh-compatible-mobile-navigation",
+            "capability": "app.navigation",
+            "mode": "append",
+            "priority": 500,
+            "placement": "any",
+            "trustLevel": "official",
+            "entries": {
+              "android": {
+                "type": "declarative"
+              },
+              "ios": {
+                "type": "declarative"
+              },
+              "mobile": {
+                "type": "declarative"
+              }
+            },
+            "metadata": {
+              "navigationItems": [
+                {
+                  "id": "dsh-compatible-mobile-host-manage",
+                  "label": "DSH 插件管理",
+                  "route": "/extension/page/dsh-compatible-mobile-page?extensionId=com.amitia%2Fdsh-compatible-host",
+                  "icon": "extension",
+                  "group": "compatibility",
+                  "groupLabel": "兼容性",
+                  "order": 900,
+                  "placement": "contextual"
+                }
+              ]
+            }
+          },
+          "requiredPermissions": [
+            "tool.invoke"
+          ]
         },
         {
           "id": "dsh-desktop-shell-host",

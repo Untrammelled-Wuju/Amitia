@@ -348,3 +348,101 @@ func TestProjectRoutesAcceptMatchingInputScopeAndRejectMismatch(t *testing.T) {
 		t.Fatal("route handler called the port despite a mismatched input scope")
 	}
 }
+
+type recordingProjectReorderer struct {
+	request ProjectReorderRequest
+	output  json.RawMessage
+	err     error
+	called  bool
+}
+
+func (r *recordingProjectReorderer) ReorderProject(_ context.Context, request ProjectReorderRequest) (json.RawMessage, error) {
+	r.called = true
+	r.request = request
+	return r.output, r.err
+}
+
+type recordingConversationReorderer struct {
+	request ConversationReorderRequest
+	output  json.RawMessage
+	err     error
+	called  bool
+}
+
+func (r *recordingConversationReorderer) ReorderConversation(_ context.Context, request ConversationReorderRequest) (json.RawMessage, error) {
+	r.called = true
+	r.request = request
+	return r.output, r.err
+}
+
+func TestReorderRoutesUseProjectAndConversationPolicies(t *testing.T) {
+	for method, permission := range map[host_api.Method]string{host_api.MethodProjectReorder: "project.manage", host_api.MethodConversationReorder: "conversation.manage"} {
+		permissions := host_api.RoutePermissionForMethod(method)
+		if len(permissions) != 1 || permissions[0].Name != permission {
+			t.Fatalf("unexpected permissions for %s: %+v", method, permissions)
+		}
+		if risk := host_api.RouteRiskForMethod(method); risk != host_api.RiskMedium {
+			t.Fatalf("unexpected risk for %s: %s", method, risk)
+		}
+		if effect := host_api.RouteSideEffectForMethod(method); effect != host_api.SideEffectWrite {
+			t.Fatalf("unexpected side effect for %s: %s", method, effect)
+		}
+		if !host_api.IsDataRouteMethod(method) || !host_api.RouteScopeForMethod(method).Namespaced {
+			t.Fatalf("expected data route with namespaced scope for %s", method)
+		}
+	}
+}
+
+func TestProjectReorderRouteForwardsAnchor(t *testing.T) {
+	reorderer := &recordingProjectReorderer{output: json.RawMessage(`{"projectIds":["project-2","project-1"]}`)}
+	gateway := projectRouteGateway(t, HostAPIRouteDeps{ProjectReorderer: reorderer})
+	result := gateway.Call(context.Background(), projectRouteCall(host_api.MethodProjectReorder, `{"projectId":"project-2","beforeProjectId":"project-1","requestId":"project-reorder-1"}`))
+	if result.Status != host_api.StatusSuccess {
+		t.Fatalf("expected success, got %s: %+v", result.Status, result.Error)
+	}
+	if !reorderer.called || reorderer.request.ProjectID != "project-2" || reorderer.request.BeforeProjectID != "project-1" || reorderer.request.RequestID != "project-reorder-1" {
+		t.Fatalf("unexpected reorder request: %+v", reorderer.request)
+	}
+}
+
+func TestProjectReorderRouteRequiresProjectID(t *testing.T) {
+	reorderer := &recordingProjectReorderer{output: json.RawMessage(`{"projectIds":[]}`)}
+	gateway := projectRouteGateway(t, HostAPIRouteDeps{ProjectReorderer: reorderer})
+	result := gateway.Call(context.Background(), projectRouteCall(host_api.MethodProjectReorder, `{"beforeProjectId":"project-1"}`))
+	if result.Status == host_api.StatusSuccess || reorderer.called {
+		t.Fatalf("expected input rejection, got %s", result.Status)
+	}
+}
+
+func TestConversationReorderRouteForwardsWorkspaceScope(t *testing.T) {
+	reorderer := &recordingConversationReorderer{output: json.RawMessage(`{"conversationIds":["conversation-1"]}`)}
+	gateway := projectRouteGateway(t, HostAPIRouteDeps{ConversationReorderer: reorderer})
+	result := gateway.Call(context.Background(), projectRouteCall(host_api.MethodConversationReorder, `{"conversationId":"conversation-1","beforeConversationId":"conversation-0","projectId":"project-1","requestId":"conversation-reorder-1"}`))
+	if result.Status != host_api.StatusSuccess {
+		t.Fatalf("expected success, got %s: %+v", result.Status, result.Error)
+	}
+	if !reorderer.called || reorderer.request.ConversationID != "conversation-1" || reorderer.request.BeforeConversationID != "conversation-0" || reorderer.request.ProjectID != "project-1" {
+		t.Fatalf("unexpected reorder request: %+v", reorderer.request)
+	}
+}
+
+func TestProjectUpdateRouteForwardsOrder(t *testing.T) {
+	updater := &recordingProjectUpdater{output: json.RawMessage(`{"projectId":"project-1"}`)}
+	gateway := projectRouteGateway(t, HostAPIRouteDeps{ProjectUpdater: updater})
+	result := gateway.Call(context.Background(), projectRouteCall(host_api.MethodProjectUpdate, `{"projectId":"project-1","order":2048,"requestId":"project-update-order"}`))
+	if result.Status != host_api.StatusSuccess {
+		t.Fatalf("expected success, got %s: %+v", result.Status, result.Error)
+	}
+	if updater.request.Order == nil || *updater.request.Order != 2048 {
+		t.Fatalf("order not forwarded: %+v", updater.request)
+	}
+}
+
+func TestProjectUpdateRouteRejectsNegativeOrder(t *testing.T) {
+	updater := &recordingProjectUpdater{output: json.RawMessage(`{"projectId":"project-1"}`)}
+	gateway := projectRouteGateway(t, HostAPIRouteDeps{ProjectUpdater: updater})
+	result := gateway.Call(context.Background(), projectRouteCall(host_api.MethodProjectUpdate, `{"projectId":"project-1","order":-1,"requestId":"project-update-order"}`))
+	if result.Status == host_api.StatusSuccess || updater.called {
+		t.Fatalf("expected input rejection, got %s", result.Status)
+	}
+}

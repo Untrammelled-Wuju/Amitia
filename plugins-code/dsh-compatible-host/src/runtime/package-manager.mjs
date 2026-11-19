@@ -277,7 +277,8 @@ export async function runNpmInstall(spec, workspace, environment = process.env) 
     const dependency = text(injectName);
     if (!dependency || CLIENT_INJECT_INSTALLED.has(dependency) || dependency === name) continue;
     CLIENT_INJECT_INSTALLED.add(dependency);
-    const nested = await runNpmInstall(`${dependency}@${text(installedManifest.version) || "latest"}`, workspace, environment);
+    const declared = declaredInjectRange(installedManifest, dependency);
+    const nested = await runNpmInstall(declared, workspace, environment);
     injectLogs.push(nested.log);
   }
   return { log: logs.join("") + injectLogs.join(""), packageName: name };
@@ -307,6 +308,16 @@ export async function runNpmCi(workspace, environment = process.env) {
     throw error;
   }
   return { log: result.log };
+}
+
+export function declaredInjectRange(manifest, dependency) {
+  for (const field of ["peerDependencies", "dependencies", "optionalDependencies"]) {
+    const table = manifest?.[field];
+    if (!table || typeof table !== "object") continue;
+    const range = text(table[dependency]);
+    if (range !== "") return `${dependency}@${range}`;
+  }
+  return `${dependency}@latest`;
 }
 
 export async function runNpmInstallPinned(pins, workspace, environment = process.env) {

@@ -11,9 +11,9 @@ export const DSH_CATALOG_SUMMARY = Object.freeze({
   "uiSlotMappedCount": 120,
   "uiSlotPendingCount": 0,
   "hostServiceDelegatedCount": 27,
-  "hostServiceImplementedCount": 12,
-  "hostServicePartialCount": 9,
-  "hostServiceProviderPendingCount": 8,
+  "hostServiceImplementedCount": 25,
+  "hostServicePartialCount": 4,
+  "hostServiceProviderPendingCount": 0,
   "hostServiceUnavailableCount": 13,
   "officialReferencePackageCount": 416
 });

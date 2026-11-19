@@ -325,7 +325,7 @@ func (p *meshLocalDataPort) manageChatForRole(ctx context.Context, scope coordin
 	if err != nil {
 		return nil, err
 	}
-	if request.Operation != "conversation/create" && request.Operation != "conversation/prepare" && request.ConversationID != "" {
+	if request.Operation != "conversation/create" && request.ConversationID != "" {
 		found := false
 		for _, row := range selected {
 			found = found || row.Kind == "conversation" && row.ID == request.ConversationID
@@ -337,7 +337,7 @@ func (p *meshLocalDataPort) manageChatForRole(ctx context.Context, scope coordin
 	switch request.Operation {
 	case "feedback-stats", "feedback/list", "feedback/create", "feedback/delete":
 		return p.managedChatFeedback(ctx, scope, request, records)
-	case "conversations", "conversation/create", "conversation/prepare", "conversation/read", "conversation/rename", "conversation/delete", "conversation/archive", "conversation/pin", "conversation/fork":
+	case "conversations", "conversation/create", "conversation/read", "conversation/rename", "conversation/delete", "conversation/archive", "conversation/pin", "conversation/reorder", "conversation/fork":
 		return p.managedConversationAction(ctx, scope, role, request, records, selected)
 	case "stats":
 		counts := chatManagementCounts(records, true)

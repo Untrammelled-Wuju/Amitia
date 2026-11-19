@@ -50,14 +50,15 @@ const (
 type EndpointFeature string
 
 const (
-	EndpointFeatureUINotify       EndpointFeature = "ui.notify"
-	EndpointFeatureUIDialog       EndpointFeature = "ui.dialog"
-	EndpointFeatureUINavigate     EndpointFeature = "ui.navigate"
-	EndpointFeatureUIStyle        EndpointFeature = "ui.style"
-	EndpointFeatureClipboardWrite EndpointFeature = "clipboard.write"
-	EndpointFeatureClipboardRead  EndpointFeature = "clipboard.read"
-	EndpointFeatureDesktopMenu    EndpointFeature = "desktop.menu"
-	EndpointFeatureDesktopTray    EndpointFeature = "desktop.tray"
+	EndpointFeatureUINotify        EndpointFeature = "ui.notify"
+	EndpointFeatureUIDialog        EndpointFeature = "ui.dialog"
+	EndpointFeatureUIDirectoryPick EndpointFeature = "ui.directory.pick"
+	EndpointFeatureUINavigate      EndpointFeature = "ui.navigate"
+	EndpointFeatureUIStyle         EndpointFeature = "ui.style"
+	EndpointFeatureClipboardWrite  EndpointFeature = "clipboard.write"
+	EndpointFeatureClipboardRead   EndpointFeature = "clipboard.read"
+	EndpointFeatureDesktopMenu     EndpointFeature = "desktop.menu"
+	EndpointFeatureDesktopTray     EndpointFeature = "desktop.tray"
 )
 
 type RuntimeEntry struct {

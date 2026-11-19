@@ -1642,6 +1642,232 @@ function createLocaleBridge() {
   };
 }
 
+function base64ToBytes(value) {
+  const binary = atob(String(value ?? ""));
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return bytes;
+}
+
+async function importClientEntryFromHost(pluginId, entry) {
+  const command = globalThis.__dshHostCommand;
+  if (typeof command !== "function") throw new Error("DSH 客户端模块加载需要宿主命令桥");
+  const chunks = [];
+  let total = 0;
+  let offset = 0;
+  for (let page = 0; page < 256; page += 1) {
+    const chunk = await command({ action: "client-source", pluginId, entryId: entry.id, offset, length: 262144 });
+    const bytes = base64ToBytes(chunk?.dataBase64);
+    chunks.push(bytes);
+    total += bytes.length;
+    if (chunk?.done === true) break;
+    if (Number(chunk?.nextOffset) <= offset) throw new Error(`DSH client-source 分页未推进：${pluginId}/${entry.id}`);
+    offset = Number(chunk.nextOffset);
+  }
+  const source = new Uint8Array(total);
+  let cursor = 0;
+  for (const bytes of chunks) {
+    source.set(bytes, cursor);
+    cursor += bytes.length;
+  }
+  const url = URL.createObjectURL(new Blob([source], { type: "text/javascript" }));
+  try {
+    await import(url);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+async function importClientEntry(plugin, entry) {
+  let url = "";
+  try {
+    url = await clientRuntimeModuleURL(plugin, entry);
+  } catch (error) {
+    if (!/page module URL/.test(String(error?.message ?? error))) throw error;
+    await importClientEntryFromHost(plugin.pluginId, entry);
+    return "client-source";
+  }
+  try {
+    await import(url);
+    return "page-module";
+  } catch (error) {
+    const message = String(error?.message ?? error);
+    if (!/runtime_module_not_found|Failed to fetch dynamically imported module|401|404/.test(message)) throw error;
+    await importClientEntryFromHost(plugin.pluginId, entry);
+    return "client-source";
+  }
+}
+
+function createClientCommandUi() {
+  const items = new Map();
+  const decorations = new Map();
+  const normalizeName = (command) => {
+    const name = String(command?.name ?? "").trim().replace(/^\//, "");
+    if (name === "") throw new Error("DSH commandUi.register 需要 name");
+    return name;
+  };
+  const rows = (list) => list.map((command) => ({
+    name: command.name,
+    label: typeof command.label === "function" ? command.label() : (command.label ?? command.name),
+    ...(command.icon ? { icon: command.icon } : {}),
+    ...(command.description ? { description: command.description } : {}),
+    ...(command.available === false ? { available: false } : {}),
+  }));
+  return {
+    register(command) {
+      const name = normalizeName(command);
+      if (items.has(name)) throw new Error(`DSH commandUi 命令 ${name} 已经注册`);
+      items.set(name, { ...command, name });
+      let active = true;
+      return () => {
+        if (!active) return;
+        active = false;
+        if (items.get(name)?.name === name) items.delete(name);
+      };
+    },
+    unregister(name) {
+      return items.delete(String(name ?? "").trim().replace(/^\//, ""));
+    },
+    list() {
+      return rows([...items.values()]);
+    },
+    decorate(decoration) {
+      const name = String(decoration?.name ?? "").trim().replace(/^\//, "");
+      if (name === "") throw new Error("DSH commandUi.decorate 需要 name");
+      if (decorations.has(name)) throw new Error(`DSH commandUi 装饰 ${name} 已经注册`);
+      decorations.set(name, decoration);
+      let active = true;
+      return () => {
+        if (!active) return;
+        active = false;
+        if (decorations.get(name) === decoration) decorations.delete(name);
+      };
+    },
+    decorations() {
+      return [...decorations.values()];
+    },
+    async candidates(_session, request) {
+      const prefix = String(request?.query ?? "").trim().replace(/^\//, "").toLowerCase();
+      return rows([...items.values()].filter((command) => command.name.toLowerCase().startsWith(prefix)));
+    },
+  };
+}
+
+function createClientCommandRegistry() {
+  const items = new Map();
+  const requireCommand = (command) => {
+    const name = String(command?.name ?? "").trim().replace(/^\//, "");
+    if (name === "") throw new Error("DSH 客户端命令需要 name");
+    if (typeof command?.handler !== "function" && typeof command?.run !== "function") {
+      throw new Error(`DSH 客户端命令 ${name} 需要 handler 或 run 函数`);
+    }
+    return name;
+  };
+  return {
+    register(command) {
+      const name = requireCommand(command);
+      if (items.has(name)) throw new Error(`DSH 客户端命令 ${name} 已经注册`);
+      items.set(name, command);
+      let active = true;
+      return () => {
+        if (!active) return;
+        active = false;
+        if (items.get(name) === command) items.delete(name);
+      };
+    },
+    unregister(name) {
+      return items.delete(String(name ?? "").trim().replace(/^\//, ""));
+    },
+    list() {
+      return [...items.values()];
+    },
+    candidates(query) {
+      const prefix = String(query ?? "").trim().replace(/^\//, "").toLowerCase();
+      return [...items.values()].filter((command) => String(command.name ?? "").toLowerCase().startsWith(prefix));
+    },
+    async execute(name, input) {
+      const key = String(name ?? "").trim().replace(/^\//, "");
+      const command = items.get(key);
+      if (!command) throw new Error(`DSH 客户端命令 ${key} 不存在`);
+      const run = typeof command.handler === "function" ? command.handler : command.run;
+      return run.call(command, input);
+    },
+  };
+}
+
+function appendScriptAwait(src) {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = src;
+    script.async = false;
+    script.addEventListener("load", () => resolve());
+    script.addEventListener("error", (event) => reject(new Error(`DSH 宿主注入脚本加载失败 ${src}: ${String(event?.message ?? "error")}`)));
+    document.head.appendChild(script);
+  });
+}
+
+export async function applyWebIndexInjections() {
+  const command = globalThis.__dshHostCommand;
+  if (typeof command !== "function") return;
+  const injection = await command({ action: "web-index-injection" });
+  const origin = typeof injection?.origin === "string" ? injection.origin : "";
+  const html = typeof injection?.html === "string" ? injection.html : "";
+  if (origin !== "") globalThis.__DSH_WEB_ORIGIN__ = origin;
+  if (origin !== "") {
+    const paths = injection?.paths ?? {};
+    const exactPaths = Array.isArray(paths.exact) ? paths.exact.map(String) : [];
+    const prefixPaths = Array.isArray(paths.prefixes) ? paths.prefixes.map(String) : [];
+    const bridgeCode = `(() => {
+  const base = ${JSON.stringify(origin)};
+  const exactPaths = ${JSON.stringify(exactPaths)};
+  const prefixPaths = ${JSON.stringify(prefixPaths)};
+  const owned = (pathname) => exactPaths.includes(pathname) || prefixPaths.some((prefix) => pathname === prefix || pathname.startsWith(prefix.endsWith("/") ? prefix : prefix + "/"));
+  const rewrite = (value) => (typeof value === "string" && value.startsWith("/") && owned(value.split("?")[0]) ? base + value : value);
+  const nativeFetch = globalThis.fetch;
+  if (typeof nativeFetch === "function") {
+    globalThis.fetch = function (input, init) {
+      try {
+        if (typeof input === "string") input = rewrite(input);
+        else if (input instanceof Request && input.url) {
+          const url = new URL(input.url);
+          if (url.origin === location.origin && owned(url.pathname)) input = new Request(base + url.pathname + url.search, input);
+        }
+      } catch (error) { console.error("[original-error]", error); }
+      return nativeFetch.call(this, input, init);
+    };
+  }
+  const open = XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.open = function (method, url, ...rest) {
+    try { url = rewrite(url); } catch (error) { console.error("[original-error]", error); }
+    return open.call(this, method, url, ...rest);
+  };
+})();`;
+    const servedBridge = await command({ action: "web-inline-script", code: bridgeCode });
+    if (typeof servedBridge?.url !== "string" || servedBridge.url === "") {
+      throw new Error("DSH 宿主请求改写脚本没有取得可加载地址");
+    }
+    await appendScriptAwait(servedBridge.url.startsWith("/") ? `${origin}${servedBridge.url}` : servedBridge.url);
+  }
+  if (html.trim() === "") return;
+  const parsed = new DOMParser().parseFromString(html, "text/html");
+  for (const node of parsed.head.querySelectorAll("script")) {
+    if (node.src) {
+      await appendScriptAwait(new URL(node.src, origin || location.origin).toString());
+      continue;
+    }
+    const code = node.textContent ?? "";
+    if (code.trim() === "") continue;
+    const served = await command({ action: "web-inline-script", code });
+    if (typeof served?.url !== "string" || served.url === "") {
+      throw new Error("DSH 宿主索引注入的内联脚本没有取得可加载地址");
+    }
+    await appendScriptAwait(served.url.startsWith("/") ? `${origin || location.origin}${served.url}` : served.url);
+  }
+  for (const node of parsed.head.querySelectorAll("link[rel=stylesheet], style")) {
+    document.head.appendChild(node.cloneNode(true));
+  }
+}
+
 export async function instantiateClient(plugin, options = {}) {
   const clientEntries = Array.isArray(plugin.clientEntries) && plugin.clientEntries.length
     ? plugin.clientEntries
@@ -1664,20 +1890,39 @@ export async function instantiateClient(plugin, options = {}) {
     }
     const identity = { pluginId: dependency.pluginId, clientEntries: dependencyEntries, clientEntry: dependency.clientEntry };
     for (const entry of dependencyEntries) {
-      try {
-        await import(await clientRuntimeModuleURL(identity, entry));
-      } catch (error) {
-        if (!/Failed to fetch dynamically imported module/.test(String(error?.message ?? error))) throw error;
-        await import(await clientRuntimeModuleURL(identity, entry));
+      await importClientEntry(identity, entry);
+    }
+  }
+  try {
+    const hostCommand = globalThis.__dshHostCommand;
+    if (typeof hostCommand !== "function") throw new Error("DSH 宿主命令桥不可用，无法读取插件语言包");
+    const payload = await hostCommand({ action: "client-locale", pluginId: plugin.pluginId });
+    const locales = payload?.locales && typeof payload.locales === "object" ? payload.locales : {};
+    const languages = Object.keys(locales);
+    if (languages.length > 0) {
+      const namespaces = new Set();
+      for (const language of languages) {
+        for (const name of Object.keys(locales[language] ?? {})) namespaces.add(name);
+      }
+      const localeBridge = createLocaleBridge();
+      for (const name of namespaces) {
+        const dictionaries = {};
+        for (const language of languages) {
+          const value = locales[language]?.[name];
+          if (value && typeof value === "object") dictionaries[language] = value;
+        }
+        localeBridge.register(name, dictionaries);
       }
     }
+  } catch (error) {
+    console.error(`[dsh-shell] ${plugin.pluginId} 语言包注册失败\n[original-error] ${rawError(error)}`);
   }
   const before = new Map(loader.list().map((id) => [id, loader.record(id)]));
   for (const entry of runtimeEntries) {
     if (typeof options.loadClientSource === "function") {
       await options.loadClientSource(plugin, entry);
     } else {
-      await import(await clientRuntimeModuleURL(plugin, entry));
+      await importClientEntry(plugin, entry);
     }
   }
   const moduleIds = loader.list().filter((id) => !before.has(id) || loader.record(id) !== before.get(id));
@@ -1685,6 +1930,8 @@ export async function instantiateClient(plugin, options = {}) {
     console.warn(`[dsh-shell] ${plugin.pluginId} 未注册新的 client module，视为已装载`);
     return { async dispose() {} };
   }
+  const clientCommands = createClientCommandRegistry();
+  const clientCommandUi = createClientCommandUi();
   ensureReactAdapter();
   const moduleRecords = moduleIds.map((id) => ({ id, record: loader.record(id) }));
   const loadedModules = [];
@@ -2150,6 +2397,8 @@ export async function instantiateClient(plugin, options = {}) {
         eventBus,
         services: {
           slots,
+          commands: clientCommands,
+          commandUi: clientCommandUi,
           input: createInputService(),
           locale,
           theme: runtimeServices.theme,

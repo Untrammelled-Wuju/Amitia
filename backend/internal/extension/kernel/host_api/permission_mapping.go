@@ -51,6 +51,9 @@ func DefaultPermissionMapping() map[Method][]PermissionMappingEntry {
 		MethodCharacterList:                {{PermissionID: "character.read", Resource: "character"}},
 		MethodConversationList:             {{PermissionID: "conversation.read", Resource: "conversation"}},
 		MethodConversationRead:             {{PermissionID: "conversation.read", Resource: "conversation"}},
+		MethodConversationTurns:            {{PermissionID: "conversation.read", Resource: "conversation"}},
+		MethodConversationUpdate:           {{PermissionID: "conversation.manage", Resource: "conversation"}},
+		MethodConversationTurnSteer:        {{PermissionID: "conversation.manage", Resource: "conversation"}},
 		MethodConversationSearch:           {{PermissionID: "conversation.read", Resource: "conversation"}},
 		MethodConversationScope:            {{PermissionID: "conversation.read", Resource: "conversation"}},
 		MethodConversationCreate:           {{PermissionID: "conversation.manage", Resource: "conversation"}},
@@ -62,14 +65,16 @@ func DefaultPermissionMapping() map[Method][]PermissionMappingEntry {
 		MethodConversationArchive:          {{PermissionID: "conversation.manage", Resource: "conversation"}},
 		MethodConversationPin:              {{PermissionID: "conversation.manage", Resource: "conversation"}},
 		MethodConversationFork:             {{PermissionID: "conversation.manage", Resource: "conversation"}},
-		MethodConversationPrepare:          {{PermissionID: "conversation.manage", Resource: "conversation"}},
+		MethodConversationReorder:          {{PermissionID: "conversation.manage", Resource: "conversation"}},
 		MethodDirectoryList:                {{PermissionID: "workspace.read", Resource: "workspace"}},
 		MethodDirectoryCreate:              {{PermissionID: "workspace.write", Resource: "workspace"}},
+		MethodDirectoryPick:                {{PermissionID: "workspace.read", Resource: "workspace"}},
 		MethodSkillList:                    {{PermissionID: "conversation.read", Resource: "conversation"}},
 		MethodProjectList:                  {{PermissionID: "project.read", Resource: "project"}},
 		MethodProjectCreate:                {{PermissionID: "project.manage", Resource: "project"}},
 		MethodProjectUpdate:                {{PermissionID: "project.manage", Resource: "project"}},
 		MethodProjectDelete:                {{PermissionID: "project.manage", Resource: "project"}},
+		MethodProjectReorder:               {{PermissionID: "project.manage", Resource: "project"}},
 		MethodMemoryQuery:                  {{PermissionID: "memory.read", Resource: "memory"}},
 		MethodProviderInvoke:               {{PermissionID: "provider.invoke", Resource: "provider"}},
 		MethodModelInvoke:                  {{PermissionID: "provider.invoke", Resource: "provider"}},
@@ -152,21 +157,21 @@ func RouteScopeForMethod(method Method) ScopePolicy {
 		return ScopePolicy{RequireRoles: []string{"character"}}
 	case MethodCharacterList:
 		return ScopePolicy{Namespaced: true}
-	case MethodConversationRead, MethodConversationSearch, MethodApprovalRequest:
+	case MethodConversationRead, MethodConversationSearch, MethodConversationTurns, MethodApprovalRequest:
 		return ScopePolicy{RequireRoles: []string{"conversation"}}
 	case MethodConversationList:
 		return ScopePolicy{Namespaced: true}
-	case MethodConversationCreate, MethodConversationDelete, MethodConversationScope, MethodConversationPrepare:
+	case MethodConversationCreate, MethodConversationDelete, MethodConversationScope:
 		return ScopePolicy{Namespaced: true}
 	case MethodConversationMessageSend, MethodConversationMessageAppend, MethodConversationTurnInterrupt, MethodConversationTurnAwait:
 		return ScopePolicy{Namespaced: true}
-	case MethodConversationArchive, MethodConversationPin, MethodConversationFork, MethodProjectList, MethodProjectCreate, MethodProjectUpdate, MethodProjectDelete:
+	case MethodConversationArchive, MethodConversationPin, MethodConversationFork, MethodConversationReorder, MethodConversationUpdate, MethodConversationTurnSteer, MethodProjectList, MethodProjectCreate, MethodProjectUpdate, MethodProjectDelete, MethodProjectReorder:
 		return ScopePolicy{Namespaced: true}
 	case MethodMemoryQuery:
 		return ScopePolicy{RequireRoles: []string{"character", "conversation"}, AllowNarrowing: true}
 	case MethodEventEmit, MethodEventSubscribe, MethodEventUnsubscribe:
 		return ScopePolicy{}
-	case MethodDirectoryList, MethodDirectoryCreate:
+	case MethodDirectoryList, MethodDirectoryCreate, MethodDirectoryPick:
 		return ScopePolicy{}
 	case MethodScheduleCreate, MethodScheduleCancel, MethodScheduleList, MethodScheduleRun, MethodScheduleUpdate, MethodScheduleHistory:
 		return ScopePolicy{Namespaced: true}
@@ -206,8 +211,8 @@ func IsDataRouteMethod(method Method) bool {
 	switch method {
 	case MethodStateGet, MethodStateCAS, MethodStateDelete, MethodStateList,
 		MethodResourceOpen, MethodResourceRead, MethodResourceWrite, MethodResourceClose, MethodResourceStat, MethodResourceLink, MethodResourceDelete,
-		MethodCharacterRead, MethodCharacterList, MethodConversationList, MethodConversationRead, MethodConversationSearch, MethodConversationCreate, MethodConversationDelete, MethodConversationScope, MethodMemoryQuery, MethodRuntimeHealth, MethodWorkspaceRead, MethodWorkspaceWrite, MethodImportExecute, MethodStorageCleanup, MethodStorageBackup, MethodStorageRestore, MethodConversationLogsRead, MethodConversationLogsManage, MethodConversationLogsExport, MethodExtensionDataRead,
-		MethodConversationArchive, MethodConversationPin, MethodConversationFork, MethodConversationPrepare, MethodProjectList, MethodProjectCreate, MethodProjectUpdate, MethodProjectDelete,
+		MethodCharacterRead, MethodCharacterList, MethodConversationList, MethodConversationRead, MethodConversationSearch, MethodConversationTurns, MethodConversationCreate, MethodConversationDelete, MethodConversationScope, MethodMemoryQuery, MethodRuntimeHealth, MethodWorkspaceRead, MethodWorkspaceWrite, MethodImportExecute, MethodStorageCleanup, MethodStorageBackup, MethodStorageRestore, MethodConversationLogsRead, MethodConversationLogsManage, MethodConversationLogsExport, MethodExtensionDataRead,
+		MethodConversationArchive, MethodConversationPin, MethodConversationFork, MethodConversationReorder, MethodConversationUpdate, MethodConversationTurnSteer, MethodProjectList, MethodProjectCreate, MethodProjectUpdate, MethodProjectDelete, MethodProjectReorder,
 		MethodVectorUpsert, MethodVectorSearch, MethodVectorDelete:
 		return true
 	default:
@@ -239,7 +244,7 @@ func RouteRiskForMethod(method Method) RiskLevel {
 		return RiskMedium
 	case MethodScheduleCreate, MethodScheduleCancel, MethodScheduleRun, MethodScheduleUpdate:
 		return RiskMedium
-	case MethodDirectoryCreate:
+	case MethodDirectoryCreate, MethodDirectoryPick, MethodConversationReorder, MethodProjectReorder, MethodConversationUpdate:
 		return RiskMedium
 	case MethodApprovalRequest:
 		return RiskMedium
@@ -249,9 +254,9 @@ func RouteRiskForMethod(method Method) RiskLevel {
 		MethodPluginContributionRegister, MethodPluginContributionUnregister,
 		MethodPluginServiceProvide, MethodPluginServiceUnprovide, MethodPluginServiceRequire, MethodPluginServiceRelease,
 		MethodPluginAdapterInvoke, MethodPluginAdapterCancel,
-		MethodConversationCreate, MethodConversationDelete, MethodConversationMessageSend, MethodConversationMessageAppend, MethodConversationTurnInterrupt:
+		MethodConversationCreate, MethodConversationDelete, MethodConversationMessageSend, MethodConversationMessageAppend, MethodConversationTurnInterrupt, MethodConversationTurnSteer:
 		return RiskHigh
-	case MethodConversationArchive, MethodConversationPin, MethodConversationFork, MethodConversationPrepare, MethodProjectCreate, MethodProjectUpdate, MethodProjectDelete:
+	case MethodConversationArchive, MethodConversationPin, MethodConversationFork, MethodProjectCreate, MethodProjectUpdate, MethodProjectDelete:
 		return RiskHigh
 	case MethodExtensionDataRead:
 		return RiskMedium
@@ -280,15 +285,15 @@ func RouteSideEffectForMethod(method Method) SideEffectLevel {
 	}
 	switch method {
 	case MethodStateGet, MethodStateList, MethodResourceOpen, MethodResourceRead, MethodResourceStat,
-		MethodResourceLink, MethodCharacterRead, MethodCharacterList, MethodConversationList, MethodConversationRead, MethodConversationSearch, MethodConversationTurnAwait, MethodConversationScope, MethodMemoryQuery, MethodScheduleList, MethodScheduleHistory, MethodExtensionDataRead, MethodPluginList, MethodVectorSearch, MethodProjectList:
+		MethodResourceLink, MethodCharacterRead, MethodCharacterList, MethodConversationList, MethodConversationRead, MethodConversationSearch, MethodConversationTurns, MethodConversationTurnAwait, MethodConversationScope, MethodMemoryQuery, MethodScheduleList, MethodScheduleHistory, MethodExtensionDataRead, MethodPluginList, MethodVectorSearch, MethodProjectList:
 		return SideEffectReadOnly
-	case MethodStateCAS, MethodStateDelete, MethodResourceWrite, MethodResourceDelete, MethodScheduleCreate, MethodScheduleCancel, MethodScheduleRun, MethodScheduleUpdate, MethodVectorUpsert, MethodVectorDelete, MethodConversationCreate, MethodConversationDelete, MethodConversationTurnInterrupt:
+	case MethodStateCAS, MethodStateDelete, MethodResourceWrite, MethodResourceDelete, MethodScheduleCreate, MethodScheduleCancel, MethodScheduleRun, MethodScheduleUpdate, MethodVectorUpsert, MethodVectorDelete, MethodConversationCreate, MethodConversationDelete, MethodConversationTurnInterrupt, MethodConversationTurnSteer:
 		return SideEffectWrite
-	case MethodConversationArchive, MethodConversationPin, MethodConversationFork, MethodConversationPrepare, MethodProjectCreate, MethodProjectUpdate, MethodProjectDelete:
+	case MethodConversationArchive, MethodConversationPin, MethodConversationFork, MethodConversationReorder, MethodConversationUpdate, MethodProjectCreate, MethodProjectUpdate, MethodProjectDelete, MethodProjectReorder:
 		return SideEffectWrite
 	case MethodRuntimeMaintenanceUpdate, MethodRuntimeCleanupTemp, MethodRuntimeRotateLogs, MethodRuntimeCheckDBIntegrity:
 		return SideEffectWrite
-	case MethodWorkspaceRead, MethodDirectoryList:
+	case MethodWorkspaceRead, MethodDirectoryList, MethodDirectoryPick:
 		return SideEffectReadOnly
 	case MethodWorkspaceWrite, MethodDirectoryCreate:
 		return SideEffectWrite

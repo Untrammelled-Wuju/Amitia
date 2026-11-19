@@ -95,6 +95,7 @@ class ConversationRuntimeController extends ChangeNotifier {
   String? _characterId;
   ConversationWorkspaceDto? _workspace;
   bool _sending = false;
+  String _liveOwnedSendRequestId = '';
   bool _groupSending = false;
   bool _groupDiscussionMode = false;
   Object? _lastError;
@@ -767,6 +768,7 @@ class ConversationRuntimeController extends ChangeNotifier {
     _messages.upsert(pending);
     _sending = true;
     _ownedRequestId = requestId;
+    _liveOwnedSendRequestId = requestId;
     _lastError = null;
     var text = '';
     var reasoning = '';
@@ -858,21 +860,27 @@ class ConversationRuntimeController extends ChangeNotifier {
 
     void project(MessageStatus status) {
       if (_disposed) return;
-      final local = _messages.findByRenderId(
+      final existing = _messages.findByRenderId(
         _assistantRenderId(requestId),
         role: MessageRole.assistant,
-        sourceOwnerId: '',
       );
-      if (local != null && acceptedScope.isNotEmpty) _messages.remove(local);
+      final ownerId = (acceptedScope['resourceOwnerId'] ?? '').toString();
+      if (existing != null &&
+          existing.sourceOwnerId.isEmpty &&
+          ownerId.isNotEmpty) {
+        _messages.remove(existing);
+      }
       _messages.upsert(
         ChatMessage(
           id: '$requestId/assistant',
-          sourceOwnerId: (acceptedScope['resourceOwnerId'] ?? '').toString(),
+          sourceOwnerId: ownerId,
           sourceConversationId: sourceConversationId,
           sourceScope: acceptedScope,
           sourceRevision: savedRevision,
           renderId: _assistantRenderId(requestId),
           characterId: _characterId ?? '',
+          characterName: existing?.characterName ?? '',
+          characterAvatar: existing?.characterAvatar ?? '',
           role: MessageRole.assistant,
           type: MessageType.text,
           content: text,
@@ -880,8 +888,8 @@ class ConversationRuntimeController extends ChangeNotifier {
           reasoningComplete: reasoningComplete,
           outputComplete: outputComplete,
           citationSnapshot: citationSnapshot,
-          time: time,
-          sequence: sequence,
+          time: existing?.time ?? time,
+          sequence: existing?.sequence ?? sequence,
           status: status,
           runtimeErrorDetail: terminalErrorDetail,
           assistantTurn: acceptedTurnId.isEmpty
@@ -1092,6 +1100,9 @@ class ConversationRuntimeController extends ChangeNotifier {
         }
       }
     } finally {
+      if (_liveOwnedSendRequestId == requestId) {
+        _liveOwnedSendRequestId = '';
+      }
       if (_ownedRequestId == requestId) {
         if (deliveryDetached && !_disposed) {
           _sending = true;
@@ -1221,6 +1232,7 @@ class ConversationRuntimeController extends ChangeNotifier {
           if (deliveryId.isEmpty || childRequestId.isEmpty) continue;
           final currentUser = _messages.findById(pending.id, sourceOwnerId: '');
           if (currentUser != null) {
+            _messages.remove(currentUser);
             _messages.upsert(
               _cloneMessage(
                 currentUser,
@@ -1517,6 +1529,13 @@ class ConversationRuntimeController extends ChangeNotifier {
     for (final dto in snapshot.messages) {
       final message = _messageFromDto(dto);
       snapshotMessageIds.add(message.id);
+      if (_liveOwnedSendRequestId.isNotEmpty &&
+          (message.id == '$_liveOwnedSendRequestId/user' ||
+              message.role == MessageRole.assistant &&
+                  message.renderId ==
+                      _assistantRenderId(_liveOwnedSendRequestId))) {
+        continue;
+      }
       final existing = message.deliveryId.isEmpty
           ? null
           : _messages.messages
@@ -1531,6 +1550,8 @@ class ConversationRuntimeController extends ChangeNotifier {
     _messages.removeWhere(
       (message) =>
           !snapshotMessageIds.contains(message.id) &&
+          !(_liveOwnedSendRequestId.isNotEmpty &&
+              message.id == '$_liveOwnedSendRequestId/user') &&
           !_isLiveAssistantMessage(message) &&
           !(_groupSending && message.deliveryId.isNotEmpty) &&
           message.status != MessageStatus.sending,
@@ -1571,6 +1592,7 @@ class ConversationRuntimeController extends ChangeNotifier {
     _hasMoreTurnHistory = snapshot.hasMoreTurns;
     final active = _agentReducer.turn(_agentReducer.activeTurnId);
     _sending =
+        _liveOwnedSendRequestId.isNotEmpty ||
         _groupSending ||
         active != null &&
             !_isGroupTurn(active.requestId) &&
@@ -1709,8 +1731,11 @@ class ConversationRuntimeController extends ChangeNotifier {
         type == 'turn.failed' ||
         type == 'turn.interrupted';
     if (terminal) {
-      if (!_groupSending && !groupTurn) _sending = false;
-      if (_ownedRequestId == event.requestId) {
+      if (_liveOwnedSendRequestId.isEmpty && !_groupSending && !groupTurn) {
+        _sending = false;
+      }
+      if (_ownedRequestId == event.requestId &&
+          _liveOwnedSendRequestId != event.requestId) {
         _ownedRequestId = '';
       }
       _conversationUpdateEpoch++;
@@ -1766,6 +1791,16 @@ class ConversationRuntimeController extends ChangeNotifier {
         continue;
       }
       activeRenderIds.add(renderId);
+      final existing = _messages.findByRenderId(
+        renderId,
+        role: MessageRole.assistant,
+      );
+      if (_liveOwnedSendRequestId.isNotEmpty &&
+          turn.requestId == _liveOwnedSendRequestId &&
+          existing != null) {
+        _messages.upsert(_cloneMessage(existing, assistantTurn: turn));
+        continue;
+      }
       AssistantTurnItemDto? finalItem;
       for (final item in turn.items.reversed) {
         if (item.type == 'text' && item.messageId.trim().isNotEmpty) {
@@ -1794,10 +1829,6 @@ class ConversationRuntimeController extends ChangeNotifier {
         }
       }
 
-      final existing = _messages.findByRenderId(
-        renderId,
-        role: MessageRole.assistant,
-      );
       final text = turn.items
           .where((item) => item.type == 'text')
           .map((item) => item.content)
@@ -1837,6 +1868,8 @@ class ConversationRuntimeController extends ChangeNotifier {
           sourceRevision: existing?.sourceRevision,
           renderId: renderId,
           characterId: characterId,
+          characterName: existing?.characterName ?? '',
+          characterAvatar: existing?.characterAvatar ?? '',
           role: MessageRole.assistant,
           type: MessageType.text,
           content: text,
@@ -1846,6 +1879,7 @@ class ConversationRuntimeController extends ChangeNotifier {
               existing?.time ??
               DateTime.tryParse(turn.createdAt) ??
               DateTime.now(),
+          sequence: existing?.sequence,
           status: status,
           assistantTurn: turn,
           runtimeErrorDetail: existing?.runtimeErrorDetail ?? '',

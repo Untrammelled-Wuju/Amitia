@@ -245,3 +245,86 @@ test("mobile management page ignores a standalone null error and preserves real 
     environment.restore();
   }
 });
+
+test("mobile management page surfaces activation state and runs enable, disable and remove", async () => {
+  const environment = installDom();
+  try {
+    const calls = [];
+    let status = {
+      targetDshVersion: "0.2.2-rc.2",
+      packageCount: 1,
+      enabledCount: 1,
+      compatibility: { implemented: 19 },
+      packages: [
+        {
+          pluginId: "demo/broken",
+          name: "Broken Plugin",
+          version: "3.0.0",
+          enabled: true,
+          active: false,
+          activationError: "Error: 启动失败: connect ECONNREFUSED 127.0.0.1:9",
+          entry: "index.js",
+          clientEntry: "",
+          mappedContributionCount: 0,
+        },
+      ],
+    };
+    window.confirm = () => true;
+    window.AmitiaHost = {
+      async invokeAction(actionId, input) {
+        calls.push({ actionId, input });
+        assert.equal(actionId, "command");
+        if (input.action === "status") return { ok: true, output: structuredClone(status) };
+        if (input.action === "set-enabled") {
+          status = {
+            ...status,
+            packages: status.packages.map((item) =>
+              item.pluginId === input.pluginId ? { ...item, enabled: input.enabled } : item,
+            ),
+          };
+          return { ok: true, output: { package: status.packages[0] } };
+        }
+        if (input.action === "remove") {
+          status = { ...status, packageCount: 0, enabledCount: 0, packages: [] };
+          return { ok: true, output: {} };
+        }
+        return {};
+      },
+      async resize(height) {
+        return { height };
+      },
+      subscribeContext() {
+        return () => {};
+      },
+    };
+
+    const { mount } = await import("../src/mobile-ui/index.mjs");
+    const root = document.getElementById("root");
+    const mounted = await mount(root, { platform: "android", host: "mobile" });
+    assert.match(root.textContent, /已启用·未运行/);
+    assert.match(root.textContent, /ECONNREFUSED 127\.0\.0\.1:9/);
+
+    const disable = Array.from(root.querySelectorAll("button")).find((item) => item.textContent === "停用");
+    assert.ok(disable);
+    disable.click();
+    await flush();
+    assert.ok(calls.some((call) => call.input.action === "set-enabled" && call.input.enabled === false));
+    assert.match(root.textContent, /已停用/);
+
+    const enable = Array.from(root.querySelectorAll("button")).find((item) => item.textContent === "启用");
+    assert.ok(enable);
+    enable.click();
+    await flush();
+    assert.ok(calls.some((call) => call.input.action === "set-enabled" && call.input.enabled === true));
+
+    const remove = Array.from(root.querySelectorAll("button")).find((item) => item.textContent === "移除");
+    assert.ok(remove);
+    remove.click();
+    await flush();
+    assert.ok(calls.some((call) => call.input.action === "remove" && call.input.pluginId === "demo/broken"));
+    assert.match(root.textContent, /尚未安装 DSH 子插件/);
+    mounted.dispose();
+  } finally {
+    environment.restore();
+  }
+});

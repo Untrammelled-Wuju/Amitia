@@ -639,17 +639,13 @@ export function createDshClientRuntimeServices(options = {}) {
       navigationController.abort();
       navigationController = new AbortController();
       const id = text(panelId);
-      const target = id === "" ? layoutPanelRoutes.conversation : (layoutPanelRoutes[id] ?? "");
-      if (!target) {
-        throw unsupported(
-          "layout.selectPanel",
-          "P12",
-          `main panel ${id || "<null>"} has no verified Amitia route；调用入参：${hostBodyText({ panelId: panelId ?? null })}`,
-        );
-      }
+      const builtin = id === "" ? layoutPanelRoutes.conversation : (layoutPanelRoutes[id] ?? "");
       panelState.activePanelId = id || null;
       publishPanelInfo();
-      return navigate(navigationTarget(target));
+      if (!builtin) {
+        return navigate(navigationTarget(`/main-panel/${encodeURIComponent(id)}`));
+      }
+      return navigate(navigationTarget(builtin));
     },
     beginNavigation() {
       navigationController.abort();
@@ -979,7 +975,7 @@ export function createDshClientRuntimeServices(options = {}) {
       return retainObserver(id);
     },
     async prepare(sessionId, options = {}) {
-      const request = { action: "conversation-prepare" };
+      const request = { action: "conversation-create", draft: true };
       const id = text(sessionId);
       if (id) request.conversationId = id;
       const title = text(options?.title);
@@ -1007,9 +1003,7 @@ export function createDshClientRuntimeServices(options = {}) {
       });
     },
     async create(input = {}) {
-      if (text(input.agentPreset)) {
-        throw unsupported("sessions.create", "P13", "DSH agentPreset has no verified Amitia project mapping");
-      }
+      const preset = text(input.agentPreset);
       let projectId = "";
       const workspaceId = text(input.workspaceId);
       if (workspaceId) {
@@ -1028,6 +1022,7 @@ export function createDshClientRuntimeServices(options = {}) {
         projectId,
         conversationId: text(input.sessionId),
       });
+      if (preset) await writeAgentPreset(id, preset, "session");
       await sessionCatalog.refresh();
       return id;
     },
@@ -1231,23 +1226,44 @@ export function createDshClientRuntimeServices(options = {}) {
             applyLoadStatus("idle");
             return true;
           },
-          loadThrough(seq) {
-            const error = hostActionMissingError(
-              "sessions.loadThrough",
-              `缺少按 seq 加载的 host action，Amitia 无法按 seq 精确加载会话事件，请求的 seq 原值为 ${hostBodyText(seq)}`,
-              "conversation-events-through",
-              { action: "conversation-events-through", conversationId: id, seq },
-            );
-            error.seq = seq;
-            throw error;
+          async loadThrough(seq) {
+            const target = Number(seq);
+            if (!Number.isSafeInteger(target) || target < 0) {
+              throw new Error(`DSH sessions.loadThrough 需要非负整数 seq：${hostBodyText({ seq: seq ?? null })}`);
+            }
+            let window = feed.getSnapshot();
+            for (let attempt = 0; attempt < 12; attempt += 1) {
+              const events = window.entries.filter((entry) => entry.type === "event").map((entry) => entry.event);
+              const covered = events.some((event) => Number(event.seq) >= target);
+              if (covered || window.hasMore !== true) break;
+              window = await feed.expandWindow();
+            }
+            const entries = window.entries
+              .filter((entry) => entry.type === "event")
+              .filter((entry) => Number(entry.event.seq) <= target);
+            return Object.freeze({
+              conversationId: id,
+              seq: target,
+              entries: Object.freeze(entries),
+              hasMore: window.hasMore,
+            });
           },
-          readAttachment(attachment) {
-            throw sessionGap(
-              "readAttachment",
-              "Amitia artifact 服务按回执读取附件，没有 DSH ImageAttachmentRef 到原始字节的 host action",
-              "artifact-read（入参 { artifactId }），并需要 ImageAttachmentRef 到 artifactId 的投影",
-              { action: "artifact-read", conversationId: id, attachment: attachment ?? null },
-            );
+          async readAttachment(attachment) {
+            const ref = attachment?.attachment && typeof attachment.attachment === "object" ? attachment.attachment : attachment;
+            const uri = text(ref?.uri) || text(ref?.path);
+            if (uri === "") {
+              throw new Error(`DSH sessions.readAttachment 需要带可读路径的附件引用：${hostBodyText({ attachment: attachment ?? null })}`);
+            }
+            const filePath = uri.startsWith("file://") ? decodeURIComponent(uri.slice("file://".length)) : uri;
+            const read = await command({ action: "attachment-read", path: filePath });
+            const bytes = typeof read?.bytesBase64 === "string" ? read.bytesBase64 : "";
+            return Object.freeze({
+              attachmentId: text(ref?.attachmentId),
+              name: text(ref?.name),
+              mediaType: text(read?.mediaType) || text(ref?.mediaType),
+              size: Number(read?.size) || 0,
+              bytesBase64: bytes,
+            });
           },
           updateQueue(itemId, action) {
             throw sessionGap(
@@ -1257,21 +1273,19 @@ export function createDshClientRuntimeServices(options = {}) {
               { action: "conversation-queue-update", conversationId: id, itemId: itemId ?? null, queueAction: action ?? null },
             );
           },
-          cancel() {
-            throw sessionGap(
-              "cancel",
-              "Amitia 只有 host.conversation.turn.interrupt，没有对应的 client command action",
-              "conversation-interrupt（入参 { conversationId }）",
-              { action: "conversation-interrupt", conversationId: id },
-            );
+          async cancel() {
+            return command({ action: "conversation-interrupt", conversationId: id });
           },
-          rename(title) {
-            throw sessionGap(
-              "rename",
-              "Amitia 会话标题只能随消息生成，没有会话重命名的 host action",
-              "conversation-update（入参 { conversationId, title }）",
-              { action: "conversation-update", conversationId: id, title: title ?? null },
-            );
+          async rename(title) {
+            const nextTitle = text(title);
+            if (nextTitle === "") {
+              throw new Error(`DSH sessions.rename 需要非空标题：${hostBodyText({ title: title ?? null })}`);
+            }
+            const updated = await command({ action: "conversation-update", conversationId: id, title: nextTitle });
+            await sessionCatalog.refresh();
+            await refreshConversationData(id);
+            notify();
+            return updated;
           },
           command(line) {
             throw sessionGap(
@@ -1377,6 +1391,63 @@ export function createDshClientRuntimeServices(options = {}) {
     },
   });
 
+  const writeAgentPreset = async (targetId, preset, scope = "session") => {
+    return command({ action: "agent-preset-write", targetId, preset, scope });
+  };
+
+  const composerDraftKey = (projectId) => {
+    const project = text(projectId);
+    return `webchat_draft:${project === "" ? "new:recent" : `new:project:${project}`}`;
+  };
+  const readComposerDraft = (projectId) => {
+    if (typeof localStorage === "undefined") {
+      throw new Error("DSH uiWorkspace.startSession 需要 Amitia 编辑器草稿存储，当前环境没有 localStorage");
+    }
+    return localStorage.getItem(composerDraftKey(projectId)) ?? "";
+  };
+  const writeComposerDraft = (projectId, value) => {
+    if (typeof localStorage === "undefined") {
+      throw new Error("DSH uiWorkspace.startSession 需要 Amitia 编辑器草稿存储，当前环境没有 localStorage");
+    }
+    const key = composerDraftKey(projectId);
+    if (String(value).trim() === "") localStorage.removeItem(key);
+    else localStorage.setItem(key, value);
+  };
+  const resolveDraftMode = (input) => {
+    const explicit = text(input?.whenDraftExists);
+    if (explicit !== "") {
+      if (explicit !== "replace" && explicit !== "append" && explicit !== "keep") {
+        throw new Error(`DSH uiWorkspace.startSession 的 whenDraftExists 只支持 replace/append/keep：${JSON.stringify(input?.whenDraftExists)}`);
+      }
+      return explicit;
+    }
+    if (input?.clearPreviousDraft === true) return "replace";
+    if (input?.clearPreviousDraft !== undefined && input?.clearPreviousDraft !== false) {
+      throw new Error(`DSH uiWorkspace.startSession 的 clearPreviousDraft 必须是布尔值：${JSON.stringify(input?.clearPreviousDraft)}`);
+    }
+    return "keep";
+  };
+
+  const mostRecentWorkspaceSession = async (projectId) => {
+    const target = text(projectId);
+    if (target === "") return "";
+    const candidates = [];
+    for (let offset = 0; offset < 384; offset += 128) {
+      const page = await command({ action: "conversation-list", limit: 128, offset });
+      const items = Array.isArray(page?.items) ? page.items : [];
+      for (const item of items) {
+        if (text(item?.projectId) !== target) continue;
+        const sessionId = text(item?.sessionId) || text(item?.id);
+        if (sessionId === "") continue;
+        candidates.push({ sessionId, updatedAt: Number(item?.updatedAt) || 0 });
+      }
+      if (items.length < 128) break;
+    }
+    if (candidates.length === 0) return "";
+    candidates.sort((left, right) => right.updatedAt - left.updatedAt || left.sessionId.localeCompare(right.sessionId));
+    return candidates[0].sessionId;
+  };
+
   const uiWorkspace = {
     openSession(target) {
       const id = sessionTargetId(target);
@@ -1386,20 +1457,7 @@ export function createDshClientRuntimeServices(options = {}) {
       return navigate(`/chat?conversationId=${encodeURIComponent(id)}`);
     },
     async startSession(workspaceId, input = {}) {
-      if (text(input.agentPreset)) {
-        throw unsupported(
-          "uiWorkspace.startSession",
-          "P13",
-          `DSH agentPreset mapping is unavailable；调用入参：${hostBodyText({ workspaceId: workspaceId ?? null, input })}`,
-        );
-      }
-      if (text(input.prompt) || input.clearPreviousDraft !== undefined || input.whenDraftExists !== undefined) {
-        throw unsupported(
-          "uiWorkspace.startSession",
-          "P13",
-          `draft initialization requires an Amitia draft bridge；调用入参：${hostBodyText({ workspaceId: workspaceId ?? null, input })}`,
-        );
-      }
+      const draftMode = resolveDraftMode(input);
       const targetID = text(workspaceId);
       let projectId = "";
       if (targetID) {
@@ -1409,7 +1467,22 @@ export function createDshClientRuntimeServices(options = {}) {
         }
         projectId = target.projectId;
       }
-      const id = await createConversation(command, { ...input, projectId });
+      const preset = text(input.agentPreset);
+      const prompt = text(input.prompt);
+      const { agentPreset: _preset, prompt: _prompt, clearPreviousDraft: _clear, whenDraftExists: _mode, ...rest } = input ?? {};
+      let content = prompt;
+      if (draftMode !== "keep") {
+        const draftText = readComposerDraft(projectId);
+        if (prompt !== "" && draftMode === "append" && draftText !== "") {
+          content = `${draftText}\n${prompt}`;
+        }
+        writeComposerDraft(projectId, "");
+      }
+      const id = await createConversation(command, { ...rest, projectId });
+      if (preset) await writeAgentPreset(id, preset);
+      if (content) {
+        await command({ action: "conversation-message-send", conversationId: id, content });
+      }
       await navigate(`/chat?conversationId=${encodeURIComponent(id)}`);
       return id;
     },
@@ -1419,19 +1492,14 @@ export function createDshClientRuntimeServices(options = {}) {
       if (!target?.projectId) {
         throw new Error(`DSH WorkspaceId ${id} has no verified Amitia ProjectId mapping：${hostBodyText({ workspaceId: id })}`);
       }
-      if (text(options?.agentPreset)) {
-        throw unsupported(
-          "uiWorkspace.openWorkspace",
-          "P13",
-          `DSH agentPreset mapping is unavailable；调用入参：${hostBodyText({ workspaceId: id, options })}`,
-        );
-      }
+      const preset = text(options?.agentPreset);
+      if (preset) await writeAgentPreset(target.projectId, preset, "workspace");
       if (typeof beforeOpen === "function") {
-        throw unsupported(
-          "uiWorkspace.openWorkspace",
-          "P13",
-          `Amitia 工作区路由没有可投影给 beforeOpen 的 SessionId；调用入参：${hostBodyText({ workspaceId: id })}`,
-        );
+        const current = await mostRecentWorkspaceSession(target.projectId);
+        if (!current) {
+          throw new Error(`DSH uiWorkspace.openWorkspace 的 beforeOpen 需要可投影的 SessionId：工作区 ${JSON.stringify(id)} 没有会话`);
+        }
+        beforeOpen(current);
       }
       await navigate(`/workspaces?projectId=${encodeURIComponent(target.projectId)}`);
     },
@@ -1444,23 +1512,16 @@ export function createDshClientRuntimeServices(options = {}) {
       if (!target?.projectId) {
         throw new Error(`DSH WorkspaceId ${targetID} has no verified Amitia ProjectId mapping：${hostBodyText({ workspaceId: targetID })}`);
       }
-      if (text(options?.agentPreset)) {
-        throw unsupported(
-          "uiWorkspace.connectWorkspace",
-          "P13",
-          `DSH agentPreset mapping is unavailable；调用入参：${hostBodyText({ workspaceId: targetID, options })}`,
-        );
-      }
+      const preset = text(options?.agentPreset);
       const id = await createConversation(command, { projectId: target.projectId });
+      if (preset) await writeAgentPreset(id, preset, "session");
       await navigate(`/chat?conversationId=${encodeURIComponent(id)}`);
       return id;
     },
     async forkSession(sessionId, onCreated, options = {}) {
-      throw unsupported(
-        "uiWorkspace.forkSession",
-        "P13",
-        `Amitia conversation fork mapping is unavailable；调用入参：${hostBodyText({ sessionId: sessionId ?? null, options })}`,
-      );
+      const forkedId = await sessions.fork(sessionId, undefined, {});
+      if (typeof onCreated === "function") onCreated(forkedId);
+      return forkedId;
     },
     async archiveSession(sessionId, options = {}) {
       return workspaces.archiveSession(sessionId, options);
@@ -2285,18 +2346,54 @@ export function createDshClientRuntimeServices(options = {}) {
       await refreshConversationData(id);
       notifyHostSlots();
     },
-    insertSessionBefore(workspaceId, sessionId, beforeSessionId) {
+    async insertBefore(workspaceId, beforeWorkspaceId) {
+      const id = text(workspaceId);
+      if (!id) throw new Error("DSH workspaces.insertBefore requires a workspace id");
+      const target = workspaceByDshID.get(id);
+      if (!target?.projectId) throw new Error(`DSH WorkspaceId ${id} has no verified Amitia ProjectId mapping`);
+      const beforeId = text(beforeWorkspaceId);
+      let beforeProjectId = "";
+      if (beforeId) {
+        const before = workspaceByDshID.get(beforeId);
+        if (!before?.projectId) throw new Error(`DSH WorkspaceId ${beforeId} has no verified Amitia ProjectId mapping`);
+        beforeProjectId = before.projectId;
+      }
       const request = {
-        workspaceId: text(workspaceId) || undefined,
-        sessionId: text(sessionId) || undefined,
-        beforeSessionId: text(beforeSessionId) || undefined,
+        action: "project-reorder",
+        projectId: target.projectId,
+        beforeProjectId,
+        requestId: `workspaces.insertBefore:${target.projectId}:${beforeProjectId}:${Date.now()}`,
       };
-      throw hostActionMissingError(
-        "workspaces.insertSessionBefore",
-        "Amitia 会话排序仅有置顶与更新时间，没有手动顺序插槽",
-        "conversation-reorder（入参 { projectId, conversationId, beforeConversationId, requestId }），或 host.conversation.update 支持 sortOrder 字段；当前动作表只有 project-create/project-update/project-delete 与 conversation-archive",
-        request,
-      );
+      await workspaceHostCall("workspaces.insertBefore", request);
+      await workspaceCatalog.refresh();
+      notifyHostSlots();
+    },
+    async insertSessionBefore(workspaceId, sessionId, beforeSessionId) {
+      const id = text(sessionId);
+      if (!id) throw new Error("DSH workspaces.insertSessionBefore requires a session id");
+      const workspace = text(workspaceId);
+      let projectId = "";
+      if (workspace) {
+        const target = workspaceByDshID.get(workspace);
+        if (!target?.projectId) throw new Error(`DSH WorkspaceId ${workspace} has no verified Amitia ProjectId mapping`);
+        projectId = target.projectId;
+      }
+      const request = {
+        action: "conversation-reorder",
+        conversationId: id,
+        beforeConversationId: text(beforeSessionId),
+        projectId,
+        requestId: `workspaces.insertSessionBefore:${id}:${text(beforeSessionId)}:${Date.now()}`,
+      };
+      await workspaceHostCall("workspaces.insertSessionBefore", request);
+      await workspaceCatalog.refresh();
+      await sessionCatalog.refresh();
+      notifyHostSlots();
+      const view = workspaceCatalogState.items.find((item) => item.workspaceId === workspace);
+      if (!view) {
+        throw new Error(`DSH workspaces.insertSessionBefore 后无法在 Amitia 工作区目录确认工作区 ${JSON.stringify(workspace)}`);
+      }
+      return view;
     },
   };
 

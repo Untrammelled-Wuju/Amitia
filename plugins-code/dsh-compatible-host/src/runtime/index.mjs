@@ -28,6 +28,7 @@ import { assertSessionStateVersion, restoreSessionEvents } from "./session-event
 import { pluginDataRootFromPackageDir, providerConfig } from "./provider-wiring.mjs";
 import { runModelDiagnose } from "./diagnose.mjs";
 import * as modelAdapterModule from "./model-adapter.mjs";
+import { createHash } from "node:crypto";
 
 const activePlugins = new Map();
 const activationFailures = new Map();
@@ -164,8 +165,10 @@ async function deactivatePromptProvider() {
 
 async function activatePackage(record, context = null) {
   await deactivatePackage(record.pluginId);
-  const services = context?.host ? createAmitiaDshHostServices(context.host, promptState.sections, promptState) : {};
+  const runtimeHooks = {};
+  const services = context?.host ? createAmitiaDshHostServices(context.host, promptState.sections, promptState, runtimeHooks) : {};
   const containerContext = resolveContainer(context, services);
+  runtimeHooks.context = containerContext;
   const config = await providerConfig(record.pluginId, pluginDataRootFromPackageDir(record.packageDir));
   const runtimes = [];
   const registrations = [];
@@ -314,6 +317,9 @@ function clientSourceChunk(source, request) {
     ...(source.installedOnly ? { installedOnly: true } : {}),
   };
 }
+
+const inlineScripts = new Map();
+let inlineScriptRouteReady = false;
 
 const clientDependencyCache = new Map();
 
@@ -606,6 +612,64 @@ export async function command(host, input) {
         }),
       };
     }
+    case "web-inline-script": {
+      const code = String(request.code ?? "");
+      if (code.trim() === "") throw new Error("web-inline-script 需要 code");
+      const { sharedDshWebServer } = await import("./web-server.mjs");
+      const webServer = sharedDshWebServer();
+      if (!inlineScriptRouteReady) {
+        inlineScriptRouteReady = true;
+        webServer.register({
+          kind: "prefix",
+          path: "/dsh-inline",
+          handler: (req, res) => {
+            const name = new URL(req.url ?? "/", "http://127.0.0.1").pathname.replace(/^\/dsh-inline\//, "").replace(/\.js$/, "");
+            const body = inlineScripts.get(name);
+            if (body === undefined) {
+              res.statusCode = 404;
+              res.end("not found");
+              return;
+            }
+            res.setHeader("Content-Type", "text/javascript; charset=utf-8");
+            res.setHeader("Cache-Control", "no-store");
+            res.end(body);
+          },
+        });
+      }
+      const hash = createHash("sha256").update(code).digest("hex").slice(0, 32);
+      inlineScripts.set(hash, code);
+      const origin = await webServer.ensureStarted();
+      return { url: `${origin}/dsh-inline/${hash}.js`, hash };
+    }
+    case "client-locale": {
+      const pluginId = String(request.pluginId || "").trim();
+      if (!pluginId) throw new Error("client-locale 需要 pluginId");
+      const snapshot = await readState(host);
+      const record = snapshot.state.packages.find((item) => item.pluginId === pluginId);
+      if (!record) throw new Error(`DSH 插件 ${pluginId} 未登记`);
+      const { readdir, readFile } = await import("node:fs/promises");
+      const { join } = await import("node:path");
+      const dir = join(record.packageDir, "locale");
+      let files = [];
+      try {
+        files = (await readdir(dir)).filter((name) => name.endsWith(".json"));
+      } catch (error) {
+        if (error?.code !== "ENOENT") throw error;
+        return { pluginId, locales: {} };
+      }
+      const locales = {};
+      for (const file of files) {
+        const language = file.replace(/\.json$/, "");
+        locales[language] = JSON.parse(await readFile(join(dir, file), "utf8"));
+      }
+      return { pluginId, locales };
+    }
+    case "web-index-injection": {
+      const { sharedDshWebServer } = await import("./web-server.mjs");
+      const webServer = sharedDshWebServer();
+      const origin = await webServer.ensureStarted();
+      return { origin, paths: webServer.routePaths(), html: webServer.renderIndex("<!doctype html><html><head></head><body></body></html>") };
+    }
     case "client-source": {
       const snapshot = await readState(host);
       const requestedPluginId = String(request.pluginId || "").trim();
@@ -624,20 +688,32 @@ export async function command(host, input) {
         peerId: String(request.peerId || "").trim(),
         requestId: String(request.requestId || "").trim(),
       };
+      const draft = request.draft === true;
+      if (draft) createInput.draft = true;
       const requestedConversationId = String(request.conversationId || "").trim();
       if (requestedConversationId) {
-        const existing = await ownedConversation(host, requestedConversationId);
-        if (existing) {
-          return {
-            conversationId: requestedConversationId,
-            scopeSnapshotId: await conversationScopeSnapshotId(host, requestedConversationId),
-          };
+        if (!draft) {
+          const existing = await ownedConversation(host, requestedConversationId);
+          if (existing) {
+            return {
+              conversationId: requestedConversationId,
+              scopeSnapshotId: await conversationScopeSnapshotId(host, requestedConversationId),
+            };
+          }
         }
         createInput.conversationId = requestedConversationId;
       }
       const result = await host.call("host.conversation.create", createInput);
       const conversationId = String(result?.conversationId || result?.sessionId || result?.id || "");
       if (!conversationId) throw new Error(`Amitia host.conversation.create returned no conversation id: ${JSON.stringify(result)}`);
+      if (draft) {
+        return {
+          conversationId,
+          draft: true,
+          preparedAt: String(result?.preparedAt || ""),
+          title: String(result?.title || ""),
+        };
+      }
       const scopeSnapshotId = String(result?.scopeSnapshotId || "").trim();
       if (!scopeSnapshotId) throw new Error(`Amitia host.conversation.create returned no scope snapshot id: ${JSON.stringify(result)}`);
       return { conversationId, scopeSnapshotId };
@@ -702,6 +778,100 @@ export async function command(host, input) {
         : host.call("host.conversation.read", input);
       return await result;
     }
+    case "conversation-interrupt": {
+      const conversationId = String(request.conversationId || "").trim();
+      if (!conversationId) throw new Error("conversationId 不能为空");
+      const input = { conversationId };
+      const turnId = String(request.turnId || "").trim();
+      if (turnId) input.turnId = turnId;
+      const scopeSnapshotId = await conversationScopeSnapshotId(host, conversationId);
+      return scopeSnapshotId && typeof host.callTargeted === "function"
+        ? host.callTargeted("host.conversation.turn.interrupt", input, scopeSnapshotId)
+        : host.call("host.conversation.turn.interrupt", input);
+    }
+    case "attachment-read": {
+      const raw = String(request.path || "").trim();
+      if (!raw) throw new Error("attachment-read 需要 path");
+      const { readFile } = await import("node:fs/promises");
+      const { resolve, sep } = await import("node:path");
+      const os = await import("node:os");
+      const root = resolve(os.tmpdir(), "amitia-dsh-attachments") + sep;
+      const target = resolve(raw);
+      if (!target.startsWith(root)) {
+        throw new Error(`attachment-read 只允许读取附件落盘目录 ${root} 下的文件，收到 ${target}`);
+      }
+      const bytes = await readFile(target);
+      const extension = target.slice(target.lastIndexOf(".") + 1).toLowerCase();
+      const mediaType = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp", gif: "image/gif", pdf: "application/pdf", txt: "text/plain", md: "text/markdown", json: "application/json" }[extension] || "application/octet-stream";
+      return { path: target, size: bytes.byteLength, mediaType, bytesBase64: bytes.toString("base64") };
+    }
+    case "session-projection": {
+      const conversationId = String(request.conversationId || "").trim();
+      if (!conversationId) throw new Error("conversationId 不能为空");
+      const limit = Number(request.limit) || 200;
+      const { buildSessionProjection, foldSessionSurface, messagePlainText } = await import("./session-projection.mjs");
+      const scopeSnapshotId = await conversationScopeSnapshotId(host, conversationId);
+      const call = (method, input) => (scopeSnapshotId && typeof host.callTargeted === "function"
+        ? host.callTargeted(method, input, scopeSnapshotId)
+        : host.call(method, input));
+      const [messagesResponse, turnsResponse] = await Promise.all([
+        call("host.conversation.read", { conversationId, limit, offset: 0 }),
+        call("host.conversation.turns", { conversationId, limit: 200 }),
+      ]);
+      const projection = buildSessionProjection({
+        conversationId,
+        messages: Array.isArray(messagesResponse?.messages) ? messagesResponse.messages : [],
+        turns: Array.isArray(turnsResponse?.turns) ? turnsResponse.turns : [],
+      });
+      const folded = foldSessionSurface(projection.events);
+      const messages = [...folded.messages.values()];
+      return {
+        conversationId,
+        events: projection.events.length,
+        surfaceNodes: folded.nodes.length,
+        messages: messages.map((message) => ({
+          id: message.id,
+          role: message.role,
+          blocks: message.content.map((block) => block.type),
+          text: messagePlainText(message).slice(0, 200),
+        })),
+      };
+    }
+    case "conversation-update": {
+      const conversationId = String(request.conversationId || "").trim();
+      const title = String(request.title || "").trim();
+      if (!conversationId) throw new Error("conversationId 不能为空");
+      if (!title) throw new Error("title 不能为空");
+      const input = { conversationId, title };
+      const requestId = String(request.requestId || "").trim();
+      if (requestId) input.requestId = requestId;
+      const scopeSnapshotId = await conversationScopeSnapshotId(host, conversationId);
+      return scopeSnapshotId && typeof host.callTargeted === "function"
+        ? host.callTargeted("host.conversation.update", input, scopeSnapshotId)
+        : host.call("host.conversation.update", input);
+    }
+    case "conversation-steer": {
+      const conversationId = String(request.conversationId || "").trim();
+      const steerInput = String(request.input || "");
+      if (!conversationId) throw new Error("conversationId 不能为空");
+      if (!steerInput.trim()) throw new Error("转向内容不能为空");
+      const input = { conversationId, input: steerInput };
+      const turnId = String(request.turnId || "").trim();
+      if (turnId) input.turnId = turnId;
+      const scopeSnapshotId = await conversationScopeSnapshotId(host, conversationId);
+      return scopeSnapshotId && typeof host.callTargeted === "function"
+        ? host.callTargeted("host.conversation.turn.steer", input, scopeSnapshotId)
+        : host.call("host.conversation.turn.steer", input);
+    }
+    case "conversation-turns": {
+      const conversationId = String(request.conversationId || "").trim();
+      if (!conversationId) throw new Error("conversationId 不能为空");
+      const input = { conversationId, limit: Number(request.limit) || 50 };
+      const scopeSnapshotId = await conversationScopeSnapshotId(host, conversationId);
+      return scopeSnapshotId && typeof host.callTargeted === "function"
+        ? host.callTargeted("host.conversation.turns", input, scopeSnapshotId)
+        : host.call("host.conversation.turns", input);
+    }
     case "conversation-message-send": {
       const conversationId = String(request.conversationId || "").trim();
       if (!conversationId) throw new Error("conversationId 不能为空");
@@ -723,6 +893,29 @@ export async function command(host, input) {
         ? host.callTargeted("host.conversation.message.send", input, scopeSnapshotId)
         : host.call("host.conversation.message.send", input);
       return await result;
+    }
+    case "agent-preset-write": {
+      const target = String(request.targetId || "").trim();
+      const preset = String(request.preset || "").trim();
+      const scope = String(request.scope || "session").trim();
+      if (!target || !preset) throw new Error("agent-preset-write 需要 targetId 与 preset");
+      const key = scope === "workspace" ? `dsh-workspace-preset:${target}` : `dsh-session-preset:${target}`;
+      const current = await host.call("host.state.get", { key });
+      const result = await host.call("host.state.cas", {
+        key,
+        expectedVersion: Number(current?.version) || 0,
+        newValue: { version: 1, preset, updatedAt: new Date().toISOString() },
+      });
+      if (!result?.swapped) throw new Error(`agent preset 写入失败：${key} 版本冲突`);
+      return { key, preset, scope };
+    }
+    case "agent-preset-read": {
+      const target = String(request.targetId || "").trim();
+      const scope = String(request.scope || "session").trim();
+      if (!target) throw new Error("agent-preset-read 需要 targetId");
+      const key = scope === "workspace" ? `dsh-workspace-preset:${target}` : `dsh-session-preset:${target}`;
+      const current = await host.call("host.state.get", { key });
+      return current?.found ? { key, preset: String(current.value?.preset || "") } : { key, preset: "" };
     }
     case "conversation-search": {
       const query = String(request.query || "").trim();
@@ -746,24 +939,6 @@ export async function command(host, input) {
       const deleted = await result;
       await host.call("host.state.delete", { key: `dsh-session:${conversationId}` });
       return deleted;
-    }
-    case "conversation-prepare": {
-      const prepareInput = {
-        title: String(request.title || "").trim(),
-        requestId: String(request.requestId || "").trim(),
-      };
-      const preparedConversationId = String(request.conversationId || "").trim();
-      if (preparedConversationId) prepareInput.conversationId = preparedConversationId;
-      if (!prepareInput.requestId) prepareInput.requestId = `dsh-prepare-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-      const result = await host.call("host.conversation.prepare", prepareInput);
-      const conversationId = String(result?.conversationId || result?.sessionId || result?.id || "");
-      if (!conversationId) throw new Error(`Amitia host.conversation.prepare returned no conversation id: ${JSON.stringify(result)}`);
-      return {
-        conversationId,
-        draft: result?.draft !== false,
-        preparedAt: String(result?.preparedAt || ""),
-        title: String(result?.title || ""),
-      };
     }
     case "conversation-fork": {
       const conversationId = String(request.conversationId || "").trim();
@@ -840,6 +1015,32 @@ export async function command(host, input) {
           : item));
       }
       return result;
+    }
+    case "project-reorder": {
+      const projectId = String(request.projectId || "").trim();
+      if (!projectId) throw new Error("project-reorder projectId 不能为空");
+      const result = await host.call("host.project.reorder", {
+        ...projectScopeInput(request),
+        projectId,
+        beforeProjectId: String(request.beforeProjectId || "").trim(),
+        requestId: String(request.requestId || "").trim(),
+      });
+      return result;
+    }
+    case "conversation-reorder": {
+      const conversationId = String(request.conversationId || "").trim();
+      if (!conversationId) throw new Error("conversation-reorder 需要 conversationId");
+      const input = {
+        conversationId,
+        beforeConversationId: String(request.beforeConversationId || "").trim(),
+        projectId: String(request.projectId || "").trim(),
+        requestId: String(request.requestId || "").trim(),
+      };
+      const scopeSnapshotId = String(request.scopeSnapshotId || "").trim() || await conversationScopeSnapshotId(host, conversationId);
+      const result = scopeSnapshotId && typeof host.callTargeted === "function"
+        ? host.callTargeted("host.conversation.reorder", input, scopeSnapshotId)
+        : host.call("host.conversation.reorder", input);
+      return await result;
     }
     case "project-delete": {
       const projectId = String(request.projectId || "").trim();

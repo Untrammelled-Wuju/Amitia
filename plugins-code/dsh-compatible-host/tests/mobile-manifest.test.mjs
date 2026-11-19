@@ -70,3 +70,24 @@ test("uses the panel contract for the complete conversation region", () => {
   assert.equal(contribution.spec.kind, "panel");
   assert.equal(contribution.spec.slot.slot_id, "provider.conversation.messages");
 });
+
+test("registers the DSH management page in the mobile extension entry group", () => {
+  const navigation = contributions.find((item) => item.id === "dsh-compatible-mobile-navigation");
+  assert.ok(navigation);
+  assert.equal(navigation.kind, "ui_provider");
+  assert.equal(navigation.spec.capability, "app.navigation");
+  for (const platform of ["android", "ios", "mobile"]) {
+    assert.equal(navigation.spec.entries[platform].type, "declarative");
+  }
+  const item = navigation.spec.metadata.navigationItems[0];
+  assert.equal(item.label, "DSH 插件管理");
+  assert.equal(item.icon, "extension");
+  assert.equal(
+    item.route,
+    "/extension/page/dsh-compatible-mobile-page?extensionId=com.amitia%2Fdsh-compatible-host",
+  );
+  const page = contributions.find((entry) => entry.id === "dsh-compatible-mobile-page");
+  assert.ok(page);
+  assert.ok(page.spec.visibility.platforms.includes("android"));
+  assert.ok(page.spec.visibility.platforms.includes("ios"));
+});

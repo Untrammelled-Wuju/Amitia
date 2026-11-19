@@ -44,8 +44,8 @@ func (p *meshLocalDataPort) managedConversationAction(ctx context.Context, scope
 			break
 		}
 	}
-	if request.Operation == "conversation/create" || request.Operation == "conversation/prepare" {
-		return p.createManagedConversation(ctx, scope, role, request, records, request.Operation == "conversation/prepare" || request.Draft)
+	if request.Operation == "conversation/create" {
+		return p.createManagedConversation(ctx, scope, role, request, records, request.Draft)
 	}
 	if target == nil {
 		return nil, errors.New("会话不存在或不属于当前角色")
@@ -88,7 +88,7 @@ func (p *meshLocalDataPort) managedConversationAction(ctx context.Context, scope
 		if *request.Archived {
 			archivedAt = time.Now().UTC().Format(time.RFC3339Nano)
 		}
-		target.Body["archivedAt"], target.Body["updatedAt"] = archivedAt, time.Now().UTC().Format(time.RFC3339Nano)
+		target.Body["archived"], target.Body["archivedAt"], target.Body["updatedAt"] = *request.Archived, archivedAt, time.Now().UTC().Format(time.RFC3339Nano)
 		encoded, err := json.Marshal(target.Body)
 		if err != nil {
 			return nil, err
@@ -120,6 +120,8 @@ func (p *meshLocalDataPort) managedConversationAction(ctx context.Context, scope
 			return nil, err
 		}
 		return target.Body, nil
+	case "conversation/reorder":
+		return p.reorderManagedConversation(ctx, scope, role, request, records)
 	case "conversation/fork":
 		rows, err := p.store.List(ctx, "message", role, false)
 		if err != nil {
@@ -183,6 +185,38 @@ func (p *meshLocalDataPort) managedConversationAction(ctx context.Context, scope
 	return nil, errors.New("未知会话操作")
 }
 
+func (p *meshLocalDataPort) nextConversationOrder(ctx context.Context, role string) (int64, error) {
+	rows, err := p.store.List(ctx, "conversation", role, false)
+	if err != nil {
+		return 0, fmt.Errorf("读取会话排序失败: %w", err)
+	}
+	maxOrder := int64(0)
+	for _, row := range rows {
+		if row.Deleted {
+			continue
+		}
+		var document map[string]any
+		if err := json.Unmarshal(row.Body, &document); err != nil {
+			return 0, fmt.Errorf("会话数据格式无效: %w", err)
+		}
+		order, _ := document["order"].(float64)
+		if candidate := conversationSortOrder(int64(order), chatManagementString(document, "createdAt")); candidate > maxOrder {
+			maxOrder = candidate
+		}
+	}
+	return maxOrder + 1024, nil
+}
+
+func conversationSortOrder(order int64, createdAt string) int64 {
+	if order > 0 {
+		return order
+	}
+	if parsed, err := time.Parse(time.RFC3339Nano, createdAt); err == nil {
+		return parsed.UnixMilli()
+	}
+	return 1
+}
+
 func (p *meshLocalDataPort) createManagedConversation(ctx context.Context, scope coordination.ExecutionScope, role string, request coordination.ChatManagementRequest, records []ownedChatManagementRecord, draft bool) (map[string]any, error) {
 	encodedInput, _ := json.Marshal([]string{request.Title, request.ProjectID, request.Channel, request.PeerID})
 	inputHash := sha256.Sum256(encodedInput)
@@ -228,7 +262,11 @@ func (p *meshLocalDataPort) createManagedConversation(ctx context.Context, scope
 	if title == "" {
 		title = "新对话"
 	}
-	document := map[string]any{"id": id, "conversationId": id, "characterId": role, "title": title, "channel": request.Channel, "peerId": request.PeerID, "source": "agent_tool", "createdAt": now, "updatedAt": now, "creationRequestId": request.RequestID}
+	nextOrder, err := p.nextConversationOrder(ctx, role)
+	if err != nil {
+		return nil, err
+	}
+	document := map[string]any{"id": id, "conversationId": id, "characterId": role, "title": title, "channel": request.Channel, "peerId": request.PeerID, "source": "agent_tool", "createdAt": now, "updatedAt": now, "order": nextOrder, "creationRequestId": request.RequestID}
 	document["creationFingerprint"] = fingerprint
 	if draft {
 		document["draft"], document["preparedAt"] = true, now
@@ -251,9 +289,95 @@ func (p *meshLocalDataPort) createManagedConversation(ctx context.Context, scope
 	digest := sha256.Sum256([]byte(request.RequestID))
 	prefix := "create-chat/"
 	if draft {
-		prefix = "prepare-chat/"
+		prefix = "draft-chat/"
 	}
 	current.RequestID = prefix + hex.EncodeToString(digest[:])
 	_, err = p.store.Apply(ctx, coordination.Commit{Scope: current, Mutations: []coordination.Mutation{{Kind: "conversation", ID: id, RoleID: role, Body: encoded}}})
 	return document, err
+}
+
+func conversationOrderOf(row map[string]any) int64 {
+	var order int64
+	switch value := row["order"].(type) {
+	case float64:
+		order = int64(value)
+	case int64:
+		order = value
+	case int:
+		order = int64(value)
+	}
+	return conversationSortOrder(order, chatManagementString(row, "createdAt"))
+}
+
+func (p *meshLocalDataPort) reorderManagedConversation(ctx context.Context, scope coordination.ExecutionScope, role string, request coordination.ChatManagementRequest, records []ownedChatManagementRecord) (map[string]any, error) {
+	projectID := strings.TrimSpace(request.ProjectID)
+	byID := map[string]*ownedChatManagementRecord{}
+	entries := make([]orderPlanEntry, 0, len(records))
+	found := false
+	for index := range records {
+		row := &records[index]
+		if row.Kind != "conversation" {
+			continue
+		}
+		byID[row.ID] = row
+		if chatManagementString(row.Body, "projectId") != projectID {
+			continue
+		}
+		if chatManagementBool(row.Body, "draft") || chatManagementBool(row.Body, "archived") || chatManagementString(row.Body, "archivedAt") != "" {
+			continue
+		}
+		entries = append(entries, orderPlanEntry{ID: row.ID, Order: conversationOrderOf(row.Body)})
+		found = found || row.ID == request.ConversationID
+	}
+	if !found {
+		return nil, errors.New("会话不在可排序范围")
+	}
+	plan, err := planSparseOrder(entries, request.ConversationID, strings.TrimSpace(request.BeforeConversationID), orderPlanStep)
+	if err != nil {
+		return nil, err
+	}
+	for index, change := range plan {
+		row := byID[change.ID]
+		if row == nil {
+			return nil, fmt.Errorf("会话 %q 不在当前角色内", change.ID)
+		}
+		if chatManagementString(row.Body, "projectId") != projectID {
+			return nil, fmt.Errorf("会话 %q 不属于当前工作区", change.ID)
+		}
+		document := make(map[string]any, len(row.Body)+1)
+		for key, value := range row.Body {
+			document[key] = value
+		}
+		document["order"] = change.Order
+		encoded, err := json.Marshal(document)
+		if err != nil {
+			return nil, err
+		}
+		current := scope
+		digest := sha256.Sum256([]byte(fmt.Sprintf("%s\x00%d", request.RequestID, index)))
+		current.RequestID = "reorder-chat/" + hex.EncodeToString(digest[:])
+		if _, err := p.store.Apply(ctx, coordination.Commit{Scope: current, Mutations: []coordination.Mutation{{Kind: "conversation", ID: row.ID, RoleID: role, ExpectedRevision: row.Revision, Body: encoded}}}); err != nil {
+			return nil, err
+		}
+		row.Revision++
+		row.Body = document
+	}
+	ordered := make([]orderPlanEntry, 0, len(entries))
+	for _, entry := range entries {
+		if row := byID[entry.ID]; row != nil {
+			entry.Order = conversationOrderOf(row.Body)
+		}
+		ordered = append(ordered, entry)
+	}
+	sort.SliceStable(ordered, func(i, j int) bool {
+		if ordered[i].Order != ordered[j].Order {
+			return ordered[i].Order < ordered[j].Order
+		}
+		return ordered[i].ID < ordered[j].ID
+	})
+	ids := make([]string, 0, len(ordered))
+	for _, entry := range ordered {
+		ids = append(ids, entry.ID)
+	}
+	return map[string]any{"conversationIds": ids, "order": conversationOrderOf(byID[request.ConversationID].Body), "projectId": projectID}, nil
 }

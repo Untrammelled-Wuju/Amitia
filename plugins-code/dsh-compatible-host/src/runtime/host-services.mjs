@@ -10,6 +10,8 @@ import {
   restoreSessionEvents,
 } from "./session-events.mjs";
 import { createCommandsService, createCredentialsService, createSessionQueryService } from "./host-service-bridges.mjs";
+import { buildSessionProjection, foldSessionSurface } from "./session-projection.mjs";
+import { sharedDshWebServer } from "./web-server.mjs";
 import { randomUUID } from "node:crypto";
 import { approvalPromptText } from "./approval-bridge.mjs";
 import { createDshScheduleDefinition, mapDshScheduleCatalog, updateDshScheduleDefinition } from "./schedule-adapter.mjs";
@@ -237,15 +239,123 @@ function workspaceOperations(call, prefix) {
 
 function createWorkspaceFilesService(call) {
   const operations = workspaceOperations(call, "workspaceFiles");
+  const read = (operation, payload) => call("host.workspace.read", { operation, payload });
+  const directoryListingOf = async (sessionId, target, absolutePath) => {
+    const listing = await read("file_list", { sessionId, path: target });
+    const entries = (Array.isArray(listing?.entries) ? listing.entries : [])
+      .map((child) => ({ name: text(child?.name), type: text(child?.type), size: Number(child?.size) }))
+      .filter((child) => child.name !== "");
+    const children = new Map();
+    let cursor = 0;
+    const worker = async () => {
+      for (;;) {
+        const index = cursor;
+        cursor += 1;
+        const child = entries[index];
+        if (!child) return;
+        const childPath = joinWatchPath(absolutePath, child.name);
+        if (child.type !== "file") {
+          children.set(child.name, { version: child.type, absolutePath: childPath });
+          continue;
+        }
+        const stat = await read("file_stat", { sessionId, path: childPath });
+        children.set(child.name, { version: text(stat?.version), absolutePath: text(stat?.absolutePath) || childPath });
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(WORKSPACE_WATCH_STAT_CONCURRENCY, entries.length) }, worker));
+    return children;
+  };
+  const snapshotOf = async (sessionId, target) => {
+    const { parent, name } = splitWatchPath(target);
+    const listing = await read("file_list", { sessionId, path: parent });
+    const entries = Array.isArray(listing?.entries) ? listing.entries : [];
+    const entry = entries.find((item) => text(item?.name) === name);
+    const absolutePath = joinWatchPath(parent, name);
+    if (!entry) return { kind: "absent", absolutePath };
+    if (text(entry?.type) !== "directory") {
+      const stat = await read("file_stat", { sessionId, path: target });
+      return { kind: "file", absolutePath: text(stat?.absolutePath) || absolutePath, version: text(stat?.version) };
+    }
+    return { kind: "directory", absolutePath, entries: await directoryListingOf(sessionId, target, absolutePath) };
+  };
+  const diffSnapshots = (previous, next) => {
+    if (next.kind === "absent") {
+      return previous.kind === "absent" ? [] : [{ absolutePath: next.absolutePath, absent: true }];
+    }
+    if (next.kind === "file") {
+      if (previous.kind === "file" && previous.version === next.version) return [];
+      return [{ absolutePath: next.absolutePath, version: next.version }];
+    }
+    const before = previous.kind === "directory" ? previous.entries : new Map();
+    const changes = [];
+    for (const [name, entry] of next.entries) {
+      const previousEntry = before.get(name);
+      if (!previousEntry || previousEntry.version !== entry.version) {
+        changes.push({ absolutePath: entry.absolutePath, version: entry.version });
+      }
+    }
+    for (const [name, entry] of before) {
+      if (!next.entries.has(name)) changes.push({ absolutePath: entry.absolutePath, absent: true });
+    }
+    changes.sort((left, right) => left.absolutePath.localeCompare(right.absolutePath));
+    return changes;
+  };
   return {
     ...operations,
-    changes: seamThrower({
-      method: "workspaceFiles.changes",
-      capability: "工作区目录与文件变更帧",
-      expectation: "持续输出 DSH ready/change 帧",
-      missing: "host.workspace.watch（host.workspace.read 只有 file_list/file_search/file_stat/file_read_text/file_read_bytes，没有变更订阅操作）",
-    }),
+    async *changes(request = {}, signal) {
+      const input = typeof request === "string" ? { path: request } : (request ?? {});
+      const sessionId = sessionIdOf("workspaceFiles.changes", input);
+      const target = text(input.path);
+      if (target === "") {
+        throw new Error(`DSH workspaceFiles.changes 需要 path：${JSON.stringify(input)}`);
+      }
+      const requestedInterval = Number(input.intervalMs);
+      const interval = Number.isFinite(requestedInterval) && requestedInterval > 0 ? Math.max(100, Math.floor(requestedInterval)) : 1000;
+      let previous = await snapshotOf(sessionId, target);
+      if (previous.kind === "absent") {
+        throw new Error(`DSH workspaceFiles.changes 目标不存在 ${JSON.stringify(target)}：请先确认路径存在再建立监视`);
+      }
+      yield { kind: "ready" };
+      while (!signal?.aborted) {
+        await delayWatch(interval, signal);
+        if (signal?.aborted) return;
+        const next = await snapshotOf(sessionId, target);
+        for (const change of diffSnapshots(previous, next)) {
+          yield { kind: "change", change };
+        }
+        previous = next;
+      }
+    },
   };
+}
+
+const WORKSPACE_WATCH_STAT_CONCURRENCY = 8;
+
+function splitWatchPath(target) {
+  const normalized = String(target ?? "");
+  const index = Math.max(normalized.lastIndexOf("/"), normalized.lastIndexOf("\\"));
+  if (index < 0) return { parent: "", name: normalized };
+  if (index === 0) return { parent: normalized.slice(0, 1), name: normalized.slice(1) };
+  return { parent: normalized.slice(0, index), name: normalized.slice(index + 1) };
+}
+
+function joinWatchPath(parent, name) {
+  const base = String(parent ?? "");
+  if (base === "") return name;
+  if (base.endsWith("/") || base.endsWith("\\")) return `${base}${name}`;
+  return `${base}/${name}`;
+}
+
+function delayWatch(ms, signal) {
+  return new Promise((resolve) => {
+    const finish = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener?.("abort", finish);
+      resolve();
+    };
+    const timer = setTimeout(finish, ms);
+    signal?.addEventListener?.("abort", finish, { once: true });
+  });
 }
 
 function createFileReferencesService(call) {
@@ -392,12 +502,16 @@ function createDirectoryPickerService(call) {
     }
     return call;
   };
-  const pick = seamThrower({
-    method: "directoryPicker.pick",
-    capability: "交互式选择宿主目录",
-    expectation: "返回用户选中的绝对路径与授权范围",
-    missing: "host.directory.pick（原生目录对话框由渲染进程 window.amitiaDesktop.selectDirectory 提供，宿主侧没有对应方法）",
-  });
+  const pick = async (input = {}) => {
+    const signal = input && typeof input === "object" && typeof input.aborted === "boolean" && typeof input.addEventListener === "function"
+      ? input
+      : undefined;
+    signal?.throwIfAborted?.();
+    const result = await requireCall("directoryPicker.pick")("host.directory.pick", {});
+    signal?.throwIfAborted?.();
+    const picked = text(result?.path);
+    return picked === "" ? null : picked;
+  };
   const list = async (path, signal) => {
     signal?.throwIfAborted?.();
     const target = text(path);
@@ -425,20 +539,327 @@ function createDirectoryPickerService(call) {
   };
 }
 
-function createDirectoryPickerControllerService() {
-  return createUnavailableHostService({
-    capability: "directoryPickerController",
-    expectation: "把目录选择流程暴露给工作区控制器",
-    missing: "host.directory.pick（控制器依赖 directoryPicker，Amitia 未暴露交互式目录选择接口）",
-  });
+function createDirectoryPickerControllerService(call) {
+  const picker = createDirectoryPickerService(call);
+  const pick = (signal) => picker.pick(signal);
+  return {
+    capability() {
+      return { kind: "native", pick };
+    },
+    async pick(signal) {
+      return pick(signal);
+    },
+    async list(path, signal) {
+      return picker.list(path, signal);
+    },
+    async createDirectory(path, name) {
+      return picker.createDirectory(path, name);
+    },
+  };
 }
 
-function createWorkspaceControllerService() {
-  return createUnavailableHostService({
-    capability: "workspaceController",
-    expectation: "管理宿主工作区打开、切换与持久化",
-    missing: "storageDomain / sessionPersistence 官方 seam 与 host.workspace.* 的控制器语义（Amitia 只有 project-create/project-update/project-delete 与 host.workspace.read/write）",
+function createWorkspaceControllerService(host) {
+  const call = (method, input = {}) => host.call(method, input);
+  const requireCall = (method) => {
+    if (typeof call !== "function") {
+      throw seamUnavailable("workspaceController", method, "host.project.* 的宿主调用桥不可用");
+    }
+    return call;
+  };
+  const callTargeted = (method, input, scopeSnapshotId) => {
+    if (typeof host.callTargeted !== "function") {
+      throw new Error(`Amitia host.callTargeted 不可用，无法按会话作用域快照调用 ${method}：${JSON.stringify({ scopeSnapshotId })}`);
+    }
+    return host.callTargeted(method, input, scopeSnapshotId);
+  };
+  const scopeSnapshotIdOf = async (conversationId) => {
+    const state = await requireCall("workspaceController.scope")("host.state.get", { key: `dsh-session:${conversationId}` });
+    if (state?.found) {
+      const persisted = text(state.value?.scopeSnapshotId);
+      if (persisted !== "") return persisted;
+    }
+    const created = await requireCall("workspaceController.scope")("host.conversation.scope", { conversationId });
+    const minted = text(created?.scopeSnapshotId);
+    if (minted === "") {
+      throw new Error(`Amitia host.conversation.scope returned no scope snapshot id: ${JSON.stringify(created ?? null)}`);
+    }
+    return minted;
+  };
+  const unavailable = (method, missing) => {
+    throw hostSeamError({
+      method: `workspaceController.${method}`,
+      capability: "宿主工作区控制器",
+      expectation: "按 DSH WorkspaceController 语义读写工作区注册表",
+      missing,
+    });
+  };
+  const listProjects = async () => {
+    const result = await requireCall("workspaceController.list")("host.project.list", { limit: 200 });
+    if (!Array.isArray(result?.projects)) {
+      throw new Error(`Amitia host.project.list 返回结构异常：缺少 projects 数组 ${JSON.stringify(result ?? null)}`);
+    }
+    return result.projects;
+  };
+  const projectPath = (project) => {
+    const workspaces = Array.isArray(project?.workspaces) ? project.workspaces : [];
+    const primary = workspaces.find((entry) => text(entry?.id) === text(project?.primaryWorkspaceId)) ?? workspaces[0];
+    const rootUri = text(primary?.rootUri);
+    if (rootUri === "") return "";
+    if (rootUri.startsWith("file://")) {
+      try {
+        return decodeURIComponent(rootUri.slice("file://".length));
+      } catch (error) {
+        throw new Error(`无法解析工作区根路径 ${JSON.stringify(rootUri)}`, { cause: error });
+      }
+    }
+    return rootUri;
+  };
+  const sessionOrderKey = (item) => {
+    const value = Number(item?.order);
+    if (Number.isFinite(value) && value > 0) return value;
+    const created = Date.parse(text(item?.createdAt));
+    return Number.isFinite(created) ? created : 1;
+  };
+  const sessionsByProject = async () => {
+    const result = await requireCall("workspaceController.sessions")("host.conversation.list", { limit: 200, offset: 0 });
+    const items = Array.isArray(result?.items) ? result.items : [];
+    const grouped = new Map();
+    for (const item of items) {
+      const projectId = text(item?.projectId);
+      if (projectId === "") continue;
+      const sessionId = text(item?.sessionId) || text(item?.id);
+      if (sessionId === "") continue;
+      const list = grouped.get(projectId) ?? [];
+      list.push({ sessionId, order: sessionOrderKey(item) });
+      grouped.set(projectId, list);
+    }
+    const ordered = new Map();
+    for (const [projectId, list] of grouped) {
+      ordered.set(projectId, list
+        .sort((left, right) => left.order - right.order || left.sessionId.localeCompare(right.sessionId))
+        .map((entry) => entry.sessionId));
+    }
+    return ordered;
+  };
+  const viewOf = (project, grouped) => ({
+    workspaceId: text(project?.id),
+    path: projectPath(project),
+    title: text(project?.title),
+    sessionIds: grouped.get(text(project?.id)) ?? [],
+    createdAt: text(project?.createdAt),
+    updatedAt: text(project?.updatedAt),
   });
+  const notFound = (workspaceId) => {
+    const error = new Error(`workspace ${JSON.stringify(text(workspaceId))} not found`);
+    error.code = "session/not-found";
+    return error;
+  };
+  const refreshed = async (workspaceId) => {
+    const project = (await listProjects()).find((entry) => text(entry?.id) === text(workspaceId));
+    if (!project) throw notFound(workspaceId);
+    return viewOf(project, await sessionsByProject());
+  };
+  const controller = {
+    async list() {
+      const grouped = await sessionsByProject();
+      return (await listProjects()).map((project) => viewOf(project, grouped));
+    },
+    async create(request = {}) {
+      const path = text(request?.path);
+      if (path === "") {
+        throw new Error(`DSH workspaceController.create 需要绝对路径：${JSON.stringify(request ?? null)}`);
+      }
+      const grouped = await sessionsByProject();
+      const existing = (await listProjects()).find((project) => projectPath(project) === path);
+      if (existing) return { workspace: viewOf(existing, grouped), created: false };
+      await requireCall("workspaceController.create")("host.project.create", {
+        title: workspaceBasename(path),
+        directoryPath: path,
+        requestId: `dsh-workspace-create:${path}`,
+      });
+      const created = (await listProjects()).find((project) => projectPath(project) === path);
+      if (!created) {
+        throw new Error(`Amitia host.project.create 没有返回 path 为 ${JSON.stringify(path)} 的项目`);
+      }
+      return { workspace: viewOf(created, await sessionsByProject()), created: true };
+    },
+    async rename(request = {}) {
+      const workspaceId = text(request?.workspaceId);
+      const title = text(request?.title);
+      if (workspaceId === "") {
+        throw new Error(`DSH workspaceController.rename 需要 workspaceId：${JSON.stringify(request ?? null)}`);
+      }
+      if (title === "") {
+        const error = new Error("Workspace rename requires a non-blank title");
+        error.code = "gateway/bad-request";
+        throw error;
+      }
+      const projects = await listProjects();
+      const target = projects.find((project) => text(project?.id) === workspaceId);
+      if (!target) throw notFound(workspaceId);
+      if (projects.some((project) => text(project?.id) !== workspaceId && text(project?.title) === title)) {
+        const error = new Error(`Workspace name ${JSON.stringify(title)} is already in use`);
+        error.code = "workspace/name-conflict";
+        throw error;
+      }
+      if (text(target.title) !== title) {
+        await requireCall("workspaceController.rename")("host.project.update", {
+          projectId: workspaceId,
+          title,
+          requestId: `dsh-workspace-rename:${workspaceId}`,
+        });
+      }
+      return { workspace: await refreshed(workspaceId) };
+    },
+    async delete(request = {}) {
+      const workspaceId = text(request?.workspaceId);
+      if (workspaceId === "") {
+        throw new Error(`DSH workspaceController.delete 需要 workspaceId：${JSON.stringify(request ?? null)}`);
+      }
+      await requireCall("workspaceController.delete")("host.project.delete", {
+        projectId: workspaceId,
+        requestId: `dsh-workspace-delete:${workspaceId}`,
+      });
+      return { deleted: true };
+    },
+    async initializeDefault(signal) {
+      signal?.throwIfAborted?.();
+      const grouped = await sessionsByProject();
+      const existing = (await listProjects())[0];
+      if (existing) return viewOf(existing, grouped);
+      const listing = await requireCall("workspaceController.initializeDefault")("host.directory.list", { limit: 1 });
+      const home = text(listing?.path) || text(listing?.home) || text(listing?.entries?.[0]?.path);
+      if (home === "") {
+        throw new Error(`Amitia host.directory.list 没有返回可用的主目录：${JSON.stringify(listing ?? null)}`);
+      }
+      signal?.throwIfAborted?.();
+      const created = await controller.create({ path: home });
+      return created.workspace;
+    },
+    async insertBefore(request = {}) {
+      const workspaceId = text(request?.workspaceId);
+      if (workspaceId === "") {
+        throw new Error(`DSH workspaceController.insertBefore 需要 workspaceId：${JSON.stringify(request ?? null)}`);
+      }
+      const beforeWorkspaceId = text(request?.beforeWorkspaceId);
+      const projects = await listProjects();
+      if (!projects.some((project) => text(project?.id) === workspaceId)) throw notFound(workspaceId);
+      if (beforeWorkspaceId !== "" && !projects.some((project) => text(project?.id) === beforeWorkspaceId)) {
+        throw notFound(beforeWorkspaceId);
+      }
+      await requireCall("workspaceController.insertBefore")("host.project.reorder", {
+        projectId: workspaceId,
+        beforeProjectId: beforeWorkspaceId,
+        requestId: `dsh-workspace-order:${workspaceId}:${beforeWorkspaceId}:${Date.now()}`,
+      });
+      const ordered = await listProjects();
+      return { workspaceIds: ordered.map((project) => text(project?.id)).filter((id) => id !== "") };
+    },
+    async insertSessionBefore(request = {}) {
+      const workspaceId = text(request?.workspaceId);
+      const sessionId = text(request?.sessionId);
+      if (workspaceId === "" || sessionId === "") {
+        throw new Error(`DSH workspaceController.insertSessionBefore 需要 workspaceId 与 sessionId：${JSON.stringify(request ?? null)}`);
+      }
+      const beforeSessionId = text(request?.beforeSessionId);
+      const projects = await listProjects();
+      if (!projects.some((project) => text(project?.id) === workspaceId)) throw notFound(workspaceId);
+      const grouped = await sessionsByProject();
+      const members = grouped.get(workspaceId) ?? [];
+      if (!members.includes(sessionId)) {
+        throw new Error(`session ${JSON.stringify(sessionId)} does not belong to workspace ${JSON.stringify(workspaceId)}: ${JSON.stringify(members)}`);
+      }
+      if (beforeSessionId !== "" && !members.includes(beforeSessionId)) {
+        throw new Error(`session ${JSON.stringify(beforeSessionId)} does not belong to workspace ${JSON.stringify(workspaceId)}: ${JSON.stringify(members)}`);
+      }
+      const snapshotId = await scopeSnapshotIdOf(sessionId);
+      await callTargeted("host.conversation.reorder", {
+        conversationId: sessionId,
+        beforeConversationId: beforeSessionId,
+        projectId: workspaceId,
+        requestId: `dsh-session-order:${workspaceId}:${sessionId}:${beforeSessionId}:${Date.now()}`,
+      }, snapshotId);
+      return { workspace: await refreshed(workspaceId) };
+    },
+    async archivedSessionIds() {
+      const result = await requireCall("workspaceController.archivedSessionIds")("host.conversation.list", { limit: 200, offset: 0, archived: true });
+      const items = Array.isArray(result?.items) ? result.items : [];
+      return items.map((item) => text(item?.sessionId) || text(item?.id)).filter((id) => id !== "");
+    },
+    async pinnedSessionIds() {
+      const result = await requireCall("workspaceController.pinnedSessionIds")("host.conversation.list", { limit: 200, offset: 0 });
+      const items = Array.isArray(result?.items) ? result.items : [];
+      return items
+        .filter((item) => text(item?.pinnedAt) !== "")
+        .sort((left, right) => text(right?.pinnedAt).localeCompare(text(left?.pinnedAt)))
+        .map((item) => text(item?.sessionId) || text(item?.id))
+        .filter((id) => id !== "");
+    },
+    async archiveSession(request = {}) {
+      const sessionId = text(request?.sessionId);
+      if (sessionId === "") {
+        throw new Error(`DSH workspaceController.archiveSession 需要 sessionId：${JSON.stringify(request ?? null)}`);
+      }
+      const snapshotId = await scopeSnapshotIdOf(sessionId);
+      await callTargeted("host.conversation.archive", {
+        conversationId: sessionId,
+        archived: true,
+        stopActivity: request?.stopActivity === true,
+        requestId: `dsh-workspace-archive:${sessionId}`,
+      }, snapshotId);
+      return { archivedSessionIds: await controller.archivedSessionIds() };
+    },
+    async unarchiveSession(request = {}) {
+      const sessionId = text(request?.sessionId);
+      if (sessionId === "") {
+        throw new Error(`DSH workspaceController.unarchiveSession 需要 sessionId：${JSON.stringify(request ?? null)}`);
+      }
+      const snapshotId = await scopeSnapshotIdOf(sessionId);
+      await callTargeted("host.conversation.archive", {
+        conversationId: sessionId,
+        archived: false,
+        requestId: `dsh-workspace-unarchive:${sessionId}`,
+      }, snapshotId);
+      return { archivedSessionIds: await controller.archivedSessionIds() };
+    },
+    async pinSession(request = {}) {
+      const sessionId = text(request?.sessionId);
+      if (sessionId === "") {
+        throw new Error(`DSH workspaceController.pinSession 需要 sessionId：${JSON.stringify(request ?? null)}`);
+      }
+      if ((await controller.archivedSessionIds()).includes(sessionId)) {
+        const error = new Error(`Session ${JSON.stringify(sessionId)} is archived; pinning and archival are mutually exclusive`);
+        error.code = "gateway/bad-request";
+        throw error;
+      }
+      const snapshotId = await scopeSnapshotIdOf(sessionId);
+      await callTargeted("host.conversation.pin", {
+        conversationId: sessionId,
+        pinned: true,
+        requestId: `dsh-workspace-pin:${sessionId}`,
+      }, snapshotId);
+      return { pinnedSessionIds: await controller.pinnedSessionIds() };
+    },
+    async unpinSession(request = {}) {
+      const sessionId = text(request?.sessionId);
+      if (sessionId === "") {
+        throw new Error(`DSH workspaceController.unpinSession 需要 sessionId：${JSON.stringify(request ?? null)}`);
+      }
+      const snapshotId = await scopeSnapshotIdOf(sessionId);
+      await callTargeted("host.conversation.pin", {
+        conversationId: sessionId,
+        pinned: false,
+        requestId: `dsh-workspace-unpin:${sessionId}`,
+      }, snapshotId);
+      return { pinnedSessionIds: await controller.pinnedSessionIds() };
+    },
+  };
+  return controller;
+}
+
+function workspaceBasename(path) {
+  const segments = text(path).split(/[\\/]+/u).filter((segment) => segment !== "");
+  return segments.at(-1) ?? text(path);
 }
 
 
@@ -1141,92 +1562,96 @@ function createLlmService(call) {
         reasoningEffort: text(requested.reasoningEffort) || text(defaults?.reasoningEffort) || undefined,
       };
     },
-    fileRequestText: seamThrower({
-      method: "llm.fileRequestText",
-      capability: "解析文件附件引用文本",
-      expectation: "返回 FileAttachmentRef 的文本形式",
-      missing: "host.resource.stat 的附件引用文本（Amitia 资源只有句柄与 URI，没有 DSH FileAttachmentRef 的展示文本）",
-    }),
+    fileRequestText(ref) {
+      const attachment = normalizeFileAttachmentRef(ref);
+      return dshFileHandleText(attachment, attachmentReadPath(ref));
+    },
   };
 }
 
-function createSubagentUnavailableMethods() {
-  return {
-    prompt: seamThrower({
-      method: "subagents.prompt",
-      capability: "向子代理会话投递提示",
-      expectation: "返回 SubagentPromptReceipt 并带 resources.session",
-      missing: "host.conversation.message.append 的子代理发送者语义（Amitia 追加接口没有 DSH SubagentPromptRequest 的 callId/资源映射）",
-    }),
-    resolveName: seamThrower({
-      method: "subagents.resolveName",
-      capability: "按名字解析子代理会话",
-      expectation: "把 caller 下的名字解析成 SessionId",
-      missing: "host.session.subagent.names（Amitia 会话目录没有子代理命名表）",
-    }),
-  };
+function normalizeFileAttachmentRef(ref) {
+  if (!ref || typeof ref !== "object" || Array.isArray(ref)) {
+    throw new Error(`DSH llm.fileRequestText 需要 FileAttachmentRef 对象：${JSON.stringify(ref ?? null)}`);
+  }
+  const attachmentId = text(ref.attachmentId);
+  const name = text(ref.name);
+  const bytes = Number(ref.bytes);
+  if (!attachmentId || !name || !Number.isSafeInteger(bytes) || bytes < 0) {
+    throw new Error(`DSH llm.fileRequestText 的 FileAttachmentRef 缺少 attachmentId/name/bytes：${JSON.stringify(ref)}`);
+  }
+  const mediaType = text(ref.mediaType);
+  return { type: "file", attachmentId, name, bytes, ...(mediaType ? { mediaType } : {}) };
 }
 
-function createAgentUnavailableMethods() {
-  return {
-    setFactory: seamThrower({
-      method: "agents.setFactory",
-      capability: "替换 agent 工厂",
-      expectation: "之后 agents.create 使用该工厂驱动",
-      missing: "host.agent.factory（容器 create/resume 已绑定 Amitia 会话创建，没有可替换的 agent 工厂接口）",
-    }),
-    announce: seamThrower({
-      method: "agents.announce",
-      capability: "广播会话启动",
-      expectation: "向监听者发出 source 对应的会话启动事件",
-      missing: "host.event.emit 的 session-start 语义（Amitia 事件总线没有 DSH SessionStartSource 映射）",
-    }),
-  };
+function dshFileHandleText(ref, readonlyPath) {
+  const digest = String(ref.attachmentId).slice(7, 15);
+  const identity = `File ${JSON.stringify(ref.name)} (${ref.bytes} bytes, sha256:${digest})`;
+  if (readonlyPath === undefined) {
+    return `[${identity} was uploaded, but the current execution environment cannot access a readable path. Report that limitation if its contents are needed; do not claim to have read it.]`;
+  }
+  return `[${identity}: verbatim read-only copy saved at ${JSON.stringify(readonlyPath)}. Read that path with your file tools when its contents are needed; copy it to a writable location before modifying it. When delegating file work, include this saved path in the delegation prompt; only subagents sharing this execution environment can read it.]`;
+}
+
+function attachmentReadPath(ref) {
+  const uri = text(ref?.uri);
+  if (!uri) return undefined;
+  if (uri.startsWith("file://")) {
+    try {
+      return decodeURIComponent(uri.slice("file://".length));
+    } catch (error) {
+      throw new Error(`DSH llm.fileRequestText 无法解析附件 URI ${JSON.stringify(uri)}`, { cause: error });
+    }
+  }
+  if (uri.startsWith("/")) return uri;
+  return undefined;
+}
+
+async function subagentScopeSnapshotId(call, conversationId) {
+  const state = await call("host.state.get", { key: `dsh-session:${conversationId}` });
+  const persisted = state?.found ? text(state.value?.scopeSnapshotId) : "";
+  if (persisted !== "") return persisted;
+  const created = await call("host.conversation.scope", { conversationId });
+  const minted = text(created?.scopeSnapshotId);
+  if (minted === "") {
+    throw new Error(`Amitia host.conversation.scope returned no scope snapshot id: ${JSON.stringify(created ?? null)}`);
+  }
+  return minted;
 }
 
 function createSessionUnavailableMethods() {
   return {
-    fork: seamThrower({
-      method: "sessions.fork",
-      capability: "按边界派生会话",
-      expectation: "返回继承事件的新 Session",
-      missing: "host.conversation.fork（Amitia 会话目录没有派生接口，也没有 SessionSeq 边界继承）",
-    }),
-    prepare: seamThrower({
-      method: "sessions.prepare",
-      capability: "预分配未公布会话",
-      expectation: "返回尚未进入会话目录的 Session",
-      missing: "host.conversation.prepare（host.conversation.create 立即写入会话目录，没有预分配语义）",
-    }),
     enter: seamThrower({
       method: "sessions.enter",
       capability: "进入会话作用域",
       expectation: "返回退出作用域的释放函数",
-      missing: "DSH 会话作用域（容器没有 ctx.session 作用域实现）",
+      missing: "DSH Session 实例（SessionStore.enter 需要可进入存储的 Session 对象，容器只提供会话快照与 agentFacade）",
     }),
     announce: seamThrower({
       method: "sessions.announce",
       capability: "公布会话",
       expectation: "把会话写入目录并通知监听者",
-      missing: "host.conversation.announce（会话创建即公布，没有独立公布阶段）",
-    }),
-    registerMessageProjection: seamThrower({
-      method: "sessions.registerMessageProjection",
-      capability: "注册消息投影",
-      expectation: "注册后会话消息按该投影折叠",
-      missing: "host.conversation.projection（Amitia 会话消息没有投影注册接口）",
+      missing: "DSH SessionStore.announce（Amitia 会话创建即公布，没有「已创建未公布」阶段）",
     }),
   };
 }
 
-export function createAmitiaDshHostServices(host, promptSections = [], promptState = {}) {
+export function createAmitiaDshHostServices(host, promptSections = [], promptState = {}, runtimeHooks = {}) {
   if (!host || typeof host.call !== "function") throw new Error("Amitia host API is unavailable");
   const call = (method, input = {}) => host.call(method, input);
   const jobs = new Map();
   const agents = new Map();
   const initiatorStack = [];
+  const agentFactories = [];
+  const announcedAgents = new Set();
   const subagentProviders = new Map();
   const subagentRuns = new Map();
+  let subagentParents = new Map();
+  let subagentParentsLoadedAt = 0;
+  const refreshSubagentParents = async () => {
+    subagentParents = await loadConversationParents(call);
+    subagentParentsLoadedAt = Date.now();
+    return subagentParents;
+  };
   const mcpResourceProviders = new Map();
   const sessionProjections = new Map();
   const activePromptState = promptState.sections
@@ -1242,6 +1667,58 @@ export function createAmitiaDshHostServices(host, promptSections = [], promptSta
   const promptToolProviders = activePromptState.toolProviders;
   const sections = managedCollection(promptSections, "section");
   const contexts = managedCollection(promptContexts, "context");
+
+  const messageProjections = [];
+  const registerMessageProjection = (projection) => {
+    if (!projection || typeof projection !== "object" || typeof projection.project !== "function") {
+      throw new Error(`DSH sessions.registerMessageProjection 需要 { type, project(event, context) }：${JSON.stringify(projection ?? null)}`);
+    }
+    const type = text(projection.type);
+    if (type === "") {
+      throw new Error(`DSH sessions.registerMessageProjection 的 type 不能为空：${JSON.stringify(projection.type ?? null)}`);
+    }
+    if (messageProjections.some((item) => item.type === type)) {
+      throw new Error(`DSH 消息投影 ${type} 已经注册`);
+    }
+    messageProjections.push({ type, project: projection.project });
+    let active = true;
+    const dispose = () => {
+      if (!active) return;
+      active = false;
+      const index = messageProjections.findIndex((item) => item.type === type && item.project === projection.project);
+      if (index >= 0) messageProjections.splice(index, 1);
+    };
+    return dispose;
+  };
+
+  const callInConversation = async (method, input, conversationId) => {
+    if (typeof host.callTargeted === "function") {
+      const created = await call("host.conversation.scope", { conversationId });
+      const scopeSnapshotId = text(created?.scopeSnapshotId);
+      if (scopeSnapshotId !== "") return host.callTargeted(method, input, scopeSnapshotId);
+    }
+    return call(method, input);
+  };
+
+  const readAllMessages = async (conversationId) => {
+    const messages = [];
+    for (let page = 0, offset = 0; page < 200; page += 1, offset += 200) {
+      const response = await callInConversation("host.conversation.read", { conversationId, limit: 200, offset }, conversationId);
+      const items = Array.isArray(response?.messages) ? response.messages : [];
+      messages.push(...items);
+      if (items.length < 200 || response?.hasMore !== true) break;
+    }
+    return messages;
+  };
+
+  const conversationProjection = async (conversationId) => {
+    const [messages, turnResult] = await Promise.all([
+      readAllMessages(conversationId),
+      callInConversation("host.conversation.turns", { conversationId, limit: 200 }, conversationId),
+    ]);
+    const turns = Array.isArray(turnResult?.turns) ? turnResult.turns : [];
+    return buildSessionProjection({ conversationId, messages, turns });
+  };
 
   const createSessionBridge = (conversationId) => {
     const events = [];
@@ -1671,50 +2148,88 @@ export function createAmitiaDshHostServices(host, promptSections = [], promptSta
   const sessionView = async (sessionId) => {
     const live = agents.get(sessionId);
     if (live) {
+      const events = live.session.events;
       return {
         live: true,
-        events: live.session.events,
+        events,
         surfaceEvents: live.session.surfaceEvents(),
+        messages: foldSessionSurface(events, messageProjections).messages,
       };
     }
     const state = await call("host.state.get", { key: `dsh-session:${sessionId}` });
-    if (!state?.found) return { live: false, events: [], surfaceEvents: [] };
-    assertSessionStateVersion(state.value, sessionId);
-    const restored = restoreSessionEvents(state.value.events, sessionId).events;
+    let persisted = [];
+    if (state?.found) {
+      assertSessionStateVersion(state.value, sessionId);
+      persisted = restoreSessionEvents(state.value.events, sessionId).events;
+    }
+    if (persisted.some((event) => isSurfaceEventType(event.type))) {
+      return {
+        live: false,
+        events: persisted,
+        surfaceEvents: projectSurfaceEvents(persisted),
+        messages: foldSessionSurface(persisted, messageProjections).messages,
+      };
+    }
+    const projection = await conversationProjection(sessionId);
+    const base = projection.events.length;
+    const events = [
+      ...projection.events,
+      ...persisted.map((event, index) => Object.freeze({ ...event, seq: base + index })),
+    ];
     return {
       live: false,
-      events: restored,
-      surfaceEvents: projectSurfaceEvents(restored),
+      events,
+      surfaceEvents: projectSurfaceEvents(events),
+      messages: foldSessionSurface(events, messageProjections).messages,
     };
   };
+  const defaultModelState = { provider: "", model: "" };
+  const refreshDefaultModel = async () => {
+    const defaults = await call("host.model.defaults", {});
+    defaultModelState.provider = text(defaults?.provider);
+    defaultModelState.model = text(defaults?.model);
+    return { ...defaultModelState };
+  };
+  let defaultModelPrimed = false;
+  const agentDefaultModel = Object.freeze({
+    currentSelection() {
+      if (!defaultModelPrimed) {
+        defaultModelPrimed = true;
+        refreshDefaultModel().catch((error) => console.error("[original-error]", error));
+      }
+      if (defaultModelState.provider === "" && defaultModelState.model === "") {
+        throw new Error("Amitia 当前没有配置默认模型，agentDefaultModel.currentSelection 无法给出选择");
+      }
+      return Object.freeze({ provider: defaultModelState.provider, model: defaultModelState.model });
+    },
+    async refresh() {
+      return refreshDefaultModel();
+    },
+  });
+  const connection = Object.freeze({
+    get authenticatedUrl() {
+      return undefined;
+    },
+    get connected() {
+      return true;
+    },
+  });
+  const webServer = sharedDshWebServer();
+  void webServer.ensureStarted().catch((error) => console.error("[original-error]", error));
+
   const credentialsService = createCredentialsService(call);
   const commandsService = createCommandsService(call);
-  const sessionQueryService = {
-    ...createSessionQueryService({
-      call,
-      isLive: (sessionId) => agents.has(sessionId),
-      sessionView,
-    }),
-    async searchSessions(request = {}, exec = {}) {
-      const query = text(request?.query);
-      if (!query) throw new Error(`DSH sessionQuery.searchSessions 需要 query: ${JSON.stringify(request ?? null)}`);
-      exec?.signal?.throwIfAborted?.();
-      const result = await call("host.conversation.search", {
-        query,
-        ...(request.limit === undefined ? {} : { limit: request.limit }),
-      });
-      const items = Array.isArray(result?.items) ? result.items : [];
-      return {
-        hits: items.map((item) => {
-          const record = item && typeof item === "object" ? item : { content: text(item) };
-          return { ...record, sessionId: text(record.sessionId) || text(record.id) || text(record.conversationId) };
-        }),
-        hasMore: result?.hasMore === true,
-      };
-    },
-  };
+  const sessionQueryService = createSessionQueryService({
+    call,
+    isLive: (sessionId) => agents.has(sessionId),
+    sessionView,
+    projections: () => messageProjections,
+  });
 
   return {
+    webServer,
+    agentDefaultModel,
+    connection,
     systemPrompt: {
       getSectionOrder(name) {
         const orders = {
@@ -1878,8 +2393,8 @@ export function createAmitiaDshHostServices(host, promptSections = [], promptSta
     skills: createSkillsService(call),
     sessionSkillCatalog: createSessionSkillCatalogService(call),
     directoryPicker: createDirectoryPickerService(call),
-    directoryPickerController: createDirectoryPickerControllerService(),
-    workspaceController: createWorkspaceControllerService(),
+    directoryPickerController: createDirectoryPickerControllerService(call),
+    workspaceController: createWorkspaceControllerService(host),
     sessions: {
       read(input) {
         return call("host.conversation.read", input);
@@ -1910,6 +2425,62 @@ export function createAmitiaDshHostServices(host, promptSections = [], promptSta
         return true;
       },
       ...createSessionUnavailableMethods(),
+      registerMessageProjection,
+      async prepare(sessionId, options = {}) {
+        const input = { draft: true };
+        const reservedId = text(sessionId);
+        if (reservedId !== "") input.conversationId = reservedId;
+        const title = text(options?.title);
+        if (title !== "") input.title = title;
+        const projectId = text(options?.projectId);
+        if (projectId !== "") input.projectId = projectId;
+        const created = await call("host.conversation.create", input);
+        const preparedId = text(created?.conversationId) || text(created?.id);
+        if (preparedId === "") {
+          throw new Error(`Amitia host.conversation.create 没有返回草稿会话 id：${JSON.stringify(created ?? null)}`);
+        }
+        const facade = agentFacade(preparedId);
+        if (!facade?.session) {
+          throw new Error(`Amitia 草稿会话 ${preparedId} 无法建立宿主 Session`);
+        }
+        const session = facade.session;
+        session.draft = true;
+        session.publish = async (publishOptions = {}) => {
+          const request = { conversationId: preparedId, draft: false };
+          const publishTitle = text(publishOptions?.title);
+          if (publishTitle !== "") request.title = publishTitle;
+          await call("host.conversation.create", request);
+          session.draft = false;
+          return session;
+        };
+        session.drop = async () => {
+          const removed = await call("host.conversation.delete", { conversationId: preparedId });
+          if (removed && typeof removed === "object" && removed.deleted === false) {
+            throw new Error(`Amitia 草稿会话 ${preparedId} 未被删除：${JSON.stringify(removed)}`);
+          }
+          return true;
+        };
+        return session;
+      },
+      async fork(sessionId, atSeq) {
+        const id = text(sessionId);
+        if (id === "") {
+          throw new Error(`DSH sessions.fork 需要会话 id：${JSON.stringify(sessionId ?? null)}`);
+        }
+        if (atSeq !== undefined && atSeq !== null) {
+          throw new Error(`DSH sessions.fork 的 atSeq 无法映射：Amitia host.conversation.fork 只能整段派生会话，请求的 atSeq 为 ${String(atSeq)}`);
+        }
+        const created = await callInConversation("host.conversation.fork", { conversationId: id }, id);
+        const forkedId = text(created?.conversationId) || text(created?.id);
+        if (forkedId === "") {
+          throw new Error(`Amitia host.conversation.fork 没有返回派生会话 id：${JSON.stringify(created ?? null)}`);
+        }
+        const facade = agentFacade(forkedId);
+        if (!facade?.session) {
+          throw new Error(`Amitia 派生会话 ${forkedId} 无法建立宿主 Session`);
+        }
+        return facade.session;
+      },
       async create(input = {}) {
         const result = await call("host.conversation.create", {
           title: text(input.title),
@@ -1955,7 +2526,56 @@ export function createAmitiaDshHostServices(host, promptSections = [], promptSta
         for (const event of events) state = definition.apply?.(state, event) ?? state;
         return state;
       },
-      ...createAgentUnavailableMethods(),
+      setFactory(factory) {
+        if (typeof factory !== "function") {
+          throw new Error(`DSH agents.setFactory 需要工厂函数：${JSON.stringify(typeof factory)}`);
+        }
+        agentFactories.push(factory);
+        let active = true;
+        return () => {
+          if (!active) return;
+          active = false;
+          const index = agentFactories.lastIndexOf(factory);
+          if (index >= 0) agentFactories.splice(index, 1);
+        };
+      },
+      async announce(agent, source, signal) {
+        if (!agent || typeof agent !== "object" || !text(agent.id)) {
+          throw new Error(`DSH agents.announce 需要带 id 的 agent：${JSON.stringify(agent ?? null)}`);
+        }
+        if (!text(source)) {
+          throw new Error(`DSH agents.announce 需要 source：${JSON.stringify(source ?? null)}`);
+        }
+        const agentId = text(agent.id);
+        if (agents.get(agentId) !== agent) {
+          throw new Error(`DSH agents.announce 的 agent "${agentId}" 不在活动注册表中`);
+        }
+        if (announcedAgents.has(agentId)) {
+          throw new Error(`DSH agents.announce 的 agent "${agentId}" 已经公布过`);
+        }
+        signal?.throwIfAborted?.();
+        const containerContext = runtimeHooks?.context;
+        if (!containerContext || typeof containerContext.serial !== "function") {
+          throw hostSeamError({
+            method: "agents.announce",
+            capability: "向 DSH 插件广播 agent/created",
+            expectation: "在容器 cordis 上下文上串行派发 agent/created",
+            missing: "容器 cordis 上下文（announce 未绑定到宿主容器，无法通知已订阅的 DSH 插件）",
+            request: { sessionId: agentId, source },
+          });
+        }
+        announcedAgents.add(agentId);
+        try {
+          await containerContext.serial(agent, "agent/created", {
+            agent,
+            source,
+            ...(signal === undefined ? {} : { signal }),
+          });
+        } catch (error) {
+          announcedAgents.delete(agentId);
+          throw error;
+        }
+      },
       currentInitiator() {
         return initiatorStack.at(-1);
       },
@@ -2016,6 +2636,13 @@ export function createAmitiaDshHostServices(host, promptSections = [], promptSta
         const sessionId = text(options.sessionId);
         if (!sessionId) throw new Error("DSH agents.create sessionId is required");
         if (agents.has(sessionId)) throw new Error(`DSH agent ${sessionId} is already live`);
+        const factory = agentFactories.at(-1);
+        if (factory) {
+          const handle = await factory(options);
+          const factoryAgent = handle?.agent;
+          if (factoryAgent && text(factoryAgent.id)) agents.set(text(factoryAgent.id), factoryAgent);
+          return handle;
+        }
         const meta = options.meta && typeof options.meta === "object" ? options.meta : {};
         const unsupportedMeta = Object.keys(meta).filter((key) => meta[key] !== undefined);
         if (unsupportedMeta.length > 0) {
@@ -2103,7 +2730,44 @@ export function createAmitiaDshHostServices(host, promptSections = [], promptSta
       },
     },
     subagents: {
-      ...createSubagentUnavailableMethods(),
+      async prompt(request = {}, signal) {
+        const childSessionId = text(request?.childSessionId);
+        const requestId = text(request?.requestId);
+        const delivery = text(request?.delivery) || "queue";
+        const content = Array.isArray(request?.content) ? request.content : [];
+        if (childSessionId === "") {
+          throw new Error(`DSH subagents.prompt 需要 childSessionId：${JSON.stringify(request ?? null)}`);
+        }
+        if (requestId === "") {
+          throw new Error(`DSH subagents.prompt 需要 requestId：${JSON.stringify(request ?? null)}`);
+        }
+        if (delivery !== "queue" && delivery !== "steer") {
+          throw new Error(`DSH subagents.prompt 的 delivery 只支持 queue/steer：${JSON.stringify(delivery)}`);
+        }
+        if (content.length === 0) {
+          throw new Error(`DSH subagents.prompt 需要至少一个内容片段：${JSON.stringify(request ?? null)}`);
+        }
+        const parts = subagentTextParts("prompt", content);
+        signal?.throwIfAborted?.();
+        await refreshSubagentParents();
+        const scopeSnapshotId = await subagentScopeSnapshotId(call, childSessionId);
+        if (typeof host.callTargeted !== "function") {
+          throw new Error(`Amitia host.callTargeted 不可用，无法按会话作用域向子代理追加消息：${JSON.stringify({ childSessionId })}`);
+        }
+        const result = await host.callTargeted("host.conversation.message.append", {
+          conversationId: childSessionId,
+          role: "user",
+          source: "dsh-subagent",
+          requestId,
+          parts,
+        }, scopeSnapshotId);
+        signal?.throwIfAborted?.();
+        const messageId = text(result?.messageId) || text(result?.id);
+        if (messageId === "") {
+          throw new Error(`Amitia host.conversation.message.append returned no message id: ${JSON.stringify(result ?? null)}`);
+        }
+        return { messageId };
+      },
       resolveMaxDepth(configured) {
         if (configured === "provider-managed") return undefined;
         if (configured !== undefined) {
@@ -2113,12 +2777,66 @@ export function createAmitiaDshHostServices(host, promptSections = [], promptSta
         return 1;
       },
       rootOf(caller) {
-        if (!caller) throw new Error("DSH subagents.rootOf caller is required");
-        return caller;
+        const id = text(caller?.session?.id) || text(caller?.id);
+        if (id === "") throw new Error(`DSH subagents.rootOf 需要带会话 id 的 caller：${JSON.stringify(caller ?? null)}`);
+        if (subagentParentsLoadedAt === 0) {
+          throw new Error(`DSH subagents.rootOf 尚未加载会话血缘，无法确定 ${JSON.stringify(id)} 的树根`);
+        }
+        const root = conversationTreeRoot(subagentParents, id);
+        if (root === id) return caller;
+        const live = agents.get(root);
+        if (!live) {
+          throw new Error(`DSH subagents.rootOf 无法解析 ${JSON.stringify(id)} 的树根 ${JSON.stringify(root)}：该会话不在活动 agent 表中`);
+        }
+        return live;
       },
       namesOf(agent) {
-        if (!agent) throw new Error("DSH subagents.namesOf agent is required");
-        return { self: "lead" };
+        const id = text(agent?.session?.id) || text(agent?.id);
+        if (id === "") throw new Error(`DSH subagents.namesOf 需要带会话 id 的 agent：${JSON.stringify(agent ?? null)}`);
+        if (subagentParentsLoadedAt === 0) {
+          throw new Error(`DSH subagents.namesOf 尚未加载会话血缘，无法确定 ${JSON.stringify(id)} 的名字路径`);
+        }
+        const ancestry = [];
+        const seen = new Set([id]);
+        let current = id;
+        for (;;) {
+          const parent = subagentParents.get(current);
+          if (parent === undefined || parent === "") break;
+          if (seen.has(parent)) {
+            throw new Error(`会话血缘存在环：${JSON.stringify({ conversationId: id, cycleAt: parent, ancestry })}`);
+          }
+          seen.add(parent);
+          ancestry.push(parent);
+          current = parent;
+        }
+        if (ancestry.length === 0) return { self: "lead" };
+        const chain = ancestry.slice().reverse();
+        let label = "lead";
+        for (const node of chain.slice(1)) {
+          const own = text(subagentRuns.get(node)?.activation?.name);
+          label = own === "" || label === null ? null : `${label}/${own}`;
+        }
+        const own = text(subagentRuns.get(id)?.activation?.name);
+        const self = own === "" || label === null ? id : `${label}/${own}`;
+        const parentId = ancestry[0];
+        const parent = (ancestry.length === 1 ? "lead" : label) ?? parentId;
+        return { self, parent };
+      },
+      async resolveName(caller, name, signal) {
+        if (signal?.aborted) throw signal.reason;
+        const target = text(name);
+        if (!target) {
+          throw new Error(`DSH subagents.resolveName 需要名字：${JSON.stringify(name ?? null)}`);
+        }
+        const matches = [];
+        for (const [childId, entry] of subagentRuns) {
+          if (entry.activation.name === target) matches.push(childId);
+        }
+        if (matches.length === 1) return matches[0];
+        if (matches.length > 1) {
+          throw new Error(`DSH subagents.resolveName 名字 ${JSON.stringify(target)} 命中多个子代理：${JSON.stringify(matches)}`);
+        }
+        throw new Error(`DSH subagents.resolveName 找不到名字 ${JSON.stringify(target)} 的子代理，当前活动子代理：${JSON.stringify(Array.from(subagentRuns.values()).map((entry) => entry.activation.name))}`);
       },
       getProvider(name) {
         return subagentProviders.get(text(name));
@@ -2166,6 +2884,7 @@ export function createAmitiaDshHostServices(host, promptSections = [], promptSta
           dispose,
         };
         subagentRuns.set(run.id, { provider: providerName, activation, run });
+        await refreshSubagentParents();
         return activation;
       },
       async listDescendants() {
@@ -2181,8 +2900,40 @@ export function createAmitiaDshHostServices(host, promptSections = [], promptSta
           hasChildren: false,
         }));
       },
-      async sendMessage() {
-        throw unsupportedOperation("subagents.sendMessage");
+      async sendMessage(sender, targetId, content, options = {}) {
+        const target = text(targetId);
+        if (target === "") {
+          throw new Error(`DSH subagents.sendMessage 需要目标会话 id：${JSON.stringify(targetId ?? null)}`);
+        }
+        const senderId = text(sender?.session?.id) || text(sender?.sessionId) || text(sender?.id);
+        if (senderId === "") {
+          throw new Error(`DSH subagents.sendMessage 无法从 sender 解析会话 id：${JSON.stringify(sender ?? null)}`);
+        }
+        const parts = subagentTextParts("sendMessage", content);
+        options?.signal?.throwIfAborted?.();
+        const parents = await refreshSubagentParents();
+        const senderRoot = conversationTreeRoot(parents, senderId);
+        const targetRoot = conversationTreeRoot(parents, target);
+        if (senderRoot !== targetRoot) {
+          throw new Error(`DSH subagents.sendMessage 拒绝跨子代理树投递：sender ${JSON.stringify(senderId)} 树根 ${JSON.stringify(senderRoot)} 与目标 ${JSON.stringify(target)} 树根 ${JSON.stringify(targetRoot)} 不同`);
+        }
+        const scopeSnapshotId = await subagentScopeSnapshotId(call, target);
+        if (typeof host.callTargeted !== "function") {
+          throw new Error(`Amitia host.callTargeted 不可用，无法按会话作用域向子代理追加消息：${JSON.stringify({ targetSessionId: target })}`);
+        }
+        const result = await host.callTargeted("host.conversation.message.append", {
+          conversationId: target,
+          role: "user",
+          source: "dsh-subagent-steer",
+          requestId: `dsh-subagent-steer:${target}:${senderId}:${Date.now()}`,
+          parts,
+        }, scopeSnapshotId);
+        options?.signal?.throwIfAborted?.();
+        const messageId = text(result?.messageId) || text(result?.id);
+        if (messageId === "") {
+          throw new Error(`Amitia host.conversation.message.append returned no message id: ${JSON.stringify(result ?? null)}`);
+        }
+        return messageId;
       },
       interrupt(targetSessionId) {
         const active = subagentRuns.get(text(targetSessionId));
@@ -2195,9 +2946,15 @@ export function createAmitiaDshHostServices(host, promptSections = [], promptSta
         return { accepted: true };
       },
       async waitForTreeWork() {
-        return false;
+        return subagentRuns.size > 0;
       },
-      async drainDescendants() {},
+      async drainDescendants() {
+        const entries = Array.from(subagentRuns.values());
+        if (entries.length === 0) return;
+        const results = await Promise.allSettled(entries.map((entry) => entry.activation.dispose()));
+        const failure = results.find((result) => result.status === "rejected");
+        if (failure) throw failure.reason;
+      },
     },
     llm: createLlmService(call),
     jobs: {
@@ -2219,6 +2976,7 @@ export function createAmitiaDshHostServices(host, promptSections = [], promptSta
           progress: text(options.progress) || undefined,
           status: "running",
           output,
+          readErrors: [],
           controller,
           startedAt,
           finishedAt: undefined,
@@ -2250,7 +3008,6 @@ export function createAmitiaDshHostServices(host, promptSections = [], promptSta
           throw error;
         });
         jobs.set(jobId, job);
-        console.error(`[dsh-jobs] start id=${jobId} kind=${job.kind} sources=${job.sources.length}`);
         return {
           kind: "background",
           id: jobId,
@@ -2289,7 +3046,6 @@ export function createAmitiaDshHostServices(host, promptSections = [], promptSta
         const job = jobs.get(jobId);
         if (!job) throw new Error(`DSH job ${jobId} not found`);
         const chunks = collectJobChunks(job);
-        console.error(`[dsh-jobs] read id=${jobId} status=${job.status} chunks=${chunks.length} total=${job.sourceTotal}`);
         const result = job.status === "running" || job.status === "stopping" ? undefined : text(job.result) || undefined;
         return {
           chunks,
@@ -2383,6 +3139,7 @@ function jobView(job) {
     ...(owner ? { owner } : {}),
     status: job.status,
     ...(text(job.detail) ? { detail: text(job.detail) } : {}),
+    ...(job.readErrors.length > 0 ? { readErrors: job.readErrors.map((entry) => ({ channel: entry.channel, cursor: entry.cursor, message: entry.message })) } : {}),
     output: { spillPaths },
   };
 }
@@ -2395,11 +3152,17 @@ function collectJobChunks(job, from = 0) {
     let pulled;
     try {
       pulled = source.read(cursor);
-    } catch {
+    } catch (error) {
+      job.readErrors.push({
+        channel: text(source.channel) || "unknown",
+        cursor,
+        message: error instanceof Error ? error.message : String(error),
+        error,
+      });
+      console.error("[original-error]", error);
       continue;
     }
     const data = text(pulled?.text);
-    console.error(`[dsh-jobs] source channel=${text(source.channel)} cursor=${cursor} textLen=${data.length} next=${pulled?.nextOffset}`);
     if (!data) continue;
     const next = Number.isFinite(pulled?.nextOffset) ? Number(pulled.nextOffset) : cursor + data.length;
     job.sourceOffsets.set(source, next);
@@ -2415,4 +3178,63 @@ function collectJobChunks(job, from = 0) {
     offset += data.length;
   }
   return chunks;
+}
+
+const SUBAGENT_CONVERSATION_PAGE_LIMIT = 200;
+const SUBAGENT_CONVERSATION_PAGE_GUARD = 50;
+
+function subagentTextParts(method, content) {
+  const parts = Array.isArray(content) ? content : [];
+  if (parts.length === 0) {
+    throw new Error(`DSH subagents.${method} 需要至少一个内容片段：${JSON.stringify(content ?? null)}`);
+  }
+  const unsupported = parts.filter((part) => text(part?.type) !== "text");
+  if (unsupported.length > 0) {
+    throw new Error(`Amitia host.conversation.message.append 只接受文本片段，${method} 包含不支持的类型：${JSON.stringify(unsupported)}`);
+  }
+  const normalized = parts
+    .map((part) => ({ type: "text", content: text(part?.text) }))
+    .filter((part) => part.content !== "");
+  if (normalized.length === 0) {
+    throw new Error(`DSH subagents.${method} 的文本片段全为空：${JSON.stringify(content ?? null)}`);
+  }
+  return normalized;
+}
+
+async function loadConversationParents(call) {
+  const parents = new Map();
+  let previousFirst = "";
+  for (let page = 0, offset = 0; page < SUBAGENT_CONVERSATION_PAGE_GUARD; page += 1, offset += SUBAGENT_CONVERSATION_PAGE_LIMIT) {
+    const result = await call("host.conversation.list", { limit: SUBAGENT_CONVERSATION_PAGE_LIMIT, offset });
+    const items = Array.isArray(result?.items) ? result.items : [];
+    if (items.length === 0) break;
+    const first = text(items[0]?.sessionId) || text(items[0]?.id);
+    if (first !== "" && first === previousFirst) {
+      throw new Error(`Amitia host.conversation.list 的 offset 没有推进分页：${JSON.stringify({ offset })}`);
+    }
+    previousFirst = first;
+    for (const item of items) {
+      const id = text(item?.sessionId) || text(item?.id);
+      if (id === "") continue;
+      const parent = text(item?.parentSession) || text(item?.forkOrigin?.conversationId);
+      if (parent !== "") parents.set(id, parent);
+    }
+    if (items.length < SUBAGENT_CONVERSATION_PAGE_LIMIT) break;
+  }
+  return parents;
+}
+
+function conversationTreeRoot(parents, conversationId) {
+  const ancestry = [];
+  const seen = new Set([conversationId]);
+  let current = parents.get(conversationId);
+  while (current !== undefined && current !== "") {
+    if (seen.has(current)) {
+      throw new Error(`会话血缘存在环：${JSON.stringify({ conversationId, cycleAt: current, ancestry })}`);
+    }
+    seen.add(current);
+    ancestry.push(current);
+    current = parents.get(current);
+  }
+  return ancestry.length > 0 ? ancestry[ancestry.length - 1] : conversationId;
 }

@@ -316,7 +316,12 @@ test("sessions 暴露真实会话对象并明确失败的会话生命周期方�
   await assert.rejects(() => services.sessions.flush({}), /DSH sessions\.flush 需要容器创建的会话对象/);
   dispose();
   assert.equal(services.sessions.get("session-1"), undefined);
-  for (const method of ["fork", "prepare", "enter", "announce", "registerMessageProjection"]) {
+  const disposeProjection = services.sessions.registerMessageProjection({ type: "user/message", project: () => new Map() });
+  assert.equal(typeof disposeProjection, "function");
+  assert.throws(() => services.sessions.registerMessageProjection({ type: "user/message", project: () => new Map() }), /已经注册/);
+  assert.throws(() => services.sessions.registerMessageProjection({ type: "user/message" }), /需要 \{ type, project/);
+  disposeProjection();
+  for (const method of ["enter", "announce"]) {
     assert.throws(() => services.sessions[method](), (error) => {
       assert.equal(error.code, "DSH_HOST_OPERATION_UNAVAILABLE");
       assert.match(error.message, new RegExp(`DSH sessions\\.${method} 不可用`));
@@ -326,6 +331,34 @@ test("sessions 暴露真实会话对象并明确失败的会话生命周期方�
     }, method);
   }
   assert.equal(host.calls.length, 0);
+});
+
+test("sessions.prepare 建立草稿会话并支持发布与丢弃", async () => {
+  const host = createHost({
+    "host.conversation.create": (input) => ({ conversationId: input.conversationId || "draft-1", draft: input.draft !== false }),
+    "host.conversation.delete": () => ({ deleted: true }),
+  });
+  const services = createAmitiaDshHostServices(host);
+  const session = await services.sessions.prepare("draft-1", { title: "草稿" });
+  assert.equal(session.id, "draft-1");
+  assert.equal(session.draft, true);
+  const created = host.calls.find((entry) => entry.method === "host.conversation.create");
+  assert.deepEqual(created.input, { draft: true, conversationId: "draft-1", title: "草稿" });
+  await session.publish({ title: "正式" });
+  assert.equal(session.draft, false);
+  const published = host.calls.filter((entry) => entry.method === "host.conversation.create").at(-1);
+  assert.deepEqual(published.input, { conversationId: "draft-1", draft: false, title: "正式" });
+  assert.equal(await session.drop(), true);
+});
+
+test("sessions.fork 派生会话并拒绝无法映射的 atSeq", async () => {
+  const host = createHost({ "host.conversation.fork": () => ({ conversationId: "forked-1", forkedFrom: "session-1" }) });
+  const services = createAmitiaDshHostServices(host);
+  const forked = await services.sessions.fork("session-1");
+  assert.equal(forked.id, "forked-1");
+  const request = host.calls.find((entry) => entry.method === "host.conversation.fork");
+  assert.deepEqual(request.input, { conversationId: "session-1" });
+  await assert.rejects(() => services.sessions.fork("session-1", 3), /atSeq 无法映射/);
 });
 
 test("agents 发起者栈与注册表可用，缺失的驱动方法明确失败", () => {
@@ -351,17 +384,47 @@ test("agents 发起者栈与注册表可用，缺失的驱动方法明确失败"
   assert.equal(services.agents.get("session-1"), agent);
   dispose();
   assert.equal(services.agents.get("session-1"), undefined);
-  for (const method of ["setFactory", "announce"]) {
-    assert.throws(() => services.agents[method](), (error) => {
-      assert.equal(error.code, "DSH_HOST_OPERATION_UNAVAILABLE");
-      assert.match(error.message, new RegExp(`DSH agents\\.${method} 不可用`));
-      assert.match(error.message, /宿主缺少接口/);
-      assert.equal(error.details.operation, `agents.${method}`);
-      return true;
-    }, method);
-  }
   assert.equal(host.calls.length, 0);
 });
+
+test("agents.setFactory 让 create 走注册工厂，announce 在容器上下文派发 agent/created", async () => {
+  const host = createHost();
+  const serialCalls = [];
+  const runtimeHooks = {
+    context: {
+      async serial(...args) {
+        serialCalls.push(args);
+      },
+    },
+  };
+  const services = createAmitiaDshHostServices(host, [], {}, runtimeHooks);
+  const disposeFactory = services.agents.setFactory(async (options) => ({ id: options.sessionId, session: { id: options.sessionId }, options }));
+  const created = await services.agents.create({ sessionId: "session-9" });
+  assert.equal(created.id, "session-9");
+  assert.deepEqual(created.options, { sessionId: "session-9" });
+  assert.equal(host.calls.length, 0);
+  disposeFactory();
+  assert.throws(() => services.agents.setFactory("not-a-factory"), /需要工厂函数/);
+  const agent = { id: "session-1", session: {} };
+  services.agents.register(agent);
+  await services.agents.announce(agent, "startup");
+  assert.equal(serialCalls.length, 1);
+  assert.equal(serialCalls[0][0], agent);
+  assert.equal(serialCalls[0][1], "agent/created");
+  assert.deepEqual(serialCalls[0][2], { agent, source: "startup" });
+  await assert.rejects(services.agents.announce(agent, "startup"), /已经公布过/);
+  await assert.rejects(services.agents.announce({ id: "session-missing" }, "startup"), /不在活动注册表中/);
+  await assert.rejects(services.agents.announce({ id: "session-2" }, ""), /需要 source/);
+  const detached = createAmitiaDshHostServices(createHost());
+  const detachedAgent = { id: "session-3", session: {} };
+  detached.agents.register(detachedAgent);
+  await assert.rejects(detached.agents.announce(detachedAgent, "startup"), (error) => {
+    assert.equal(error.code, "DSH_HOST_OPERATION_UNAVAILABLE");
+    assert.match(error.message, /DSH agents\.announce 不可用/);
+    return true;
+  });
+});
+
 
 test("agents.turnBoundaryOf 用已注册的 turnBoundary 投影折叠会话事件", () => {
   const host = createHost();
@@ -392,20 +455,28 @@ test("agents.turnBoundaryOf 用已注册的 turnBoundary 投影折叠会话事�
   assert.equal(host.calls.length, 0);
 });
 
-test("subagents 的 prompt 与 resolveName 明确失败并指明缺少的接口", () => {
+test("subagents.resolveName 按活动子代理命名表解析", async () => {
   const host = createHost();
   const services = createAmitiaDshHostServices(host);
-  assert.throws(() => services.subagents.prompt({ childSessionId: "session-2" }), (error) => {
-    assert.match(error.message, /DSH subagents\.prompt 不可用/);
-    assert.match(error.message, /宿主缺少接口 host\.conversation\.message\.append/);
+  await assert.rejects(services.subagents.resolveName({}, "worker"), (error) => {
+    assert.match(error.message, /找不到名字 "worker" 的子代理/);
+    assert.match(error.message, /当前活动子代理：\[\]/);
     return true;
   });
-  assert.throws(() => services.subagents.resolveName({}, "worker"), (error) => {
-    assert.match(error.message, /DSH subagents\.resolveName 不可用/);
-    assert.match(error.message, /宿主缺少接口 host\.session\.subagent\.names/);
-    return true;
+  const disposeProvider = services.subagents.registerProvider({
+    name: "local",
+    async start() {
+      return { id: "child-1", messageId: "message-1", result: { ok: true }, dispose: async () => {} };
+    },
   });
-  assert.equal(host.calls.length, 0);
+  const activation = await services.subagents.startActivation({ provider: "local", name: "worker" });
+  assert.equal(activation.childId, "child-1");
+  assert.equal(await services.subagents.resolveName({}, "worker"), "child-1");
+  await assert.rejects(services.subagents.resolveName({}, "reviewer"), /找不到名字 "reviewer" 的子代理/);
+  await activation.dispose();
+  await assert.rejects(services.subagents.resolveName({}, "worker"), /找不到名字 "worker" 的子代理/);
+  disposeProvider();
+  assert.deepEqual(host.calls.map((call) => call.method), ["host.conversation.list"]);
 });
 
 test("llm.invoke 保持真实调用，未注册适配器的方法明确失败", async () => {
@@ -429,8 +500,22 @@ test("llm.invoke 保持真实调用，未注册适配器的方法明确失败", 
     assert.deepEqual(error.details.request, { settingsNs: "amitia", request: undefined });
     return true;
   });
-  assert.throws(() => services.llm.fileRequestText({ id: "file-1" }), /DSH llm\.fileRequestText 不可用/);
   assert.equal(host.calls.length, 1);
+});
+
+test("llm.fileRequestText 复用官方句柄文本，缺少可读路径时说明无法访问", () => {
+  const host = createHost();
+  const services = createAmitiaDshHostServices(host);
+  const ref = { type: "file", attachmentId: "file-abcd1234efgh", name: "report.pdf", bytes: 2048 };
+  const handle = services.llm.fileRequestText(ref);
+  assert.match(handle, /^\[File "report\.pdf" \(2048 bytes, sha256:[0-9a-f]{8}\)/);
+  assert.match(handle, /cannot access a readable path/);
+  const withPath = services.llm.fileRequestText({ ...ref, uri: "file:///tmp/report.pdf" });
+  assert.match(withPath, /verbatim read-only copy saved at "\/tmp\/report\.pdf"/);
+  assert.throws(() => services.llm.fileRequestText(null), /需要 FileAttachmentRef 对象/);
+  assert.throws(() => services.llm.fileRequestText({ id: "file-1" }), /缺少 attachmentId\/name\/bytes/);
+  assert.throws(() => services.llm.fileRequestText({ attachmentId: "file-1", name: "", bytes: 1 }), /缺少 attachmentId\/name\/bytes/);
+  assert.equal(host.calls.length, 0);
 });
 
 test("llm.resolveCallConfig 用 host.model.defaults 补齐默认值", async () => {
@@ -548,54 +633,26 @@ test("llm 可配置 provider 与模型发现器走注册表", async () => {
   assert.equal(host.calls.length, 0);
 });
 
-test("sessionQuery 不可用方法带上缺少的宿主接口", () => {
+test("sessionQuery.inspectSession 需要读取回调并交还只读会话视图", async () => {
   const host = createHost();
   const services = createAmitiaDshHostServices(host);
-  const expectations = [
-    ["observeSession", "host.session.observe"],
-    ["inspectSession", "host.session.handle"],
-    ["searchEvents", "host.event.search"],
-    ["filterSessions", "host.conversation.filter"],
-    ["filterEvents", "host.session.filter_events"],
-    ["traceSession", "host.session.lineage"],
-    ["traceEvent", "host.session.event_trace"],
-  ];
-  for (const [method, missing] of expectations) {
-    assert.throws(() => services.sessionQuery[method]("session-1"), (error) => {
-      assert.equal(error.code, "DSH_HOST_OPERATION_UNAVAILABLE");
-      assert.match(error.message, new RegExp(`DSH sessionQuery\\.${method} 没有可用的 Amitia 等价执行语义`));
-      assert.match(error.message, /宿主缺少接口/);
-      assert.equal(error.missingHostInterface.startsWith(missing), true);
-      assert.equal(error.details.operation, `sessionQuery.${method}`);
-      return true;
-    }, method);
-  }
-  assert.equal(host.calls.length, 0);
+  await assert.rejects(services.sessionQuery.inspectSession("session-1"), (error) => {
+    assert.equal(error.code, "DSH_SESSION_INSPECT_READ_REQUIRED");
+    assert.match(error.message, /需要读取回调/);
+    return true;
+  });
 });
 
-test("sessionQuery.searchSessions 落到 host.conversation.search 并折叠命中页", async () => {
+test("sessionQuery.searchSessions 在会话日志上检索并返回 DSH 命中页结构", async () => {
   const host = createHost({
-    "host.conversation.search": (input) => ({
-      items: [
-        { sessionId: "session-1", title: "Workspace chat", snippet: "workspace" },
-        { id: "session-2", content: "workspace 摘要" },
-        "workspace 纯文本命中",
-      ],
-      hasMore: input.limit === 1,
-    }),
+    "host.conversation.list": () => ({ items: [], workspaces: [], hasMore: false }),
   });
   const services = createAmitiaDshHostServices(host);
   const page = await services.sessionQuery.searchSessions({ query: "workspace", limit: 1 });
-  assert.equal(page.hasMore, true);
-  assert.equal(page.hits.length, 3);
-  assert.deepEqual(page.hits[0], { sessionId: "session-1", title: "Workspace chat", snippet: "workspace" });
-  assert.equal(page.hits[1].sessionId, "session-2");
-  assert.equal(page.hits[2].content, "workspace 纯文本命中");
-  assert.deepEqual(host.calls, [{ method: "host.conversation.search", input: { query: "workspace", limit: 1 } }]);
-  await assert.rejects(() => services.sessionQuery.searchSessions({}), (error) => {
-    assert.match(error.message, /DSH sessionQuery\.searchSessions 需要 query: \{\}/);
-    return true;
-  });
+  assert.deepEqual(page.items, []);
+  assert.equal(page.nextCursor, undefined);
+  assert.equal(host.calls.some((call) => call.method === "host.conversation.search"), false);
+  await assert.rejects(() => services.sessionQuery.searchSessions({}), /需要非空检索词/);
   const aborted = new AbortController();
   aborted.abort(new Error("cancelled"));
   await assert.rejects(() => services.sessionQuery.searchSessions({ query: "x" }, { signal: aborted.signal }), /cancelled/);

@@ -2954,30 +2954,29 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       ]),
       contributions: projectionContributions,
     );
-    final messageIndexById = <String, int>{
-      for (var index = 0; index < visibleMessages.length; index++)
-        visibleMessages[index].id: index,
-    };
-    final flowItems =
-        <_MobileChatFlowItem>[
-          for (final message in visibleMessages)
-            _MobileChatFlowItem.message(
-              message: message,
-              messageIndex: messageIndexById[message.id] ?? -1,
-              timestamp: message.time,
-            ),
-          for (final node in conversationNodes) _MobileChatFlowItem.node(node),
-        ]..sort((left, right) {
-          final order = MobileConversationProjection.compareTimeline(
-            left.sequence,
-            left.timestamp,
-            right.sequence,
-            right.timestamp,
-          );
-          if (order != 0) return order;
-          if (left.isMessage != right.isMessage) return left.isMessage ? -1 : 1;
-          return left.key.compareTo(right.key);
-        });
+    final flowItems = <_MobileChatFlowItem>[];
+    var nextNode = 0;
+    for (var index = 0; index < visibleMessages.length; index++) {
+      final message = visibleMessages[index];
+      while (nextNode < conversationNodes.length) {
+        final node = conversationNodes[nextNode];
+        final order = MobileConversationProjection.compareTimeline(
+          node.anchorSeq,
+          node.anchorTimestamp,
+          message.sequence,
+          message.time,
+        );
+        if (order >= 0) break;
+        flowItems.add(_MobileChatFlowItem.node(node));
+        nextNode++;
+      }
+      flowItems.add(
+        _MobileChatFlowItem.message(message: message, messageIndex: index),
+      );
+    }
+    for (; nextNode < conversationNodes.length; nextNode++) {
+      flowItems.add(_MobileChatFlowItem.node(conversationNodes[nextNode]));
+    }
     final lastVisibleMessage = visibleMessages.isEmpty
         ? null
         : visibleMessages.last;
@@ -3002,8 +3001,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             key:
                 'error:${lastVisibleMessage!.assistantTurn?.id ?? lastVisibleMessage.id}',
             detail: _messageErrorDetail(lastVisibleMessage),
-            timestamp: lastVisibleMessage.time,
-            sequence: lastVisibleMessage.sequence,
           ),
         );
       }
@@ -3023,8 +3020,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           _MobileChatFlowItem.error(
             key: 'error:send:${failedMessage.id}',
             detail: detail.isEmpty ? '发送失败' : detail,
-            timestamp: failedMessage.time,
-            sequence: failedMessage.sequence,
             messageIndex: _runtime.messages.indexWhere(
               (candidate) => candidate.id == failedMessage.id,
             ),
@@ -3036,6 +3031,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final showEmptyState = flowItems.isEmpty;
     final showHistoryLoader =
         _runtime.hasMoreHistory || _runtime.isLoadingOlderMessages;
+    final flowIndexByKey = <String, int>{
+      for (var index = 0; index < flowItems.length; index++)
+        flowItems[index].key: index + (showHistoryLoader ? 1 : 0),
+    };
     final workspaceName = _runtime.workspace?.workspaceName.trim() ?? '';
     final currentConversationTitle =
         _runtime.conversationTitle.trim().isNotEmpty
@@ -3415,6 +3414,18 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                               flowItems.length +
                                               (pendingRoleSwitch ? 1 : 0) +
                                               (showHistoryLoader ? 1 : 0),
+                                          findChildIndexCallback: (key) {
+                                            if (key is! ValueKey<String>) {
+                                              return null;
+                                            }
+                                            if (pendingRoleSwitch &&
+                                                key.value ==
+                                                    'role-switch-pending') {
+                                              return flowItems.length +
+                                                  (showHistoryLoader ? 1 : 0);
+                                            }
+                                            return flowIndexByKey[key.value];
+                                          },
                                           itemBuilder: (context, contentIndex) {
                                             if (showHistoryLoader &&
                                                 contentIndex == 0) {
@@ -4803,8 +4814,6 @@ class _ChatTopBarButton extends StatelessWidget {
 class _MobileChatFlowItem {
   const _MobileChatFlowItem._({
     required this.key,
-    required this.timestamp,
-    this.sequence,
     this.message,
     this.messageIndex,
     this.node,
@@ -4814,41 +4823,33 @@ class _MobileChatFlowItem {
   factory _MobileChatFlowItem.message({
     required ChatMessage message,
     required int messageIndex,
-    required DateTime timestamp,
-  }) => _MobileChatFlowItem._(
-    key:
-        'message:${message.sourceOwnerId}:${message.role.name}:${message.renderId}',
-    timestamp: timestamp,
-    sequence: message.sequence,
-    message: message,
-    messageIndex: messageIndex,
-  );
+  }) {
+    final renderId = message.renderId;
+    final owner =
+        renderId.startsWith('mobile-') || renderId.startsWith('request:mobile-')
+        ? ''
+        : message.sourceOwnerId;
+    return _MobileChatFlowItem._(
+      key: 'message:$owner:${message.role.name}:$renderId',
+      message: message,
+      messageIndex: messageIndex,
+    );
+  }
 
   factory _MobileChatFlowItem.node(MobileConversationNode node) =>
-      _MobileChatFlowItem._(
-        key: 'node:${node.nodeId}',
-        timestamp: node.anchorTimestamp,
-        sequence: node.anchorSeq,
-        node: node,
-      );
+      _MobileChatFlowItem._(key: 'node:${node.nodeId}', node: node);
 
   factory _MobileChatFlowItem.error({
     required String key,
     required String detail,
-    required DateTime timestamp,
-    int? sequence,
     int? messageIndex,
   }) => _MobileChatFlowItem._(
     key: key,
-    timestamp: timestamp,
-    sequence: sequence,
     errorDetail: detail,
     messageIndex: messageIndex,
   );
 
   final String key;
-  final DateTime timestamp;
-  final int? sequence;
   final ChatMessage? message;
   final int? messageIndex;
   final MobileConversationNode? node;

@@ -126,10 +126,13 @@ export async function mount(root, context = {}) {
       element("h3", "dsh-mobile__card-title", text(plugin.name) || text(plugin.pluginId)),
       element("p", "dsh-mobile__card-id", text(plugin.pluginId)),
     );
+    const stateText = plugin.enabled === true
+      ? (plugin.active === true ? "运行中" : "已启用·未运行")
+      : "已停用";
     const state = element(
       "span",
-      `dsh-mobile__status${plugin.enabled ? " dsh-mobile__status--enabled" : ""}`,
-      plugin.enabled ? "已启用" : "已停用",
+      `dsh-mobile__status${plugin.enabled === true ? " dsh-mobile__status--enabled" : ""}`,
+      stateText,
     );
     header.append(identity, state);
     const details = element("div", "dsh-mobile__details");
@@ -138,7 +141,11 @@ export async function mount(root, context = {}) {
       element("span", "", `宿主入口 ${text(plugin.entry) || "无"}`),
       element("span", "", `客户端入口 ${text(plugin.clientEntry) || "无"}`),
       element("span", "", `映射贡献 ${Number(plugin.mappedContributionCount) || 0}`),
+      element("span", "", `运行状态 ${plugin.active === true ? "运行中" : "未运行"}`),
     );
+    if (text(plugin.activationError)) {
+      details.append(element("pre", "dsh-mobile__error", text(plugin.activationError)));
+    }
     const actions = element("div", "dsh-mobile__actions");
     actions.append(
       button(
@@ -204,7 +211,10 @@ export async function mount(root, context = {}) {
           const value = text(input.value || window[pendingSpecKey] || spec);
           void run(async () => {
             if (!value) throw new Error("请输入 DSH 插件包地址");
-            await command({ action: "install", spec: value });
+            const installed = await command({ action: "install", spec: value });
+            if (!installed || typeof installed !== "object" || !installed.package) {
+              throw new Error(`DSH 插件安装未返回插件记录：${JSON.stringify(installed)}`);
+            }
             spec = "";
             window[pendingSpecKey] = "";
           });
@@ -222,10 +232,13 @@ export async function mount(root, context = {}) {
       button(
         "安装官方 Todo 示例",
         () => run(async () => {
-          await command({
+          const installed = await command({
             action: "install",
             spec: "@deepseek-ai/dsh-tool-todo@0.2.2-rc.2",
           });
+          if (!installed || typeof installed !== "object" || !installed.package) {
+            throw new Error(`DSH 插件安装未返回插件记录：${JSON.stringify(installed)}`);
+          }
         }),
         { disabled: busy },
       ),

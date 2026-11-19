@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 
 enum AmitiaIconGlyph {
   messages,
-  tasks,
   memory,
   extensions,
   profile,
@@ -124,7 +123,8 @@ class AmitiaIcon extends StatelessWidget {
       Icons.delete_sweep_outlined => AmitiaIconGlyph.cleanup,
       Icons.chat_bubble_outline ||
       Icons.chat_bubble_outline_rounded => AmitiaIconGlyph.messages,
-      Icons.task_alt_outlined || Icons.task_outlined => AmitiaIconGlyph.tasks,
+      Icons.task_alt_outlined ||
+      Icons.task_outlined => AmitiaIconGlyph.reminder,
       Icons.timeline_outlined ||
       Icons.timeline_rounded => AmitiaIconGlyph.memoryTimeline,
       Icons.auto_stories_outlined => AmitiaIconGlyph.episodicMemory,
@@ -241,8 +241,6 @@ class _AmitiaIconPainter extends CustomPainter {
     switch (glyph) {
       case AmitiaIconGlyph.messages:
         _messages(canvas, stroke);
-      case AmitiaIconGlyph.tasks:
-        _tasks(canvas, stroke);
       case AmitiaIconGlyph.memory:
         _memory(canvas, stroke, fill);
       case AmitiaIconGlyph.extensions:
@@ -394,21 +392,6 @@ class _AmitiaIconPainter extends CustomPainter {
     canvas.drawPath(path, stroke);
   }
 
-  void _tasks(Canvas canvas, Paint stroke) {
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        const Rect.fromLTWH(4.2, 4.2, 15.6, 15.6),
-        const Radius.circular(4.2),
-      ),
-      stroke,
-    );
-    _polyline(canvas, stroke, [
-      const Offset(7.8, 12.1),
-      const Offset(10.5, 14.7),
-      const Offset(16.4, 8.9),
-    ]);
-  }
-
   void _memory(Canvas canvas, Paint stroke, Paint fill) {
     final path = Path()
       ..moveTo(6.1, 19.2)
@@ -416,7 +399,7 @@ class _AmitiaIconPainter extends CustomPainter {
       ..cubicTo(6.1, 8.4, 8.8, 5.1, 12.4, 5.1)
       ..cubicTo(16.2, 5.1, 19.1, 8.3, 19.1, 12.6)
       ..lineTo(19.1, 16.3)
-      ..quadraticBezierTo(19.1, 19.2, 16.5, 19.2)
+      ..cubicTo(19.1, 18.2, 18.2, 19.2, 16.5, 19.2)
       ..lineTo(12.7, 19.2);
     canvas.drawPath(path, stroke);
     final inner = Path()
@@ -508,7 +491,7 @@ class _AmitiaIconPainter extends CustomPainter {
     canvas.drawPath(path, stroke);
     _lines(canvas, stroke, [(5.5, 16.3, 18.5, 16.3)]);
     canvas.drawArc(
-      const Rect.fromLTWH(10, 16, 4, 3),
+      const Rect.fromLTWH(10, 16, 4, 4),
       0,
       math.pi,
       false,

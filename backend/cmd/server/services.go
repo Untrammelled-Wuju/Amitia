@@ -461,12 +461,16 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		WithConversationWorkspaceResolver(kernelConversationCreator).
 		WithConversationTurnController(kernelTurnController).
 		WithConversationArchiver(kernelConversationCreator).
+		WithConversationReorderer(kernelConversationCreator).
+		WithConversationTurns(kernelConvReader).
+		WithConversationUpdater(kernelConvReader).
 		WithConversationPinner(kernelConversationCreator).
 		WithDirectoryLister(kernelDirectory).
 		WithDirectoryCreator(kernelDirectory).
 		WithProjectLister(kernelProjectAdapter).
 		WithProjectCreator(kernelProjectAdapter).
 		WithProjectUpdater(kernelProjectAdapter).
+		WithProjectReorderer(kernelProjectAdapter).
 		WithProjectDeleter(kernelProjectAdapter).
 		WithVectorStore(newKernelVectorStoreAdapter(ctx.DB)).
 		WithNodeEnvironmentResolver(nodeResolver).

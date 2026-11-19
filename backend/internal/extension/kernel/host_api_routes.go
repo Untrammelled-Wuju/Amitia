@@ -220,6 +220,31 @@ type ConversationSearcher interface {
 	SearchConversations(ctx context.Context, query string, limit int) ([]json.RawMessage, bool, error)
 }
 
+type ConversationTurnsReader interface {
+	ReadConversationTurns(ctx context.Context, conversationID string, limit int) ([]json.RawMessage, error)
+}
+
+type ConversationUpdateRequest struct {
+	ConversationID string
+	Title          string
+	RequestID      string
+}
+
+type ConversationUpdater interface {
+	UpdateConversation(ctx context.Context, request ConversationUpdateRequest) (json.RawMessage, error)
+}
+
+type ConversationTurnSteerRequest struct {
+	ConversationID string
+	TurnID         string
+	Input          string
+}
+
+type ConversationTurnSteerResult struct {
+	Accepted bool   `json:"accepted"`
+	TurnID   string `json:"turnId"`
+}
+
 type ConversationCreateRequest struct {
 	SpaceID        string
 	CharacterID    string
@@ -338,6 +363,7 @@ type ConversationTurnAwaitResult struct {
 type ConversationTurnController interface {
 	InterruptConversationTurn(ctx context.Context, request ConversationTurnInterruptRequest) (ConversationTurnInterruptResult, error)
 	AwaitConversationTurnIdle(ctx context.Context, request ConversationTurnInterruptRequest) (ConversationTurnAwaitResult, error)
+	SteerConversationTurn(ctx context.Context, request ConversationTurnSteerRequest) (ConversationTurnSteerResult, error)
 }
 
 type ProjectWorkspaceInput struct {
@@ -362,6 +388,7 @@ type ProjectCreateRequest struct {
 type ProjectUpdateRequest struct {
 	ProjectID          string
 	Title              *string
+	Order              *int64
 	Pinned             *bool
 	Hidden             *bool
 	Workspaces         []ProjectWorkspaceInput
@@ -463,6 +490,27 @@ type ProjectDeleter interface {
 	DeleteProject(ctx context.Context, request ProjectDeleteRequest) (json.RawMessage, error)
 }
 
+type ConversationReorderRequest struct {
+	ConversationID       string
+	BeforeConversationID string
+	ProjectID            string
+	RequestID            string
+}
+
+type ConversationReorderer interface {
+	ReorderConversation(ctx context.Context, request ConversationReorderRequest) (json.RawMessage, error)
+}
+
+type ProjectReorderRequest struct {
+	ProjectID       string
+	BeforeProjectID string
+	RequestID       string
+}
+
+type ProjectReorderer interface {
+	ReorderProject(ctx context.Context, request ProjectReorderRequest) (json.RawMessage, error)
+}
+
 type ConversationArchiver interface {
 	ArchiveConversation(ctx context.Context, request ConversationArchiveRequest) (json.RawMessage, error)
 }
@@ -506,6 +554,9 @@ type HostAPIRouteDeps struct {
 	ConversationMessageAppender ConversationMessageAppender
 	ConversationTurnController  ConversationTurnController
 	ConversationArchiver        ConversationArchiver
+	ConversationReorderer       ConversationReorderer
+	ConversationTurns           ConversationTurnsReader
+	ConversationUpdater         ConversationUpdater
 	ConversationPinner          ConversationPinner
 	ModelDefaults               ModelDefaultsProvider
 	ConversationForker          ConversationForker
@@ -515,6 +566,7 @@ type HostAPIRouteDeps struct {
 	ProjectLister               ProjectLister
 	ProjectCreator              ProjectCreator
 	ProjectUpdater              ProjectUpdater
+	ProjectReorderer            ProjectReorderer
 	ProjectDeleter              ProjectDeleter
 	ExtensionDataSources        ExtensionDataSource
 	ResourceLinks               *ResourceLinkManager
@@ -899,14 +951,6 @@ func conversationMessageAppendRouteHandler(deps HostAPIRouteDeps) host_api.Handl
 }
 
 func conversationCreateRouteHandler(deps HostAPIRouteDeps) host_api.Handler {
-	return conversationCreateRouteHandlerFor(deps, false)
-}
-
-func conversationPrepareRouteHandler(deps HostAPIRouteDeps) host_api.Handler {
-	return conversationCreateRouteHandlerFor(deps, true)
-}
-
-func conversationCreateRouteHandlerFor(deps HostAPIRouteDeps, draft bool) host_api.Handler {
 	return func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
 		var p struct {
 			SpaceID        string `json:"spaceId"`
@@ -917,6 +961,7 @@ func conversationCreateRouteHandlerFor(deps HostAPIRouteDeps, draft bool) host_a
 			ProjectID      string `json:"projectId"`
 			Channel        string `json:"channel"`
 			PeerID         string `json:"peerId"`
+			Draft          bool   `json:"draft"`
 		}
 		if err := json.Unmarshal(req.Input, &p); err != nil {
 			return host_api.CallResult{
@@ -983,7 +1028,7 @@ func conversationCreateRouteHandlerFor(deps HostAPIRouteDeps, draft bool) host_a
 			ProjectID:      p.ProjectID,
 			Channel:        p.Channel,
 			PeerID:         p.PeerID,
-			Draft:          draft,
+			Draft:          p.Draft,
 		})
 		if err != nil {
 			return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()}}, nil
@@ -1002,8 +1047,8 @@ func conversationCreateRouteHandlerFor(deps HostAPIRouteDeps, draft bool) host_a
 		if strings.TrimSpace(createdConversationID) == "" {
 			createdConversationID = p.ConversationID
 		}
-		created["draft"] = draft
-		if !draft {
+		created["draft"] = p.Draft
+		if !p.Draft {
 			targetSnapshotID, err := createConversationTargetSnapshot(ctx, deps, req, createdConversationID)
 			if err != nil {
 				return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()}}, nil
@@ -1271,6 +1316,7 @@ func projectUpdateRouteHandler(deps HostAPIRouteDeps) host_api.Handler {
 			Hidden             *bool                   `json:"hidden"`
 			Workspaces         []ProjectWorkspaceInput `json:"workspaces"`
 			PrimaryWorkspaceID *string                 `json:"primaryWorkspaceId"`
+			Order              *int64                  `json:"order"`
 			RequestID          string                  `json:"requestId"`
 		}
 		if err := json.Unmarshal(req.Input, &p); err != nil {
@@ -1283,8 +1329,11 @@ func projectUpdateRouteHandler(deps HostAPIRouteDeps) host_api.Handler {
 		if p.ProjectID == "" || len(p.ProjectID) > 512 || len(p.RequestID) > 128 {
 			return hostRouteInputInvalid("projectId is required and project update input is too long"), nil
 		}
-		if p.Title == nil && p.Pinned == nil && p.Hidden == nil && p.Workspaces == nil && p.PrimaryWorkspaceID == nil {
-			return hostRouteInputInvalid("project update requires at least one of title, pinned, hidden, workspaces or primaryWorkspaceId"), nil
+		if p.Title == nil && p.Pinned == nil && p.Hidden == nil && p.Workspaces == nil && p.PrimaryWorkspaceID == nil && p.Order == nil {
+			return hostRouteInputInvalid("project update requires at least one of title, pinned, hidden, workspaces, primaryWorkspaceId or order"), nil
+		}
+		if p.Order != nil && *p.Order < 0 {
+			return hostRouteInputInvalid("project order must be non-negative"), nil
 		}
 		if p.Title != nil {
 			trimmed := strings.TrimSpace(*p.Title)
@@ -1313,6 +1362,7 @@ func projectUpdateRouteHandler(deps HostAPIRouteDeps) host_api.Handler {
 		output, err := deps.ProjectUpdater.UpdateProject(ctx, ProjectUpdateRequest{
 			ProjectID:          p.ProjectID,
 			Title:              p.Title,
+			Order:              p.Order,
 			Pinned:             p.Pinned,
 			Hidden:             p.Hidden,
 			Workspaces:         p.Workspaces,
@@ -1356,6 +1406,245 @@ func projectDeleteRouteHandler(deps HostAPIRouteDeps) host_api.Handler {
 			return hostRouteInternal(err), nil
 		}
 		return hostRouteOutput(output, `{"deleted":true}`), nil
+	}
+}
+
+func conversationUpdateRouteHandler(deps HostAPIRouteDeps) host_api.Handler {
+	return func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+		var p struct {
+			ConversationID string `json:"conversationId"`
+			Title          string `json:"title"`
+			RequestID      string `json:"requestId"`
+		}
+		if err := json.Unmarshal(req.Input, &p); err != nil {
+			return hostRouteInputInvalid(err.Error()), nil
+		}
+		p.ConversationID = strings.TrimSpace(p.ConversationID)
+		p.Title = strings.TrimSpace(p.Title)
+		p.RequestID = strings.TrimSpace(p.RequestID)
+		if p.ConversationID == "" || len(p.ConversationID) > 512 {
+			return hostRouteInputInvalid("conversationId is required and must not exceed 512 characters"), nil
+		}
+		if p.Title == "" || len(p.Title) > 512 {
+			return hostRouteInputInvalid("title is required and must not exceed 512 characters"), nil
+		}
+		if len(p.RequestID) > 128 {
+			return hostRouteInputInvalid("requestId is too long"), nil
+		}
+		if deps.ConversationUpdater == nil {
+			return hostRouteUnavailable("conversation updater not configured"), nil
+		}
+		ctx = resolveHostAPIScope(ctx, deps.ScopeSnapshotStore, req.ScopeSnapshotID)
+		targetScope, targetErr := resolveConversationTargetScope(ctx, deps, req, p.ConversationID)
+		if targetErr != nil {
+			return hostRouteScopeDenied(targetErr.Error()), nil
+		}
+		ctx = WithHostAPIScope(ctx, targetScope)
+		output, err := deps.ConversationUpdater.UpdateConversation(ctx, ConversationUpdateRequest{
+			ConversationID: p.ConversationID,
+			Title:          p.Title,
+			RequestID:      p.RequestID,
+		})
+		if err != nil {
+			return hostRouteInternal(err), nil
+		}
+		return hostRouteOutput(output, `{"updated":true}`), nil
+	}
+}
+
+func conversationTurnSteerRouteHandler(deps HostAPIRouteDeps) host_api.Handler {
+	return func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+		var p struct {
+			ConversationID string `json:"conversationId"`
+			TurnID         string `json:"turnId"`
+			Input          string `json:"input"`
+		}
+		if err := json.Unmarshal(req.Input, &p); err != nil {
+			return hostRouteInputInvalid(err.Error()), nil
+		}
+		p.ConversationID = strings.TrimSpace(p.ConversationID)
+		p.TurnID = strings.TrimSpace(p.TurnID)
+		if p.ConversationID == "" || len(p.ConversationID) > 512 || len(p.TurnID) > 512 {
+			return hostRouteInputInvalid("conversationId is required and conversationId/turnId must not exceed 512 characters"), nil
+		}
+		if strings.TrimSpace(p.Input) == "" {
+			return hostRouteInputInvalid("input is required"), nil
+		}
+		if deps.ConversationTurnController == nil {
+			return hostRouteUnavailable("conversation turn controller not configured"), nil
+		}
+		ctx = resolveHostAPIScope(ctx, deps.ScopeSnapshotStore, req.ScopeSnapshotID)
+		targetScope, targetErr := resolveConversationTargetScope(ctx, deps, req, p.ConversationID)
+		if targetErr != nil {
+			return hostRouteScopeDenied(targetErr.Error()), nil
+		}
+		ctx = WithHostAPIScope(ctx, targetScope)
+		result, err := deps.ConversationTurnController.SteerConversationTurn(ctx, ConversationTurnSteerRequest{
+			ConversationID: p.ConversationID,
+			TurnID:         p.TurnID,
+			Input:          p.Input,
+		})
+		if err != nil {
+			return hostRouteInternal(err), nil
+		}
+		encoded, err := json.Marshal(result)
+		if err != nil {
+			return hostRouteInternal(err), nil
+		}
+		return host_api.CallResult{Status: host_api.StatusSuccess, Output: encoded}, nil
+	}
+}
+
+func conversationTurnsRouteHandler(deps HostAPIRouteDeps) host_api.Handler {
+	return func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+		var p struct {
+			ConversationID string `json:"conversationId"`
+			Limit          int    `json:"limit"`
+		}
+		if err := json.Unmarshal(req.Input, &p); err != nil {
+			return hostRouteInputInvalid(err.Error()), nil
+		}
+		p.ConversationID = strings.TrimSpace(p.ConversationID)
+		if p.ConversationID == "" {
+			return hostRouteInputInvalid("conversationId is required"), nil
+		}
+		if len(p.ConversationID) > 512 {
+			return hostRouteInputInvalid("conversationId is too long"), nil
+		}
+		if p.Limit <= 0 || p.Limit > 200 {
+			p.Limit = 50
+		}
+		if deps.ConversationTurns == nil {
+			return hostRouteUnavailable("conversation turns reader not configured"), nil
+		}
+		ctx = resolveHostAPIScope(ctx, deps.ScopeSnapshotStore, req.ScopeSnapshotID)
+		targetScope, targetErr := resolveConversationTargetScope(ctx, deps, req, p.ConversationID)
+		if targetErr != nil {
+			return hostRouteScopeDenied(targetErr.Error()), nil
+		}
+		ctx = WithHostAPIScope(ctx, targetScope)
+		turns, err := deps.ConversationTurns.ReadConversationTurns(ctx, p.ConversationID, p.Limit)
+		if err != nil {
+			return hostRouteInternal(err), nil
+		}
+		output, err := json.Marshal(map[string]any{"conversationId": p.ConversationID, "turns": turns})
+		if err != nil {
+			return hostRouteInternal(err), nil
+		}
+		return host_api.CallResult{Status: host_api.StatusSuccess, Output: output}, nil
+	}
+}
+
+func conversationReorderRouteHandler(deps HostAPIRouteDeps) host_api.Handler {
+	return func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+		var p struct {
+			SpaceID              string `json:"spaceId"`
+			CharacterID          string `json:"characterId"`
+			ConversationID       string `json:"conversationId"`
+			BeforeConversationID string `json:"beforeConversationId"`
+			ProjectID            string `json:"projectId"`
+			RequestID            string `json:"requestId"`
+		}
+		if err := json.Unmarshal(req.Input, &p); err != nil {
+			return hostRouteInputInvalid(err.Error()), nil
+		}
+		p.SpaceID = strings.TrimSpace(p.SpaceID)
+		p.CharacterID = strings.TrimSpace(p.CharacterID)
+		p.ConversationID = strings.TrimSpace(p.ConversationID)
+		p.BeforeConversationID = strings.TrimSpace(p.BeforeConversationID)
+		p.ProjectID = strings.TrimSpace(p.ProjectID)
+		p.RequestID = strings.TrimSpace(p.RequestID)
+		if p.ConversationID == "" || len(p.ConversationID) > 512 || len(p.BeforeConversationID) > 512 || len(p.ProjectID) > 512 || len(p.RequestID) > 128 {
+			return hostRouteInputInvalid("conversationId is required and conversation reorder input is too long"), nil
+		}
+		ctx = resolveHostAPIScope(ctx, deps.ScopeSnapshotStore, req.ScopeSnapshotID)
+		scope := GetHostAPIScope(ctx)
+		targetScope, targetErr := resolveConversationTargetScope(ctx, deps, req, p.ConversationID)
+		if targetErr != nil {
+			return hostRouteScopeDenied(targetErr.Error()), nil
+		}
+		scope = targetScope
+		if req.SpaceID != "" {
+			if scope.SpaceID != "" && scope.SpaceID != req.SpaceID {
+				return hostRouteScopeDenied("spaceId does not match current scope"), nil
+			}
+			scope.SpaceID = req.SpaceID
+		}
+		if req.CharacterID != "" {
+			if scope.CharacterID != "" && scope.CharacterID != req.CharacterID {
+				return hostRouteScopeDenied("characterId does not match current scope"), nil
+			}
+			scope.CharacterID = req.CharacterID
+		}
+		if p.SpaceID != "" && scope.SpaceID != "" && p.SpaceID != scope.SpaceID {
+			return hostRouteScopeDenied("spaceId does not match current scope"), nil
+		}
+		if p.CharacterID != "" && scope.CharacterID != "" && p.CharacterID != scope.CharacterID {
+			return hostRouteScopeDenied("characterId does not match current scope"), nil
+		}
+		if scope.SpaceID == "" {
+			scope.SpaceID = p.SpaceID
+		}
+		if scope.CharacterID == "" {
+			scope.CharacterID = p.CharacterID
+		}
+		if scope.SpaceID == "" || scope.CharacterID == "" {
+			return hostRouteInputInvalid("spaceId and characterId are required"), nil
+		}
+		scope.ConversationID = p.ConversationID
+		ctx = WithHostAPIScope(ctx, scope)
+		if deps.ConversationReorderer == nil {
+			return hostRouteUnavailable("conversation reorderer not configured"), nil
+		}
+		output, err := deps.ConversationReorderer.ReorderConversation(ctx, ConversationReorderRequest{
+			ConversationID:       p.ConversationID,
+			BeforeConversationID: p.BeforeConversationID,
+			ProjectID:            p.ProjectID,
+			RequestID:            p.RequestID,
+		})
+		if err != nil {
+			return hostRouteInternal(err), nil
+		}
+		return hostRouteOutput(output, `{}`), nil
+	}
+}
+
+func projectReorderRouteHandler(deps HostAPIRouteDeps) host_api.Handler {
+	return func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+		var p struct {
+			SpaceID         string `json:"spaceId"`
+			CharacterID     string `json:"characterId"`
+			ProjectID       string `json:"projectId"`
+			BeforeProjectID string `json:"beforeProjectId"`
+			RequestID       string `json:"requestId"`
+		}
+		if err := json.Unmarshal(req.Input, &p); err != nil {
+			return hostRouteInputInvalid(err.Error()), nil
+		}
+		p.SpaceID = strings.TrimSpace(p.SpaceID)
+		p.CharacterID = strings.TrimSpace(p.CharacterID)
+		p.ProjectID = strings.TrimSpace(p.ProjectID)
+		p.BeforeProjectID = strings.TrimSpace(p.BeforeProjectID)
+		p.RequestID = strings.TrimSpace(p.RequestID)
+		if p.ProjectID == "" || len(p.ProjectID) > 512 || len(p.BeforeProjectID) > 512 || len(p.RequestID) > 128 {
+			return hostRouteInputInvalid("projectId is required and project reorder input is too long"), nil
+		}
+		ctx, _, rejected, ok := resolveProjectHostScope(ctx, deps, req, p.SpaceID, p.CharacterID)
+		if !ok {
+			return rejected, nil
+		}
+		if deps.ProjectReorderer == nil {
+			return hostRouteUnavailable("project reorderer not configured"), nil
+		}
+		output, err := deps.ProjectReorderer.ReorderProject(ctx, ProjectReorderRequest{
+			ProjectID:       p.ProjectID,
+			BeforeProjectID: p.BeforeProjectID,
+			RequestID:       p.RequestID,
+		})
+		if err != nil {
+			return hostRouteInternal(err), nil
+		}
+		return hostRouteOutput(output, `{}`), nil
 	}
 }
 
@@ -1645,6 +1934,43 @@ func conversationPinRouteHandler(deps HostAPIRouteDeps) host_api.Handler {
 			pinnedJSON = "true"
 		}
 		return hostRouteOutput(output, `{"conversationId":"`+p.ConversationID+`","pinned":`+pinnedJSON+`}`), nil
+	}
+}
+
+func directoryPickRouteHandler(deps HostAPIRouteDeps) host_api.Handler {
+	return func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+		var p struct {
+			Title     string `json:"title"`
+			StartPath string `json:"startPath"`
+		}
+		if len(req.Input) > 0 {
+			if err := json.Unmarshal(req.Input, &p); err != nil {
+				return hostRouteInputInvalid(err.Error()), nil
+			}
+		}
+		startPath := strings.TrimSpace(p.StartPath)
+		if startPath != "" {
+			resolved, err := resolveHostDirectoryPath(startPath)
+			if err != nil {
+				return hostRouteInputInvalid(err.Error()), nil
+			}
+			startPath = resolved
+		}
+		if deps.UIHostNotifier == nil {
+			return hostRouteUnavailable("directory pick host notifier not configured"), nil
+		}
+		path, err := deps.UIHostNotifier.PickDirectory(ctx, string(req.RuntimeIdentity.ExtensionID), "", strings.TrimSpace(p.Title), startPath)
+		if err != nil {
+			return hostRouteInternal(err), nil
+		}
+		if strings.TrimSpace(path) == "" {
+			return host_api.CallResult{Status: host_api.StatusSuccess, Output: json.RawMessage(`{"path":""}`)}, nil
+		}
+		output, err := json.Marshal(map[string]any{"path": path})
+		if err != nil {
+			return hostRouteInternal(err), nil
+		}
+		return host_api.CallResult{Status: host_api.StatusSuccess, Output: output}, nil
 	}
 }
 
@@ -2143,7 +2469,6 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 	conversationMessageHandler := conversationMessageRouteHandler(deps)
 	conversationMessageAppendHandler := conversationMessageAppendRouteHandler(deps)
 	conversationCreateHandler := conversationCreateRouteHandler(deps)
-	conversationPrepareHandler := conversationPrepareRouteHandler(deps)
 	conversationTurnInterruptHandler := conversationTurnInterruptRouteHandler(deps)
 	conversationTurnAwaitHandler := conversationTurnAwaitRouteHandler(deps)
 	conversationArchiveHandler := conversationArchiveRouteHandler(deps)
@@ -2984,6 +3309,27 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 					Output: output,
 				}, nil
 			},
+		},
+		{
+			method:          host_api.MethodConversationUpdate,
+			riskLevel:       host_api.RiskMedium,
+			sideEffectLevel: host_api.SideEffectWrite,
+			timeout:         10 * time.Second,
+			handler:         conversationUpdateRouteHandler(deps),
+		},
+		{
+			method:          host_api.MethodConversationTurnSteer,
+			riskLevel:       host_api.RiskHigh,
+			sideEffectLevel: host_api.SideEffectWrite,
+			timeout:         10 * time.Second,
+			handler:         conversationTurnSteerRouteHandler(deps),
+		},
+		{
+			method:          host_api.MethodConversationTurns,
+			riskLevel:       host_api.RiskLow,
+			sideEffectLevel: host_api.SideEffectReadOnly,
+			timeout:         10 * time.Second,
+			handler:         conversationTurnsRouteHandler(deps),
 		},
 		{
 			method:          host_api.MethodConversationSearch,
@@ -4987,13 +5333,6 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 			handler:         conversationCreateHandler,
 		},
 		{
-			method:          host_api.MethodConversationPrepare,
-			riskLevel:       host_api.RiskHigh,
-			sideEffectLevel: host_api.SideEffectWrite,
-			timeout:         30 * time.Second,
-			handler:         conversationPrepareHandler,
-		},
-		{
 			method:          host_api.MethodConversationDelete,
 			riskLevel:       host_api.RiskHigh,
 			sideEffectLevel: host_api.SideEffectWrite,
@@ -5013,6 +5352,20 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 			sideEffectLevel: host_api.SideEffectWrite,
 			timeout:         30 * time.Second,
 			handler:         conversationArchiveHandler,
+		},
+		{
+			method:          host_api.MethodConversationReorder,
+			riskLevel:       host_api.RiskMedium,
+			sideEffectLevel: host_api.SideEffectWrite,
+			timeout:         30 * time.Second,
+			handler:         conversationReorderRouteHandler(deps),
+		},
+		{
+			method:          host_api.MethodProjectReorder,
+			riskLevel:       host_api.RiskMedium,
+			sideEffectLevel: host_api.SideEffectWrite,
+			timeout:         30 * time.Second,
+			handler:         projectReorderRouteHandler(deps),
 		},
 		{
 			method:          host_api.MethodConversationFork,
@@ -5055,6 +5408,13 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 			sideEffectLevel: host_api.SideEffectWrite,
 			timeout:         15 * time.Second,
 			handler:         directoryCreateRouteHandler(deps),
+		},
+		{
+			method:          host_api.MethodDirectoryPick,
+			riskLevel:       host_api.RiskMedium,
+			sideEffectLevel: host_api.SideEffectReadOnly,
+			timeout:         5 * time.Minute,
+			handler:         directoryPickRouteHandler(deps),
 		},
 		{
 			method:          host_api.MethodProjectList,

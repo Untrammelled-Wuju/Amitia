@@ -153,28 +153,23 @@ test("session.loadOlder 同步刷新事件窗口与会话投影并返回结果",
   data.dispose();
 });
 
-test("session.loadThrough 缺少按 seq 加载的 host action 时抛出原值", async () => {
+test("session.loadThrough 按 seq 截取窗口并在需要时扩展", async () => {
   const calls = [];
-  const services = createDshClientRuntimeServices({ command: pagedCommand(10, calls), navigate: () => {} });
+  const services = createDshClientRuntimeServices({ command: pagedCommand(400, calls), navigate: () => {} });
   const binding = services.sessions.binding("conversation-paging");
   await flush();
-  const before = calls.length;
-  assert.throws(
-    () => binding.session.loadThrough(42),
-    (error) => {
-      assert.match(error.message, /缺少按 seq 加载的 host action/);
-      assert.match(error.message, /42/);
-      assert.equal(error.seq, 42);
-      assert.equal(error.missingHostAction, "conversation-events-through");
-      assert.deepEqual(error.request, {
-        action: "conversation-events-through",
-        conversationId: "conversation-paging",
-        seq: 42,
-      });
-      return true;
-    },
-  );
-  assert.equal(calls.length, before);
+  const head = await binding.session.loadThrough(5);
+  assert.equal(head.seq, 5);
+  assert.equal(head.entries.length > 0, true);
+  assert.equal(head.entries.every((entry) => Number(entry.event.seq) <= 5), true);
+
+  const readsBefore = calls.filter((call) => call.action === "conversation-read").length;
+  const deep = await binding.session.loadThrough(2000);
+  assert.equal(deep.seq, 2000);
+  assert.equal(deep.entries.every((entry) => Number(entry.event.seq) <= 2000), true);
+  assert.equal(calls.filter((call) => call.action === "conversation-read").length > readsBefore, true);
+
+  await assert.rejects(() => binding.session.loadThrough(-1), /需要非负整数 seq/);
 });
 
 test("loadOlder 宿主失败时原样抛出错误与返回体并回退窗口", async () => {

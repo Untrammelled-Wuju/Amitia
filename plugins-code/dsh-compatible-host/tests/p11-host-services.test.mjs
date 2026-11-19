@@ -42,6 +42,9 @@ function createStateHost(options = {}) {
         const offset = Math.max(Number(input.offset) || 0, 0);
         return { items: conversations.slice(offset, offset + limit), workspaces: [] };
       }
+      if (method === "host.conversation.read") return { messages: [], hasMore: false };
+      if (method === "host.conversation.turns") return { turns: [] };
+      if (method === "host.conversation.scope") return { scopeSnapshotId: "scope-" + String(input.conversationId || "") };
       throw new Error(`unexpected host method ${method}`);
     },
   };
@@ -318,20 +321,48 @@ test("reads DSH session query views from the Amitia conversation catalog and per
   assert.equal(batch[1].reason.code, "DSH_SESSION_NOT_FOUND");
 });
 
-test("keeps unmapped session query methods explicitly unavailable", async () => {
+test("inspectSession 交给读取函数只读会话视图", async () => {
+  const events = [
+    { type: "turn/start", seq: 0, time: 1762000000000, data: { turn: 1 } },
+    { type: "user/message", seq: 1, time: 1762000000001, data: { id: "m1", role: "user", content: [{ type: "text", text: "季度计划" }], source: { kind: "user" } }, surfaceOp: "append" },
+    { type: "assistant/message", seq: 2, time: 1762000000002, data: { turn: 1, step: 0, stream: [], message: { id: "m2", role: "assistant", content: [{ type: "text", text: "收到" }], source: { kind: "model", provider: "amitia", model: "amitia-conversation" } } }, surfaceOp: "append" },
+    { type: "session/title", seq: 3, time: 1762000000003, data: { title: "季度计划", messageSeqs: [1], source: "user" } },
+  ];
+  const host = createStateHost({
+    conversations: [{ sessionId: "session-1", title: "季度计划", createdAt: "2026-11-01T10:00:00Z", formatStatus: "current" }],
+    state: {
+      "dsh-session:session-1": {
+        version: 2,
+        conversationId: "session-1",
+        scopeSnapshotId: "",
+        events,
+        updatedAt: "2026-11-01T10:00:00.000Z",
+      },
+    },
+  });
+  const services = createAmitiaDshHostServices(host);
+  const summary = await services.sessionQuery.inspectSession("session-1", (session) => ({
+    id: session.id,
+    surfaceSeqs: session.surfaceEvents().map((event) => event.seq),
+    messages: session.messages().map((message) => message.role),
+    title: session.title()?.title,
+  }));
+  assert.deepEqual(summary, { id: "session-1", surfaceSeqs: [1, 2], messages: ["user", "assistant"], title: "季度计划" });
+  await assert.rejects(services.sessionQuery.inspectSession("session-1", (session) => session.append("user/message", {})), (error) => {
+    assert.equal(error.code, "DSH_SESSION_INSPECT_READ_ONLY");
+    return true;
+  });
+});
+
+test("keeps the remaining session query methods explicitly unavailable", async () => {
   const host = createStateHost();
   const services = createAmitiaDshHostServices(host);
-  for (const method of [
-    "observeSession",
-    "inspectSession",
-    "searchEvents",
-    "filterSessions",
-    "filterEvents",
-    "traceSession",
-    "traceEvent",
-  ]) {
-    assert.throws(() => services.sessionQuery[method]("session-1"), {
-      code: "DSH_HOST_OPERATION_UNAVAILABLE",
-    }, method);
-  }
+  await assert.rejects(services.sessionQuery.inspectSession("session-1"), {
+    code: "DSH_SESSION_INSPECT_READ_REQUIRED",
+  });
+  await assert.rejects(services.sessionQuery.searchEvents({ sessionId: "session-1", query: "no-hit-token" }), (error) => {
+    assert.equal(error.code, "DSH_SESSION_NOT_FOUND");
+    assert.match(error.message, /session-1/);
+    return true;
+  });
 });
