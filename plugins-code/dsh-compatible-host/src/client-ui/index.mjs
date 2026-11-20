@@ -84,17 +84,7 @@ function text(value) {
   return value == null ? "" : String(value).trim();
 }
 
-function runtimeModuleSessionContext(pageID) {
-  if (pageID === "dsh-compatible-page" || pageID === "dsh-compatible-mobile-page") {
-    return { characterId: "", conversationId: "" };
-  }
-  return {
-    characterId: text(globalThis.__dshCurrentCharacterId),
-    conversationId: text(globalThis.__dshCurrentSessionId),
-  };
-}
-
-async function clientRuntimeModuleURL(plugin, entry) {
+export async function clientRuntimeModuleURL(plugin, entry) {
   const pageModuleURL = new URL(import.meta.url);
   const marker = "/page-module/";
   const markerIndex = pageModuleURL.pathname.indexOf(marker);
@@ -119,7 +109,6 @@ async function clientRuntimeModuleURL(plugin, entry) {
       Object.assign(headers, await desktop.getBackendAuthHeaders("local"));
     }
   }
-  const sessionContext = runtimeModuleSessionContext(pageID);
   const response = await fetch(new URL("/api/extensions/ui/runtime-module-ticket", baseURL), {
     method: "POST",
     credentials,
@@ -129,8 +118,6 @@ async function clientRuntimeModuleURL(plugin, entry) {
       pageId: pageID,
       pluginId: plugin.pluginId,
       entryId: entry.id,
-      characterId: sessionContext.characterId,
-      conversationId: sessionContext.conversationId,
     }),
   });
   if (!response.ok) {

@@ -8,6 +8,46 @@ import test from "node:test";
 
 const packageRoot = fileURLToPath(new URL("..", import.meta.url));
 
+test("requests client modules independently of the active conversation", async () => {
+  const result = await build({
+    entryPoints: [join(packageRoot, "src", "client-ui", "index.mjs")],
+    outfile: join(packageRoot, ".client-ui-ticket-test.mjs"),
+    bundle: true,
+    format: "esm",
+    platform: "browser",
+    write: false,
+    define: { "process.env.NODE_ENV": '"production"', "import.meta.url": '"http://localhost/api/public/extensions/ui/page-module/com.amitia%2Fdsh-compatible-host/dsh-desktop-shell-host/index.mjs"' },
+    loader: { ".woff": "dataurl", ".woff2": "dataurl", ".ttf": "dataurl", ".png": "dataurl", ".svg": "dataurl", ".css": "css" },
+  });
+  const javascript = result.outputFiles.find((file) => file.path.endsWith(".mjs"));
+  assert.ok(javascript);
+  const dom = new JSDOM("<!doctype html><html><head></head><body></body></html>", { url: "http://localhost" });
+  const previous = { document: globalThis.document, window: globalThis.window, location: globalThis.location, fetch: globalThis.fetch, character: globalThis.__dshCurrentCharacterId, session: globalThis.__dshCurrentSessionId };
+  try {
+    globalThis.document = dom.window.document;
+    globalThis.window = dom.window;
+    globalThis.location = dom.window.location;
+    globalThis.__dshCurrentCharacterId = "role";
+    globalThis.__dshCurrentSessionId = "deleted-conversation";
+    let body;
+    globalThis.fetch = async (_url, options) => {
+      body = JSON.parse(options.body);
+      return { ok: true, json: async () => ({ path: "/api/public/extensions/ui/runtime-module/token" }) };
+    };
+    const runtime = await import(`data:text/javascript;base64,${Buffer.from(javascript.text).toString("base64")}`);
+    await runtime.clientRuntimeModuleURL({ pluginId: "plugin" }, { id: "root" });
+    assert.deepEqual(body, { extensionId: "com.amitia/dsh-compatible-host", pageId: "dsh-desktop-shell-host", pluginId: "plugin", entryId: "root" });
+  } finally {
+    globalThis.document = previous.document;
+    globalThis.window = previous.window;
+    globalThis.location = previous.location;
+    globalThis.fetch = previous.fetch;
+    globalThis.__dshCurrentCharacterId = previous.character;
+    globalThis.__dshCurrentSessionId = previous.session;
+    dom.window.close();
+  }
+});
+
 function sourceChunk(code, input = {}) {
   const bytes = Buffer.from(code, "utf8");
   const offset = Math.min(bytes.length, Number(input.offset) || 0);
