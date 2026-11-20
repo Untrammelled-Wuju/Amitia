@@ -226,6 +226,10 @@ SPDX-License-Identifier: AGPL-3.0-only
       render-fallback-while-scope-pending
     >
     <div ref="composerRegionRef" class="composer-region" data-amitia-ui="chat.composer">
+      <QueuedMessages :items="queuedMessages" :busy="queueBusy" :can-steer="sending || isSubmitting" :error="queueError"
+        @reorder="ids => runQueueAction(() => queue.reorder(ids))"
+        @remove="id => runQueueAction(() => queue.remove(id))"
+        @steer="id => runQueueAction(() => queue.steer(id))" />
       <div v-if="group" class="group-composer-members" aria-label="群成员点名">
         <button v-for="member in activeGroupMembers" :key="member.memberId" type="button" @click="insertGroupMention(member)">@{{ member.characterName }}</button>
         <button type="button" class="mention-all" @click="insertAllGroupMentions">@所有成员</button>
@@ -267,7 +271,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       :model-commit-change="handleModelSettingChange"
       :role-model-preview-change="handleRoleModelSettingPreviewChange"
       :role-model-commit-change="handleRoleModelSettingChange"
-      @send="handleSend"
+      @send="handleQueuedOrSend"
       @image="onImageAttached"
       @removeImage="onImageRemoved"
       @stop="handleStop"
@@ -324,7 +328,11 @@ import { useWorkbenchStore } from "@/stores/workbench";
 import { useConversationRuntime } from "../../composables/useConversationRuntime";
 import AutomationStatusIndicator from "../../components/AutomationStatusIndicator.vue";
 import { useWebChatScroll } from "../../composables/useWebChatScroll";
-import { useWebChatSend } from "../../composables/useWebChatSend";
+import { ownedQuoteReferenceForMessage, useWebChatSend } from "../../composables/useWebChatSend";
+import { useConversationQueue } from "../../composables/useConversationQueue";
+import { resolveGroupMentions } from "../../composables/groupMentions";
+import { uploadOwnedAttachment, type OwnedAttachment } from "@/runtime/device-owned-attachments";
+import QueuedMessages from "../../components/QueuedMessages.vue";
 import { useWebChatConversation } from "../../composables/useWebChatConversation";
 import { useDeviceOwnedConversation } from "../../composables/useDeviceOwnedConversation";
 import { OwnedChatStateChangedError, pollOwnedChat } from "@/runtime/owned-chat-poll";
@@ -337,7 +345,8 @@ import {
 import ChatHeaderBar from "../../components/ChatHeaderBar.vue";
 import RealtimeCallDialog from "../../components/RealtimeCallDialog.vue";
 import type { OwnedChatResponse, OwnedExecutionScope } from "../../runtime/device-owned-chat";
-import { conversationReference } from "../../runtime/device-owned-conversation-reference";
+import { conversationReference, parseConversationReference } from "../../runtime/device-owned-conversation-reference";
+import { prepareOwnedChatRequest } from "../../runtime/owned-chat-management";
 import MessagesArea from "../../components/MessagesArea.vue";
 import ChatInput from "../../components/ChatInput.vue";
 import CharacterPickerDialog from "../../components/CharacterPickerDialog.vue";
@@ -625,6 +634,11 @@ async function handleNewChat(event?: CustomEvent) {
 
 async function handleFileSend(file: File) {
   if (!file) return;
+  if (sending.value || isSubmitting.value) {
+    try { await enqueueQueuedMessage(`[文件] ${file.name}`, [await uploadOwnedAttachment({ file, kind: "file", name: file.name })]); }
+    catch (cause) { await ElMessageBox.alert(queue.reportError(cause), "文件加入队列失败", { confirmButtonText: "关闭" }); }
+    return;
+  }
   try { if (await owned.refresh()) { if (!characterId.value) { ElMessage.warning("请先选择调用角色"); return; } await handleOwnedFileSend(file); return; } } catch (error: any) { ElMessage.error(error?.message || "文件发送失败"); return; }
   ElMessage.error(owned.notice.value || "设备对话服务尚未就绪，附件未发送");
 }
@@ -956,7 +970,7 @@ const {
     applySnapshotWorkspace(workspace, String(conversation?.projectId || ""));
     applyHistorySnapshot(snapshot?.messageHistory);
     if (conversation?.id) {
-      await chatStore.markConversationRead(String(conversation.id), Number(conversation.lastTerminalTurnSequence || 0)).catch((error) => {
+      await chatStore.markConversationRead(String(conversation.id), Number(conversation.lastTerminalTurnSequence || 0), characterId.value).catch((error) => {
   console.error("[original-error]", error);
   return undefined;
 });
@@ -966,6 +980,7 @@ const {
     await chatStore.fetchSidebar();
   },
   groupSending,
+  characterId,
 );
 
 loadOlderRuntimeTurns = loadOlderConversationTurns;
@@ -1023,8 +1038,10 @@ const {
   handleRetry,
   handleClear,
   resetForNewDraft,
+  getPendingVideoFile,
   generating,
   isSubmitting,
+  messageStyle,
 } = useWebChatSend(
   persistedMessages,
   convId,
@@ -1064,7 +1081,80 @@ const {
   groupSending,
   groupDiscussion,
   groupConversation,
+  async (text, attachments) => enqueueQueuedMessage(text, attachments),
 );
+
+const queue = useConversationQueue(convId, characterId, activeTurnId);
+const { items: queuedMessages, busy: queueBusy, error: queueError } = queue;
+
+async function runQueueAction(action: () => Promise<void>) {
+  try {
+    await action();
+  } catch (cause) {
+    const detail = queue.reportError(cause);
+    await ElMessageBox.alert(detail, "排队消息操作失败", { confirmButtonText: "关闭" });
+  }
+}
+
+async function handleQueuedOrSend(text: string, imageBase64?: string, videoBase64?: string) {
+  if (!sending.value && !isSubmitting.value) return handleSend(text, imageBase64, videoBase64);
+  const id = convId.value;
+  const imageName = currentImageFile.value?.name || "image.png";
+  const videoFile = getPendingVideoFile();
+  try {
+    const attachments: OwnedAttachment[] = [];
+    if (imageBase64) {
+      const imageFile = currentImageFile.value;
+      if (!imageFile) throw new Error("图片原始文件不可用，请重新选择图片");
+      attachments.push(await uploadOwnedAttachment({ file: imageFile, kind: "image", name: imageName }));
+    }
+    if (videoBase64) {
+      if (!videoFile) throw new Error("视频文件已变化，请重新选择视频");
+      attachments.push(await uploadOwnedAttachment({ file: videoFile, kind: "video", name: videoFile.name }));
+    }
+    await enqueueQueuedMessage(text.trim() || (imageBase64 ? "[图片]" : "[视频]"), attachments);
+    if (imageBase64) onImageRemoved();
+    if (videoBase64) onVideoRemoved();
+  } catch (cause) {
+    if (convId.value === id && !inputRef.value?.getText?.()) inputRef.value?.setText?.(text);
+    const detail = queue.reportError(cause);
+    await ElMessageBox.alert(`${detail}\n\n未入队的消息：\n${text}`, "加入队列失败", { confirmButtonText: "关闭" });
+  }
+}
+
+async function enqueueQueuedMessage(text: string, attachments: OwnedAttachment[] = []) {
+  const conversationId = convId.value;
+  const roleId = characterId.value;
+  if (!conversationId || !roleId) throw new Error("当前会话或角色不可用");
+  const prepared = await prepareOwnedChatRequest({ conversationId }, roleId);
+  if (convId.value !== conversationId || characterId.value !== roleId) throw new Error("会话或角色已变化，排队消息未提交");
+  const quote = replyTarget.value ? await ownedQuoteReferenceForMessage(replyTarget.value, prepared.expected) : undefined;
+  const previousCore = [...persistedMessages.value].reverse().find((message) => message.executionScope?.coreId && message.executionScope.coreId !== owned.coreId.value)?.executionScope?.coreId;
+  const context = previousCore ? {
+    previousCoreId: previousCore,
+    conversationId,
+    summary: owned.previousSummary(previousCore, conversationId),
+    messages: persistedMessages.value.filter((message) => ["user", "assistant"].includes(message.role) && !["sending", "queued", "failed"].includes(message.status)).slice(-128).map((message) => ({ id: message.id, ownerId: message.ownerId || message.executionScope?.resourceOwnerId, role: message.role, content: String(message.content || ""), status: message.status })),
+  } : undefined;
+  const origin = parseConversationReference(conversationId);
+  const currentGroup = group.value;
+  await queue.enqueue(text, {
+    modelConfigId: selectedModelId.value,
+    reasoningEffort: selectedReasoningEffort.value,
+    reasoningEnabled: selectedReasoningEnabled.value,
+    permissionMode: selectedPermissionMode.value,
+    messageStyle: messageStyle.value,
+    ...(quote ? { quote } : {}),
+    ...(context ? { context } : {}),
+    ...(origin ? { conversationOrigin: origin } : {}),
+    ...(replyTarget.value?.content ? { replyExcerpt: String(replyTarget.value.content).slice(0, 512) } : {}),
+    ...(attachments.length ? { attachments } : {}),
+    ...(currentGroup ? {
+      mentions: groupDiscussion.value ? [] : resolveGroupMentions(text, currentGroup.members),
+      group: { expectedMembershipRevision: currentGroup.membershipRevision, expectedSettingsRevision: currentGroup.settingsRevision, mode: groupDiscussion.value ? "discussion" : "standard" },
+    } : {}),
+  });
+}
 
 const {
   characters,
@@ -1150,7 +1240,7 @@ watch(() => chatStore.currentConversationId, (id) => {
 });
 
 const conversationHostActions: Record<string, (input?: any) => unknown | Promise<unknown>> = {
-  "conversation.send": async (input) => handleSend(String(input?.text ?? input ?? ""), input?.imageBase64, input?.videoBase64),
+  "conversation.send": async (input) => handleQueuedOrSend(String(input?.text ?? input ?? ""), input?.imageBase64, input?.videoBase64),
   "conversation.stop": async () => handleStop(),
   "conversation.retry": async (input) => { const id = String(input?.messageId ?? input ?? ""); const msg = messages.value.find((item) => item.id === id); if (msg) await handleRetry(msg); },
   "conversation.delete": async (input) => deleteConversationMessage(String(input?.messageId ?? input ?? ""), input?.ownerId),
@@ -1195,15 +1285,17 @@ const conversationHostActions: Record<string, (input?: any) => unknown | Promise
 };
 
 watch(
-  convId,
-  (conversationId) => {
+  [convId, characterId],
+  ([conversationId, roleId]) => {
     const id = conversationId || "";
     void loadConversationWorkspace(id, id ? "" : String(route.query.projectId || "")).catch((error) => {
       if ((convId.value || "") === id) modelError.value = error instanceof Error ? error.message : "聊天数据加载失败，请重试";
     });
+    if (!id || !roleId) return;
     const requestedId = id;
+    const requestedRole = roleId;
     void fetchConvSummary(requestedId).then((summary) => {
-      if ((convId.value || "") === requestedId) {
+      if ((convId.value || "") === requestedId && characterId.value === requestedRole) {
         convSummary.value = summary;
       }
     }).catch((error) => {
@@ -1322,7 +1414,7 @@ provideConversationUIContext({
   generating,
   offline: isOffline,
   actions: {
-    async send(input) { await handleSend(input.text ?? ""); },
+    async send(input) { await handleQueuedOrSend(input.text ?? ""); },
     async stop() { await handleStop(); },
     async retry(messageId) {
       const index = messages.value.findIndex((item) => item.id === messageId);

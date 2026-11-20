@@ -42,8 +42,10 @@ describe("桌面端消息行活动投影", () => {
     expect(wrapper.find(".thread-unread").text()).toBe("3");
     expect(wrapper.find(".thread-title").text()).toBe("小夏");
     expect(wrapper.find(".thread-preview").text()).toBe("正在使用 workspace.read 工具");
-    expect(wrapper.find(".thread-meta time").exists()).toBe(true);
+    expect(wrapper.find(".thread-time").exists()).toBe(true);
     expect(wrapper.find(".thread-spinner").exists()).toBe(true);
+    const copyChildren = Array.from(wrapper.find(".thread-copy").element.children).map((node) => (node as HTMLElement).className);
+    expect(copyChildren).toEqual(["thread-heading", "thread-time", "thread-preview", "thread-spinner"]);
     expect(wrapper.text()).not.toContain("10 条消息");
     wrapper.unmount();
   });

@@ -734,7 +734,7 @@ async function handleSelectConversation(conversation: ConversationItem) {
   }
   chatStore.currentProjectId = conversation.projectId || "";
   chatStore.setConversationId(conversation.id);
-  await router.push({ path: "/chat", query: { conversationId: conversation.id } });
+  await router.push({ path: "/chat", query: { conversationId: conversation.id, characterId: conversation.characterId } });
 }
 
 const batchSelecting = ref(false);

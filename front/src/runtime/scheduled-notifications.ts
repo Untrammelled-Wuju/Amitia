@@ -1,4 +1,5 @@
 import { notificationRegistrationPayload } from "./device-notifications";
+import { originalErrorText } from "./original-error";
 
 export interface ScheduledBrowserEnvelope {
   requestId: string;
@@ -6,7 +7,7 @@ export interface ScheduledBrowserEnvelope {
 }
 
 export interface ScheduledBrowserDelivery {
-  acknowledge(state: 'displayed' | 'clicked' | 'display_failed'): Promise<void>;
+  acknowledge(state: 'displayed' | 'clicked' | 'display_failed', error?: string): Promise<void>;
   navigate(target: string): void;
 }
 
@@ -30,9 +31,13 @@ async function registerScheduledEndpoint(platform: 'web' | 'desktop', deviceId: 
 
 export async function deliverScheduledBrowserNotification(envelope: ScheduledBrowserEnvelope, delivery: ScheduledBrowserDelivery): Promise<void> {
   const payload = envelope.payload;
-  const acknowledge = (state: 'displayed' | 'clicked' | 'display_failed'): Promise<void> => payload.ackable === true ? delivery.acknowledge(state) : Promise.resolve();
-  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') {
-    await acknowledge('display_failed');
+  const acknowledge = (...receipt: Parameters<ScheduledBrowserDelivery["acknowledge"]>): Promise<void> =>
+    payload.ackable === true ? delivery.acknowledge(...receipt) : Promise.resolve();
+  const permission = typeof Notification === 'undefined' ? undefined : Notification.permission;
+  if (permission !== 'granted') {
+    await acknowledge('display_failed', permission === undefined
+      ? 'Notification is undefined'
+      : `Notification.permission = ${permission}`);
     return;
   }
   try {
@@ -40,9 +45,14 @@ export async function deliverScheduledBrowserNotification(envelope: ScheduledBro
     notification.onshow = () => { void acknowledge('displayed').catch((error) => {
   console.error("[original-error]", error);
 }); };
-    notification.onerror = () => { void acknowledge('display_failed').catch((error) => {
-  console.error("[original-error]", error);
-}); };
+    notification.onerror = (event) => {
+      const details = event instanceof ErrorEvent
+        ? { type: event.type, message: event.message, error: event.error, filename: event.filename, lineno: event.lineno, colno: event.colno }
+        : { type: event.type, isTrusted: event.isTrusted };
+      void acknowledge('display_failed', originalErrorText(details)).catch((error) => {
+        console.error("[original-error]", error);
+      });
+    };
     notification.onclick = () => {
       void acknowledge('clicked').catch((error) => {
   console.error("[original-error]", error);
@@ -55,7 +65,7 @@ export async function deliverScheduledBrowserNotification(envelope: ScheduledBro
       else if (attentionId) delivery.navigate('/reminders?attentionId=' + encodeURIComponent(attentionId));
     };
   } catch (error) {
-  console.error("[original-error]", error);
-await acknowledge('display_failed');
+    console.error("[original-error]", error);
+    await acknowledge('display_failed', originalErrorText(error));
   }
 }

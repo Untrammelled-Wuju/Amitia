@@ -143,7 +143,7 @@ describe("saved reply completion", () => {
     finish(false);
     await sending;
     expect(failed).toHaveBeenCalled();
-    expect(messages.value[1].status).toBe("interrupted");
+    expect(messages.value[1].status).toBe("failed");
   });
   it("keeps a saved reply completed when sidebar refresh fails", async () => {
     const scope = { coreId: "core", resourceOwnerId: "owner", roleId: "role" };

@@ -1,8 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { mount } from "@vue/test-utils";
+import { createPinia, setActivePinia } from "pinia";
 import ConfigCardList from "../views/model-config/components/ConfigCardList.vue";
 
 describe("vision model takeover", () => {
+  beforeEach(() => setActivePinia(createPinia()));
   it("intercepts both card and action clicks when suspended", async () => {
     const config = { id: 1, name: "Vision", disabled: true, isActive: false };
     const wrapper = mount(ConfigCardList, {

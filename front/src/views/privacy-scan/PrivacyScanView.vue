@@ -56,6 +56,10 @@
         <el-descriptions-item label="待清理">{{ deletionStats.pending ?? deletionStats.pendingCleanup ?? "—" }}</el-descriptions-item>
         <el-descriptions-item label="当前状态">{{ deletionStatus?.status || "—" }}</el-descriptions-item>
       </el-descriptions>
+      <details v-if="deletionStatsError" open>
+        <summary>删除统计读取失败</summary>
+        <pre style="white-space: pre-wrap; overflow-wrap: anywhere">{{ deletionStatsError }}</pre>
+      </details>
       <el-alert v-if="deletionStatus?.lastError" type="warning" :closable="false" :title="deletionStatus.lastError" show-icon />
       <el-table v-if="securityResults.length" :data="securityResults" size="small" class="security-results">
         <el-table-column prop="kind" label="测试" min-width="180" />
@@ -71,6 +75,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
+import { originalErrorText } from "@/runtime/original-error";
 import ScanScopePanel from "./components/ScanScopePanel.vue";
 import ScanResultsPanel from "./components/ScanResultsPanel.vue";
 import ScanHistoryPanel from "./components/ScanHistoryPanel.vue";
@@ -89,6 +94,7 @@ const scanning = ref(false);
 const scanSummary = ref<any>(null);
 const deletionBusy = ref(false);
 const deletionStats = ref<any>({});
+const deletionStatsError = ref("");
 const deletionStatus = ref<any>(null);
 const securityResults = ref<any[]>([]);
 const deletionForm = reactive({ targetId: "", targetType: "memory", scope: "all", reason: "" });
@@ -96,9 +102,11 @@ const deletionForm = reactive({ targetId: "", targetType: "memory", scope: "all"
 async function loadDeletionStats() {
   try {
     deletionStats.value = await getDeletionStats();
+    deletionStatsError.value = "";
   } catch (error) {
-  console.error("[original-error]", error);
-deletionStats.value = {};
+    console.error("[original-error]", error);
+    deletionStats.value = {};
+    deletionStatsError.value = originalErrorText(error);
   }
 }
 

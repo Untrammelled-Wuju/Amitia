@@ -4,7 +4,6 @@
 
     <div class="page-head">
       <div class="page-copy">
-        <span class="eyebrow">GAME MODE</span>
         <h1>游戏模式</h1>
         <p>同一 Space 同一时间只允许一台设备进入。其他设备可以查看占用状态，并通过对话控制正在运行的设备。</p>
       </div>
@@ -19,66 +18,22 @@
 
     <template v-else-if="gameModeStatus">
       <section class="current-game-card" :class="{ 'is-connected': gameOwned }">
-        <div class="current-game-visual">
-          <div class="visual-grid" />
-          <div class="visual-mark">{{ gameInitial(currentGamePlugin?.name || gameModeStatus.session.gameTitle || "G") }}</div>
-        </div>
         <div class="current-game-content">
           <div class="current-game-meta">
-            <span class="status-pill" :class="gameOwned ? 'online' : 'offline'">
+            <h2>{{ gameOwned ? "本机正在使用" : gameActive ? "其他设备正在使用" : "等待进入" }}</h2>
+            <span v-if="gameActive" class="status-pill" :class="gameOwned ? 'online' : 'offline'">
               <span class="status-dot" />
-              {{ gameOwned ? "本机正在使用" : gameActive ? "其他设备正在使用" : "等待进入" }}
+              {{ gameModeStateLabel(gameModeStatus.session.state) }}
             </span>
-            <span class="version-text">{{ gameModeStateLabel(gameModeStatus.session.state) }}</span>
           </div>
-          <template v-if="gameActive">
-            <h2>{{ currentGamePlugin?.name || gameModeStatus.session.gameTitle || "游戏模式已进入" }}</h2>
-            <p>
-              {{ gameOwned
-                ? "选择已安装的游戏插件启动，或直接回到当前游戏控制界面。游戏行为与状态由插件动态提供。"
-                : "当前 Space 的游戏模式已被其他设备占用。你可以继续聊天，通过对话查看或控制该设备上运行的游戏插件。" }}
-            </p>
-            <div class="current-game-stats">
-              <div class="stat-item">
-                <span>{{ gameOwned ? "当前设备" : "占用设备" }}</span>
-                <strong>{{ gameModeStatus.session.deviceId || "-" }}</strong>
-              </div>
-              <div class="stat-item">
-                <span>运行状态</span>
-                <strong>{{ gameModeStateLabel(gameModeStatus.session.state) }}</strong>
-              </div>
-              <div class="stat-item">
-                <span>{{ gameOwned ? "可用插件" : "游戏" }}</span>
-                <strong>{{ gameOwned ? plugins.length : (gameModeStatus.session.gameTitle || "-") }}</strong>
-              </div>
-            </div>
-            <div class="current-game-actions">
-              <el-button v-if="gameOwned && currentGamePlugin" type="primary" @click="openGamePlugin(currentGamePlugin)">继续当前游戏</el-button>
-              <el-button @click="refresh">刷新状态</el-button>
-            </div>
-          </template>
+          <p v-if="!gameActive">设备断开后仍保留游戏模式，其他设备需等待租约释放。</p>
           <template v-else>
-            <h2>进入游戏模式</h2>
-            <p>进入后本机取得该 Space 的唯一游戏租约。设备断开时租约保持，其他设备不会自动抢占。</p>
-            <div class="current-game-stats">
-              <div class="stat-item">
-                <span>准入规则</span>
-                <strong>同一时间单设备</strong>
-              </div>
-              <div class="stat-item">
-                <span>设备状态</span>
-                <strong>可进入</strong>
-              </div>
-              <div class="stat-item">
-                <span>控制方式</span>
-                <strong>设备执行</strong>
-              </div>
-            </div>
-            <div class="current-game-actions">
-              <el-button type="primary" :loading="gameModeOperating" @click="acquireGameMode">进入游戏模式</el-button>
-            </div>
+            <p v-if="currentGameName">{{ currentGameName }}</p>
+            <p v-if="!gameOwned && gameModeStatus.session.deviceId">占用设备 {{ gameModeStatus.session.deviceId }}</p>
           </template>
         </div>
+        <el-button v-if="!gameActive" type="primary" :loading="gameModeOperating" @click="acquireGameMode">进入游戏模式</el-button>
+        <el-button v-else-if="gameOwned && currentGamePlugin" type="primary" @click="openGamePlugin(currentGamePlugin)">继续当前游戏</el-button>
       </section>
 
       <template v-if="gameOwned">
@@ -425,6 +380,7 @@ import {
   UploadFilled,
 } from "@element-plus/icons-vue";
 import { useApi } from "@/composables/useApi";
+import { originalErrorText } from "@/runtime/original-error";
 import {
   installExtensionPackage,
   previewExtensionPackage,
@@ -500,6 +456,7 @@ const currentGamePlugin = computed(() => {
     || plugins.value.find((plugin) => plugin.extensionId === session.gameExtensionId)
     || null;
 });
+const currentGameName = computed(() => currentGamePlugin.value?.name || gameModeStatus.value?.session.gameTitle);
 const selectedRuntimeSupportsControl = computed(() => {
   const runtime = runtimes.value.find((item) => item.runtimeId === selectedRuntimeId.value);
   const plugin = plugins.value.find((item) => item.pluginId === (runtime?.pluginId || runtimeDetail.value?.pluginId));
@@ -654,30 +611,28 @@ async function acquireGameMode() {
 }
 
 async function releaseGameMode() {
+  if (gameModeOperating.value) return;
   const status = gameModeStatus.value;
   const session = status?.session;
   if (!status || !session?.sessionId) return;
+  gameModeOperating.value = true;
   try {
     await ElMessageBox.confirm(
       "退出后当前游戏模式的唯一租约会被释放，其他设备可以立即进入。",
       "退出游戏模式",
       { type: "warning", confirmButtonText: "退出", cancelButtonText: "取消" },
     );
-  } catch {
-    return;
-  }
-  gameModeOperating.value = true;
-  error.value = "";
-  try {
+    error.value = "";
     await api.post("/api/game-mode/release", {
       sessionId: session.sessionId,
       expectedRevision: session.revision ?? 0,
     });
     ElMessage.success("已退出游戏模式");
     await refresh();
-  } catch (err: any) {
-    error.value = err?.message || "退出游戏模式失败";
+  } catch (cause) {
+    if (cause === "cancel" || cause === "close") return;
     await refresh();
+    error.value = [originalErrorText(cause), error.value].filter(Boolean).join("\n");
   } finally {
     gameModeOperating.value = false;
   }
@@ -1373,7 +1328,6 @@ watch(() => route.query.install, () => { void maybeOpenInstallFromQuery(); });
 .runtime-main,
 .runtime-actions,
 .current-game-meta,
-.current-game-actions,
 .detail-hero {
   display: flex;
   align-items: center;
@@ -1396,7 +1350,6 @@ watch(() => route.query.install, () => { void maybeOpenInstallFromQuery(); });
   min-width: 0;
 }
 
-.eyebrow,
 .preview-kicker,
 .preview-label {
   display: block;
@@ -1436,13 +1389,14 @@ watch(() => route.query.install, () => { void maybeOpenInstallFromQuery(); });
 }
 
 .current-game-card {
-  position: relative;
-  min-height: 310px;
-  display: grid;
-  grid-template-columns: minmax(260px, 0.85fr) minmax(420px, 1.45fr);
-  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  padding: 16px 20px;
   border: 1px solid var(--game-border);
-  border-radius: 22px;
+  border-radius: 14px;
   background: var(--game-panel);
   box-shadow: var(--tp-shadow-card, 0 1px 2px rgba(48, 40, 31, 0.05));
 }
@@ -1451,55 +1405,17 @@ watch(() => route.query.install, () => { void maybeOpenInstallFromQuery(); });
   border-color: var(--tp-primary-border);
 }
 
-.current-game-visual {
-  position: relative;
-  min-height: 310px;
-  overflow: hidden;
-  background:
-    radial-gradient(circle at 25% 20%, color-mix(in srgb, var(--game-primary) 24%, transparent), transparent 38%),
-    linear-gradient(135deg, var(--game-panel-soft), color-mix(in srgb, var(--game-primary) 10%, var(--game-panel)));
-  border-right: 1px solid var(--game-border-light);
-}
-
-.visual-grid {
-  position: absolute;
-  inset: 0;
-  opacity: 0.32;
-  background-image:
-    linear-gradient(var(--game-border-light) 1px, transparent 1px),
-    linear-gradient(90deg, var(--game-border-light) 1px, transparent 1px);
-  background-size: 32px 32px;
-  mask-image: linear-gradient(135deg, #000, transparent 78%);
-}
-
-.visual-mark {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: 118px;
-  height: 118px;
-  border-radius: 30px;
-  display: grid;
-  place-items: center;
-  font-size: 38px;
-  font-weight: 700;
-  color: var(--game-primary);
-  background: color-mix(in srgb, var(--game-panel) 84%, transparent);
-  border: 1px solid var(--tp-primary-border);
-  box-shadow: var(--tp-shadow-float, 0 18px 48px rgba(36, 32, 27, 0.15));
-  backdrop-filter: blur(12px);
-}
-
 .current-game-content {
-  padding: 34px 38px;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .current-game-meta {
   gap: 10px;
+  flex-wrap: wrap;
 }
 
 .status-pill,
@@ -1546,42 +1462,15 @@ watch(() => route.query.install, () => { void maybeOpenInstallFromQuery(); });
   flex: 0 0 auto;
 }
 
-.version-text {
-  font-size: 12px;
-  color: var(--game-text-muted);
-}
-
 .current-game-content h2 {
-  margin: 15px 0 8px;
-  font-size: clamp(26px, 3vw, 38px);
-  line-height: 1.08;
-  letter-spacing: -0.03em;
+  margin: 0;
+  font-size: 16px;
 }
 
 .current-game-content > p {
-  max-width: 680px;
-  line-height: 1.65;
-  font-size: 14px;
+  font-size: 13px;
 }
 
-.current-game-stats {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  margin: 24px 0;
-}
-
-.stat-item {
-  padding: 12px 14px;
-  border-radius: 12px;
-  background: var(--game-panel-soft);
-  border: 1px solid var(--game-border-light);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.stat-item span,
 .detail-grid span,
 .developer-grid span,
 .preview-facts span {
@@ -1589,17 +1478,11 @@ watch(() => route.query.install, () => { void maybeOpenInstallFromQuery(); });
   font-size: 11px;
 }
 
-.stat-item strong,
 .detail-grid strong,
 .developer-grid strong,
 .preview-facts strong {
   font-size: 13px;
   font-weight: 600;
-}
-
-.current-game-actions {
-  gap: 10px;
-  flex-wrap: wrap;
 }
 
 .content-section {
@@ -2131,14 +2014,6 @@ watch(() => route.query.install, () => { void maybeOpenInstallFromQuery(); });
   .game-mode-page {
     padding: 22px 20px 34px;
   }
-
-  .current-game-card {
-    grid-template-columns: 0.75fr 1.25fr;
-  }
-
-  .current-game-content {
-    padding: 28px;
-  }
 }
 
 @media (max-width: 760px) {
@@ -2164,28 +2039,6 @@ watch(() => route.query.install, () => { void maybeOpenInstallFromQuery(); });
     flex: 1;
   }
 
-  .current-game-card {
-    grid-template-columns: 1fr;
-  }
-
-  .current-game-visual {
-    min-height: 180px;
-    border-right: 0;
-    border-bottom: 1px solid var(--game-border-light);
-  }
-
-  .visual-mark {
-    width: 88px;
-    height: 88px;
-    border-radius: 24px;
-    font-size: 28px;
-  }
-
-  .current-game-content {
-    padding: 24px 20px;
-  }
-
-  .current-game-stats,
   .preview-facts,
   .detail-grid,
   .developer-grid {

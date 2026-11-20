@@ -11,7 +11,7 @@ vi.mock("../components/extension/ExtensionSlot.vue", async () => {
   const { defineComponent } = await import("vue");
   return { default: defineComponent({
     props: ["slotId", "context"],
-    template: '<div :data-slot="slotId" :data-route="context.route" />',
+    template: '<div :data-slot="slotId" :data-route="context && context.route"><slot /></div>',
   }) };
 });
 
@@ -85,7 +85,8 @@ describe("桌面设置分类导航", () => {
       }
       expect(wrapper.find('a[href="/settings/model"]').attributes('aria-current')).toBe('page');
       expect((wrapper.get("select").element as HTMLSelectElement).value).toBe("/settings/model");
-      expect(wrapper.findAll("[data-slot]").map(slot => slot.attributes("data-slot"))).toEqual([
+      expect(wrapper.findAll(".settings-page [data-slot]").map(slot => slot.attributes("data-slot"))).toEqual([
+        "settings.shell.action", "settings.shell.close", "settings.onboarding", "extension.settings.tab",
         "system.status.item", "system.settings.section", "extension.settings.section", "extension.settings.page",
       ]);
     } finally { wrapper.unmount(); }

@@ -33,12 +33,10 @@
             @blur="saveRename"
           />
           <span v-else class="thread-title" :title="conversation.title || '新对话'" @dblclick.stop.prevent="beginRename">{{ conversation.title || "新对话" }}</span>
-          <span class="thread-meta">
-            <time>{{ timeLabel }}</time>
-            <span v-if="conversation.isGenerating" class="thread-spinner" aria-label="正在生成"></span>
-          </span>
         </span>
+        <time class="thread-time">{{ timeLabel }}</time>
         <span class="thread-preview" :title="previewText">{{ previewText }}</span>
+        <span v-if="conversation.isGenerating" class="thread-spinner" aria-label="正在生成"></span>
       </span>
     </div>
   </div>
@@ -314,17 +312,16 @@ function cancelRename() {
   line-height: 1;
 }
 .thread-copy {
-  position: relative;
   flex: 1;
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 3px;
-  padding-right: 48px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 3px;
 }
 .thread-heading {
-  width: 100%;
   min-width: 0;
   display: flex;
   align-items: center;
@@ -342,24 +339,16 @@ function cancelRename() {
   color: var(--ac-color-primary);
   font-size: 12px;
 }
-.thread-meta {
-  position: absolute;
-  top: 1px;
-  right: 0;
-  width: 42px;
-  min-height: 28px;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  justify-content: center;
-  gap: 3px;
+.thread-time {
+  align-self: start;
   color: var(--text-muted);
   font-size: 10px;
-  line-height: 1;
+  line-height: 1.35;
+  white-space: nowrap;
   text-align: right;
-  margin-left: auto;
 }
 .thread-spinner {
+  justify-self: end;
   width: 11px;
   height: 11px;
   border: 1.6px solid color-mix(in srgb, var(--ac-color-primary) 28%, transparent);

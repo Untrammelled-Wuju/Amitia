@@ -81,6 +81,7 @@ describe("chat store", () => {
       messageCount: 2,
       isGenerating: false,
       hasUnread: true,
+      unreadCompletedCount: 1,
       lastReadTurnSequence: 0,
       lastTerminalTurnSequence: 2,
       createdAt: "2026-09-19T00:00:00Z",
@@ -91,8 +92,24 @@ describe("chat store", () => {
     await store.fetchSidebar();
     await store.markConversationRead(conversation.id, 2);
 
-    expect(mocks.edit).toHaveBeenCalledWith("conversation", conversation.id, { lastReadTurnSequence: 2 });
+    expect(mocks.edit).toHaveBeenCalledWith("conversation", conversation.id, { lastReadTurnSequence: 2 }, { characterId: undefined });
     expect(store.sidebar.recent[0].hasUnread).toBe(false);
+    expect(store.sidebar.recent[0].unreadCompletedCount).toBe(0);
     expect(store.sidebar.recent[0].lastReadTurnSequence).toBe(2);
+  });
+
+  it("keeps a newer unread turn when the sidebar refreshes while marking read", async () => {
+    const conversation = { id: "conversation-4", projectId: "", title: "Unread", channel: "web", source: "device-mesh", messageCount: 1, hasUnread: true, unreadCompletedCount: 1, lastReadTurnSequence: 0, lastTerminalTurnSequence: 2, createdAt: "2026-09-19T00:00:00Z", updatedAt: "2026-09-19T00:00:00Z" };
+    mocks.conversations.mockResolvedValue([conversation]);
+    let finishEdit!: () => void;
+    mocks.edit.mockImplementation(() => new Promise<void>((resolve) => { finishEdit = resolve; }));
+    const store = useChatStore();
+    await store.fetchSidebar();
+    const marking = store.markConversationRead(conversation.id, 2);
+    mocks.conversations.mockResolvedValue([{ ...conversation, lastTerminalTurnSequence: 3 }]);
+    await store.fetchSidebar();
+    finishEdit();
+    await marking;
+    expect(store.sidebar.recent[0]).toMatchObject({ hasUnread: true, unreadCompletedCount: 1, lastReadTurnSequence: 2, lastTerminalTurnSequence: 3 });
   });
 });

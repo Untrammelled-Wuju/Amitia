@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { mount } from "@vue/test-utils";
+import { createPinia, setActivePinia } from "pinia";
 import { nextTick } from "vue";
 
 describe("chat message appearance", () => {
-  beforeEach(() => { vi.resetModules(); localStorage.clear(); vi.restoreAllMocks(); });
+  beforeEach(() => { vi.resetModules(); localStorage.clear(); vi.restoreAllMocks(); setActivePinia(createPinia()); });
 
   it("restores avatar shapes, retains custom roundness and keeps state on failed saves", async () => {
     const module = await import("../composables/useChatAppearancePreference");

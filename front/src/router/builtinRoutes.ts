@@ -2,6 +2,7 @@ import type { RouteRecordRaw } from "vue-router";
 
 /** Built-in business pages. Core router owns only bootstrap/recovery routes. */
 export const builtinBusinessRoutes: RouteRecordRaw[] = [
+  { path: "/main-panel/:panelId", name: "mainPanelHost", component: () => import("@/views/main-panel/MainPanelHostView.vue"), meta: { requiresAuth: true, fullHeight: true } },
   { path: "/chat", name: "chat", component: () => import("@/views/web-chat/WebChatView.vue"), meta: { requiresAuth: true } },
   { path: "/attention", name: "attentionCenter", component: () => import("@/views/attention/AttentionCenterView.vue"), meta: { requiresAuth: true } },
   { path: "/developer", redirect: "/runtime-debug" },

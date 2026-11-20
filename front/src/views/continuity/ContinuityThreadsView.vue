@@ -173,6 +173,7 @@ import { useRoute, useRouter } from "vue-router";
 import { authorizedWorkbenchRole } from "@/components/workbench/workbench-role-link";
 import { canEditGoalDocument, goalEditAuthorityKey, prepareGoalEdit, type GoalEditDocument } from "./continuity-goal-editor";
 import type { OwnedExecutionScope } from "@/runtime/device-owned-chat";
+import { originalErrorText } from "@/runtime/original-error";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversation";
 import { GLOBAL_MEMORY_ROLE } from "@/runtime/owned-memory-scope";
@@ -373,10 +374,10 @@ async function reloadDetail() {
 }
 
 async function setStatus(status: ThreadStatus) {
-  if (!detail.value) return;
+  if (saving.value || !detail.value) return;
   saving.value = true;
   try { await updateContinuityThread(detail.value.thread.id, { status }, detailIntent.value); await reloadDetail(); }
-  catch (error) { ElMessage.error(error instanceof Error ? error.message : "持续事项状态修改失败"); }
+  catch (error) { ElMessage.error(originalErrorText(error)); }
   finally { saving.value = false; }
 }
 
@@ -401,6 +402,7 @@ return;
 }
 
 async function createThread() {
+  if (saving.value) return;
   if (!createForm.title.trim()) { ElMessage.warning("请输入标题"); return; }
   saving.value = true;
   try {
@@ -409,7 +411,7 @@ async function createThread() {
     createForm.title = ""; createForm.goal = ""; createForm.nextAction = "";
     await refresh();
     await selectThread(item);
-  } catch (error) { ElMessage.error(error instanceof Error ? error.message : "持续事项创建失败"); }
+  } catch (error) { ElMessage.error(originalErrorText(error)); }
   finally { saving.value = false; }
 }
 

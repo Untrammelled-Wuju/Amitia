@@ -1,9 +1,11 @@
 import { mount } from "@vue/test-utils";
+import { createPinia, setActivePinia } from "pinia";
 import { nextTick } from "vue";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import AssistantTurnTimeline from "../conversation/rendering/AssistantTurnTimeline.vue";
 
 describe("AssistantTurnTimeline", () => {
+  beforeEach(() => setActivePinia(createPinia()));
   it("renders reasoning, collapsed tool stream and text in sequence order", async () => {
     const wrapper = mount(AssistantTurnTimeline, {
       props: {

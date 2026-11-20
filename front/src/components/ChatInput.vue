@@ -595,6 +595,10 @@ SPDX-License-Identifier: AGPL-3.0-only
               </el-popover>
             </ExtensionSlot>
             <el-button
+              v-if="generating && hasSendableContent"
+              type="danger" circle size="small" title="停止生成" aria-label="停止生成" @click="$emit('stop')"
+            ><span class="composer-stop-square"></span></el-button>
+            <el-button
               v-if="!generating && (voiceMode || !hasSendableContent)"
               circle
               size="small"
@@ -612,24 +616,24 @@ SPDX-License-Identifier: AGPL-3.0-only
             </el-button>
             <el-button
               v-else
-              :type="generating ? 'danger' : 'primary'"
+              :type="generating && !hasSendableContent ? 'danger' : 'primary'"
               circle
               size="small"
               :aria-disabled="
-                !generating &&
+                !(generating && !hasSendableContent) &&
                 (isInputDisabled ||
                   uploadingVideo ||
                   !!videoUploadError ||
                   processingImage ||
                   !hasSendableContent ||
-                  isSubmitting)
+                  (isSubmitting && !generating))
               "
-              @click="generating ? $emit('stop') : handleSendClick()"
+              @click="generating && !hasSendableContent ? $emit('stop') : handleSendClick()"
               data-amitia-ui="chat.composer.send"
-              :title="generating ? '停止生成' : (sendOnEnter ? '发送 (Enter)' : '发送')"
-              :aria-label="generating ? '停止生成' : '发送消息'"
+              :title="generating && !hasSendableContent ? '停止生成' : (generating ? '加入队列' : (sendOnEnter ? '发送 (Enter)' : '发送'))"
+              :aria-label="generating && !hasSendableContent ? '停止生成' : (generating ? '加入队列' : '发送消息')"
             >
-              <span v-if="generating" class="composer-stop-square"></span>
+              <span v-if="generating && !hasSendableContent" class="composer-stop-square"></span>
               <el-icon v-else class="composer-send-arrow"><Top /></el-icon>
             </el-button>
           </div>
@@ -821,7 +825,6 @@ const {
   clearImage,
   handleVideoSelect,
   clearVideo,
-  fileToBase64,
 } = mediaUpload;
 
 const genericFileInputRef = ref<HTMLInputElement | null>(null);
@@ -1713,7 +1716,7 @@ async function submitComposer(event?: KeyboardEvent) {
     showInputUnavailable();
     return;
   }
-  if (props.generating || props.isSubmitting || processingImage.value || uploadingVideo.value) {
+  if ((!props.generating && props.isSubmitting) || processingImage.value || uploadingVideo.value) {
     ElMessage.warning("正在处理消息或附件，请稍后重试。");
     return;
   }
@@ -1735,11 +1738,11 @@ async function submitComposer(event?: KeyboardEvent) {
   }
 
   if (attachedImage.value) {
-    if (attachedImagePreview.value) {
-      sendWithImage(outgoingText, attachedImagePreview.value);
-    } else {
-      sendWithImage(outgoingText, await fileToBase64(attachedImage.value));
+    if (!attachedImagePreview.value) {
+      ElMessage.error("图片预览尚未就绪");
+      return;
     }
+    sendWithImage(outgoingText, attachedImagePreview.value);
     clearImage();
     finishSubmit();
     return;
@@ -1804,7 +1807,7 @@ onUnmounted(() => {
   window.removeEventListener("keydown", handleGlobalComposerKey, true);
 });
 
-defineExpose({ focus, setText, insertText: insertComposerText, clear: clearText });
+defineExpose({ focus, setText, getText: () => text.value, insertText: insertComposerText, clear: clearText });
 </script>
 
 <style scoped>

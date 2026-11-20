@@ -1,10 +1,6 @@
 // SPDX-FileCopyrightText: 2026 彭旭
 // SPDX-License-Identifier: AGPL-3.0-only
 import { ref, onUnmounted } from "vue";
-import { resolveApiUrl } from "../runtime/runtime-adapter";
-import { createAuthenticatedFetchInit } from "../runtime/request-auth";
-import { useDeviceOwnedConversation } from "./useDeviceOwnedConversation";
-import { ownedFileAttachment, ownedAttachmentURL } from "@/runtime/device-owned-attachments";
 
 const VISION_IMAGE_TYPES = new Set([
   "image/png",
@@ -84,7 +80,6 @@ export function useMediaUpload(
   onRemoveImage: () => void,
   onRemoveVideo: () => void,
 ) {
-  const owned = useDeviceOwnedConversation();
   const attachedImage = ref<File | null>(null);
   const attachedImagePreview = ref<string | null>(null);
   const fileInputRef = ref<HTMLInputElement>();
@@ -99,15 +94,6 @@ export function useMediaUpload(
   const processingImage = ref(false);
   let imageSelectionVersion = 0;
 
-  function fileToBase64(file: File): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = () => reject(new Error("文件读取失败"));
-      reader.readAsDataURL(file);
-    });
-  }
-
   async function handleImageSelect(e: Event) {
     const input = e.target as HTMLInputElement;
     const file = input.files?.[0];
@@ -118,6 +104,8 @@ export function useMediaUpload(
     }
 
     const selectionVersion = ++imageSelectionVersion;
+    const previousPreview = attachedImagePreview.value;
+    if (previousPreview?.startsWith("blob:")) URL.revokeObjectURL(previousPreview);
     attachedImage.value = file;
     attachedImagePreview.value = null;
     processingImage.value = true;
@@ -128,11 +116,11 @@ export function useMediaUpload(
       const normalizedFile = isVisionImageTypeSupported(file.type)
         ? file
         : await convertImageToPng(file);
-      const dataUrl = await fileToBase64(normalizedFile);
       if (selectionVersion !== imageSelectionVersion) return;
+      const previewUrl = URL.createObjectURL(normalizedFile);
       attachedImage.value = normalizedFile;
-      attachedImagePreview.value = dataUrl;
-      onImage(normalizedFile, dataUrl);
+      attachedImagePreview.value = previewUrl;
+      onImage(normalizedFile, previewUrl);
     } catch (error) {
       if (selectionVersion !== imageSelectionVersion) return;
       attachedImage.value = null;
@@ -148,6 +136,7 @@ export function useMediaUpload(
 
   function clearImage() {
     imageSelectionVersion += 1;
+    if (attachedImagePreview.value?.startsWith("blob:")) URL.revokeObjectURL(attachedImagePreview.value);
     attachedImage.value = null;
     attachedImagePreview.value = null;
     processingImage.value = false;
@@ -155,7 +144,7 @@ export function useMediaUpload(
   }
 
   function handleVideoSelect(e: Event) {
-    const generation = ++videoGeneration;
+    ++videoGeneration;
     const input = e.target as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
@@ -165,45 +154,16 @@ export function useMediaUpload(
     videoUploadError.value = null;
     uploadingVideo.value = true;
     onRemoveVideo();
-    const formData = new FormData();
-    formData.append("video", file);
-    owned.refresh().then(async (bound) => {
-      if (bound) { const attachment = await ownedFileAttachment(file, file.name, "video"); return { ok: true, status: 200, json: async () => ({ data: { videoUrl: ownedAttachmentURL(attachment) } }) }; }
-      const [url, init] = await Promise.all([resolveApiUrl("/api/video/upload"), createAuthenticatedFetchInit("/api/video/upload", { method: "POST", body: formData })]); return fetch(url, init);
-    })
-      .then(async (res) => {
-        const data = await res.json().catch((error) => {
-  console.error("[original-error]", error);
-  return null;
-});
-        if (!res.ok) {
-          throw new Error(data?.message || data?.error || `视频上传失败 (${res.status})`);
-        }
-        return data;
-      })
-      .then((data) => {
-        if (generation !== videoGeneration) return;
-        const videoUrl = data?.data?.videoUrl || data?.videoUrl || "";
-        if (!videoUrl) throw new Error("视频上传成功但服务端未返回 videoUrl");
-        attachedVideoUrl.value = videoUrl;
-        videoUploadError.value = null;
-        onVideo(file, videoUrl);
-      })
-      .catch((error: unknown) => {
-        if (generation !== videoGeneration) return;
-        attachedVideoUrl.value = null;
-        videoUploadError.value =
-          error instanceof Error && error.message ? error.message : "视频上传失败，请重新选择";
-        onRemoveVideo();
-      })
-      .finally(() => {
-        if (generation === videoGeneration) uploadingVideo.value = false;
-      });
+    attachedVideoUrl.value = URL.createObjectURL(file);
+    uploadingVideo.value = false;
+    videoUploadError.value = null;
+    onVideo(file, attachedVideoUrl.value);
     input.value = "";
   }
 
   function clearVideo() {
     videoGeneration++;
+    if (attachedVideoUrl.value?.startsWith("blob:")) URL.revokeObjectURL(attachedVideoUrl.value);
     attachedVideo.value = null;
     attachedVideoUrl.value = null;
     uploadingVideo.value = false;
@@ -225,6 +185,5 @@ export function useMediaUpload(
     clearImage,
     handleVideoSelect,
     clearVideo,
-    fileToBase64,
   };
 }

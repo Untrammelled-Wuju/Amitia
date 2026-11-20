@@ -19,7 +19,15 @@ export function useChatCleanup() {
   const confirmLoading = ref(false);
   const cleanupResult = ref<any>(null);
 
+  function hasCleanupCondition() {
+    return Boolean(form.beforeDate) || Boolean(form.olderThanDays) || form.channels.length > 0 || form.sources.length > 0;
+  }
+
   async function previewCleanup() {
+    if (!hasCleanupCondition()) {
+      ElMessage.warning("请至少选择一个清理条件：日期、天数、渠道或来源");
+      return;
+    }
     previewLoading.value = true;
     previewResult.value = null;
     cleanupResult.value = null;
@@ -79,6 +87,7 @@ export function useChatCleanup() {
     confirmText,
     confirmLoading,
     cleanupResult,
+    hasCleanupCondition,
     previewCleanup,
     executeCleanup,
   };

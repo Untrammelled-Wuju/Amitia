@@ -17,12 +17,18 @@ interface CachedMediaTicket {
 
 const mediaTicketCache = new Map<string, CachedMediaTicket>();
 const mediaBlobCache = new Map<string, string>();
+const chatAttachmentTicketCache = new Map<string, CachedMediaTicket>();
 if (typeof window !== "undefined") {
   window.addEventListener("amitia:runtime-connection-changed", () => {
     mediaTicketCache.clear();
     for (const url of mediaBlobCache.values()) URL.revokeObjectURL(url);
     mediaBlobCache.clear();
+    chatAttachmentTicketCache.clear();
   });
+}
+
+function isChatAttachmentPath(value: string): boolean {
+  return /^\/api\/device-mesh\/v1\/business\/attachments\/[^/?#]+\/content(?:[?#]|$)/.test(value);
 }
 
 function artifactIdFromRaw(raw: string): string {
@@ -111,12 +117,33 @@ async function absoluteMediaUrl(path: string): Promise<string> {
   return new URL(value, `${base.replace(/\/+$/, "")}/`).toString();
 }
 
+async function getChatAttachmentTicket(path: string): Promise<string> {
+  const parsed = new URL(path, "http://amitia.local");
+  const cached = chatAttachmentTicketCache.get(parsed.pathname);
+  if (cached && cached.expiresAt > Date.now() + 30_000) return cached.url;
+  const ticketPath = parsed.pathname.replace(/\/content$/, "/ticket");
+  const response = await apiClient.get<MediaTicketResponse>(`${ticketPath}${parsed.search}`);
+  const payload = response.data as MediaTicketResponse;
+  const value = String(payload?.url || "").trim();
+  if (!value) throw new Error("后端未返回聊天附件媒体访问地址");
+  const expiresAt = Date.parse(String(payload?.expiresAt || ""));
+  const url = await absoluteMediaUrl(value);
+  chatAttachmentTicketCache.set(parsed.pathname, {
+    url,
+    expiresAt: Number.isFinite(expiresAt) ? expiresAt : Date.now() + 10 * 60_000,
+  });
+  return url;
+}
+
 export async function resolveConversationMediaUrl(raw: string): Promise<string> {
   const value = String(raw || "").trim();
   if (!value) return "";
   const artifactId = artifactIdFromRaw(value);
   if (artifactId) {
     return absoluteMediaUrl(await getMediaTicket(artifactId));
+  }
+  if (isChatAttachmentPath(value)) {
+    return getChatAttachmentTicket(value);
   }
   return absoluteMediaUrl(value);
 }

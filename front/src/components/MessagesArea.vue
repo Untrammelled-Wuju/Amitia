@@ -23,69 +23,69 @@ SPDX-License-Identifier: AGPL-3.0-only
 
     <ExtensionSlot
       v-if="visibleMessages.length === 0 && !sending"
+      class="empty-chat-frame"
       slot-id="chat.empty.frame"
       :context="extensionContext || {}"
       fallback="default"
       layout="stack"
       surface-role="main"
     >
-    <div class="empty-chat">
-      <ExtensionSlot
-        slot-id="chat.empty.brand_mark"
-        :context="extensionContext || {}"
-        fallback="default"
-        layout="inline"
-        surface-role="status"
-        bare
-      >
-        <div class="empty-icon"><el-icon :size="48"><ChatDotRound /></el-icon></div>
-      </ExtensionSlot>
-      <ExtensionSlot
-        slot-id="chat.empty.workspace"
-        :context="{ ...(extensionContext || {}), workspaceName }"
-        fallback="default"
-        layout="stack"
-        surface-role="main"
-        bare
-      >
-      <template v-if="workspaceName">
-        <p class="empty-text empty-text--project">你好，我是 {{ charName || "Amitia" }}</p>
-        <p class="empty-hint">你想在 {{ workspaceName }} 中构建什么？</p>
-      </template>
-      <template v-else-if="noCharacters">
-        <p class="empty-text">还没有可以对话的角色</p>
-        <p class="empty-hint">请先在「角色」中创建角色，然后回到这里开始对话。</p>
-      </template>
-      <template v-else>
-        <p class="empty-text">你好，我是 {{ charName || "AI 陪伴角色" }}</p>
-        <p class="empty-hint">随时可以和我聊聊天，或者做你想做的事。</p>
-      </template>
-      </ExtensionSlot>
-      <ExtensionSlot
-        slot-id="chat.empty.workspace.directory_flow"
-        :context="{ ...(extensionContext || {}), workspaceName }"
-        fallback="none"
-        layout="stack"
-        surface-role="main"
-      />
-      <ExtensionSlot
-        slot-id="chat.empty.agent_preset"
-        :context="extensionContext || {}"
-        fallback="none"
-        layout="inline"
-        surface-role="main"
-        render-fallback-while-scope-pending
-      />
-      <ExtensionSlot
-        slot-id="chat.empty.options"
-        :context="extensionContext || {}"
-        fallback="none"
-        layout="inline"
-        surface-role="main"
-        render-fallback-while-scope-pending
-      />
-      <ChatEmptyStateExtensionHost :context="extensionContext || {}" />
-    </div>
+      <div class="empty-chat">
+        <ExtensionSlot
+          slot-id="chat.empty.brand_mark"
+          :context="extensionContext || {}"
+          fallback="default"
+          layout="inline"
+          surface-role="status"
+          bare
+        >
+          <div class="empty-icon"><el-icon :size="48"><ChatDotRound /></el-icon></div>
+        </ExtensionSlot>
+        <template v-if="workspaceName">
+          <p class="empty-text empty-text--project">你好，我是 {{ charName || "Amitia" }}</p>
+          <p class="empty-hint">你想在 {{ workspaceName }} 中构建什么？</p>
+        </template>
+        <template v-else-if="noCharacters">
+          <p class="empty-text">还没有可以对话的角色</p>
+          <p class="empty-hint">请先在「角色」中创建角色，然后回到这里开始对话。</p>
+        </template>
+        <template v-else>
+          <p class="empty-text">你好，我是 {{ charName || "AI 陪伴角色" }}</p>
+          <p class="empty-hint">随时可以和我聊聊天，或者做你想做的事。</p>
+        </template>
+        <ExtensionSlot
+          slot-id="chat.empty.workspace"
+          :context="{ ...(extensionContext || {}), workspaceName }"
+          fallback="none"
+          layout="stack"
+          surface-role="main"
+          bare
+        />
+        <ExtensionSlot
+          slot-id="chat.empty.workspace.directory_flow"
+          :context="{ ...(extensionContext || {}), workspaceName }"
+          fallback="none"
+          layout="stack"
+          surface-role="main"
+        />
+        <ExtensionSlot
+          slot-id="chat.empty.agent_preset"
+          :context="extensionContext || {}"
+          fallback="none"
+          layout="inline"
+          surface-role="main"
+          render-fallback-while-scope-pending
+        />
+        <ExtensionSlot
+          slot-id="chat.empty.options"
+          :context="extensionContext || {}"
+          fallback="none"
+          layout="inline"
+          surface-role="main"
+          render-fallback-while-scope-pending
+        />
+        <ChatEmptyStateExtensionHost :context="extensionContext || {}" />
+      </div>
     </ExtensionSlot>
 
     <ExtensionSlot
@@ -808,16 +808,20 @@ defineExpose({ rootEl });
   display: contents;
 }
 
+.empty-chat-frame > :deep(.extension-slot__default) {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+}
+
 .empty-chat {
   display: flex;
+  flex: 1 0 auto;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 100%;
-  min-height: 100%;
   text-align: center;
   padding: 40px 20px;
-  margin: auto 0;
 }
 
 .empty-icon {

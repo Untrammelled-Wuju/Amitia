@@ -15,10 +15,9 @@ export function createOwnedConversationExport(conversationId: string, rows: any[
     createdAt: String(row.createdAt || ""),
     ...(row.imageUrl ? { imageUrl: String(row.imageUrl) } : {}),
     ...(row.audioUrl ? { audioUrl: String(row.audioUrl) } : {}),
-    ...(Array.isArray(row.attachments) && row.attachments.length ? { attachments: row.attachments.filter((item: any) => ["file", "video"].includes(item?.kind)).map((item: any) => {
+    ...(Array.isArray(row.attachments) && row.attachments.length ? { attachments: row.attachments.map((item: any) => {
       const url = ownedAttachmentURL(item);
-      if (!url) throw new Error("导出附件缺少原所有者内容，请重新加载");
-      return { kind: item.kind, name: String(item.name || "附件"), mimeType: item.mimeType, sha256: item.sha256, data: item.data, url };
+      return { kind: item.kind, name: String(item.name || "附件"), mimeType: item.mimeType, sha256: item.sha256, artifactId: item.artifactId, ownerDeviceId: item.ownerDeviceId, storageDeviceId: item.storageDeviceId, sizeBytes: item.sizeBytes, url: item.url || url };
     }) } : {}),
   }));
   if (messages.some((row) => !row.id || !row.ownerId)) throw new Error("导出消息缺少数据来源，请重新加载");

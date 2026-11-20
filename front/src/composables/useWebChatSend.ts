@@ -7,13 +7,20 @@ import { notifyDesktopPetChatState } from "@/runtime/desktop-pet-chat-state";
 import { useConversationWorkspace } from "./useConversationWorkspace";
 import { useChatAppearancePreference } from "./useChatAppearancePreference";
 import { useDeviceOwnedConversation } from "./useDeviceOwnedConversation";
-import { ownedImageAttachment, ownedAudioAttachment, ownedAudioURL, ownedFileAttachment, ownedAttachmentURL, type OwnedAttachment } from "@/runtime/device-owned-attachments";
+import { uploadOwnedAttachment, ownedAttachmentBlock, type OwnedAttachment, type OwnedAttachmentInput } from "@/runtime/device-owned-attachments";
 import { sameOwnedAuthority } from "@/runtime/owned-speech-result";
 import { parseConversationReference } from "@/runtime/device-owned-conversation-reference";
 import { parseOwnedProjectReference } from "@/runtime/owned-project-reference";
 import { ownedChatRuntimeRequest } from "@/runtime/owned-chat-management";
-import type { OwnedGroupChatResponse, OwnedGroupState } from "@/runtime/device-owned-chat";
+import type { OwnedExecutionScope, OwnedGroupChatResponse, OwnedGroupState } from "@/runtime/device-owned-chat";
 import { resolveGroupMentions } from "./groupMentions";
+
+export async function ownedQuoteReferenceForMessage(originalReply: any, expectedExecutionScope: OwnedExecutionScope) {
+  if (!originalReply?.executionScope || !sameOwnedAuthority(originalReply.executionScope, expectedExecutionScope) || !originalReply.ownerId || !originalReply.characterId || !originalReply.sourceConversationId || typeof originalReply.fullContent !== "string") throw new Error("引用消息的服务、角色或归属已变化，请重新选择");
+  const source = parseConversationReference(originalReply.sourceConversationId);
+  const contentHash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(originalReply.fullContent))), (value) => value.toString(16).padStart(2, "0")).join("");
+  return { ownerId: originalReply.ownerId, characterId: originalReply.characterId, conversationId: source?.id || originalReply.sourceConversationId, messageId: originalReply.id, expectedRevision: originalReply.sourceRevision, contentHash, expectedExecutionScope: originalReply.executionScope };
+}
 
 export function useWebChatSend(
   messages: Ref<any[]>,
@@ -43,6 +50,7 @@ export function useWebChatSend(
   groupSending?: Ref<boolean>,
   groupDiscussion?: Ref<boolean>,
   groupConversation?: Ref<OwnedGroupState | null>,
+  enqueueWhenBusy?: (text: string, attachments: OwnedAttachment[]) => Promise<unknown>,
 ) {
   const owned = useDeviceOwnedConversation();
   const { messageStyle } = useChatAppearancePreference();
@@ -95,8 +103,12 @@ export function useWebChatSend(
   async function handleVoiceAudio(blob: Blob, transcript?: string, duration?: number) {
     try {
 			if (await owned.refresh()) {
-				const attachment = await ownedAudioAttachment(blob, blob.type.startsWith("audio/wav") ? "voice.wav" : "voice.webm");
-				await doActualSend("[语音]", undefined, true, undefined, attachment);
+				const attachment = await uploadOwnedAttachment({ file: blob, kind: "audio", name: blob.type.startsWith("audio/wav") ? "voice.wav" : "voice.webm" });
+				if ((sending.value || isSubmitting.value) && enqueueWhenBusy) {
+					await enqueueWhenBusy("[语音]", [attachment]);
+					return;
+				}
+				await doActualSend("[语音]", undefined, true, undefined, [], [attachment]);
 				return;
 			}
       throw new Error(owned.notice.value || "设备对话服务尚未就绪");
@@ -112,11 +124,12 @@ export function useWebChatSend(
 
   async function handleImageSend(text: string, imageBase64: string) {
     if (await owned.refresh()) {
-      await ownedImageAttachment(imageBase64, currentImageFile.value?.name || "image.png");
+      const file = currentImageFile.value;
+      if (!file) throw new Error("图片原始文件不可用，请重新选择图片");
       currentImageBase64.value = null;
       currentImageFile.value = null;
       pendingImageBase64.value = imageBase64;
-      await doActualSend(text.trim() || "[图片]");
+      await doActualSend(text.trim() || "[图片]", undefined, undefined, undefined, [{ file, kind: "image", name: file.name || "image.png" }]);
       return;
     }
     throw new Error(owned.notice.value || "设备对话服务尚未就绪");
@@ -137,7 +150,7 @@ export function useWebChatSend(
     await doActualSend(text);
   }
 
-  async function doActualSend(text: unknown, audioUrl?: string, voiceMessage?: boolean, videoUrl?: string, ownedAudio?: OwnedAttachment, ownedExtra?: OwnedAttachment) {
+  async function doActualSend(text: unknown, audioUrl?: string, voiceMessage?: boolean, videoUrl?: string, attachmentInputs: OwnedAttachmentInput[] = [], uploadedAttachments: OwnedAttachment[] = []) {
     const originalConversation = convId.value;
     const sendGeneration = draftGeneration;
     const originalRole = characterId.value;
@@ -159,7 +172,10 @@ export function useWebChatSend(
     pendingImageBase64.value = null;
     pendingAudioUrl.value = null;
     pendingVideoUrl.value = null;
-    const sendContent = finalAudioUrl && !safeText.trim()
+    const pendingAudioPreview = attachmentInputs.find((item) => item.kind === "audio")?.file
+      ? URL.createObjectURL(attachmentInputs.find((item) => item.kind === "audio")!.file)
+      : finalAudioUrl || undefined;
+    const sendContent = (finalAudioUrl || attachmentInputs.some((item) => item.kind === "audio")) && !safeText.trim()
       ? "[语音]"
       : finalVideoUrl && !safeText.trim()
         ? "[视频]"
@@ -177,9 +193,9 @@ export function useWebChatSend(
       role: "user",
       content: sendContent,
       imageUrl: imgUrl || undefined,
-      audioUrl: ownedAudio ? ownedAudioURL([ownedAudio]) : finalAudioUrl || undefined,
+      audioUrl: pendingAudioPreview,
       videoUrl: finalVideoUrl || undefined,
-      ...(ownedExtra ? { attachments: [{ ...ownedExtra, url: ownedAttachmentURL(ownedExtra), downloadUrl: ownedAttachmentURL(ownedExtra) }] } : {}),
+      ...(uploadedAttachments.length ? { attachments: uploadedAttachments } : {}),
       status: "sending",
       conversationId: convId.value,
       createdAt,
@@ -218,15 +234,22 @@ export function useWebChatSend(
           if (project && project.ownerId !== expectedExecutionScope.resourceOwnerId) throw new Error("项目数据归属已变化，请重新选择项目");
           draftProjectId = project?.id || draftProjectReference;
         }
-        if (finalAudioUrl) throw new Error("请重新录制语音，以便当前数据所有者保存原始音频");
-				let video: OwnedAttachment | undefined;
-        if (finalVideoUrl) {
-          if (videoFile) video = await ownedFileAttachment(videoFile, videoFile.name, "video");
-          else { const match = /^data:(video\/(?:mp4|webm|quicktime));base64,([A-Za-z0-9+/]+={0,2})$/.exec(finalVideoUrl); if (!match || match[2].length > Math.ceil(1048576 / 3) * 4) throw new Error("请重新选择视频，当前 Core 需要校验并保存原始视频"); const bytes = Uint8Array.from(atob(match[2]), (value) => value.charCodeAt(0)); video = await ownedFileAttachment(new Blob([bytes], { type: match[1] }), "video", "video"); }
+        if (finalVideoUrl && videoFile && !attachmentInputs.some((item) => item.kind === "video")) {
+          attachmentInputs.push({ file: videoFile, kind: "video", name: videoFile.name || "video" });
         }
-				if (ownedAudio && imgUrl) throw new Error("语音消息不能同时携带图片");
-        const attachments = ownedAudio ? [ownedAudio] : [ownedExtra, video, imgUrl ? await ownedImageAttachment(imgUrl) : undefined].filter((item): item is OwnedAttachment => !!item);
+        if (finalVideoUrl && !videoFile && !attachmentInputs.some((item) => item.kind === "video")) {
+          throw new Error("视频原始文件不可用，请重新选择视频");
+        }
+				if (attachmentInputs.some((item) => item.kind === "audio") && imgUrl) throw new Error("语音消息不能同时携带图片");
+        const attachments = [...uploadedAttachments, ...(await Promise.all(attachmentInputs.map((item) => uploadOwnedAttachment(item))))];
         if (attachments.length > 2) throw new Error("单条消息最多携带两个附件");
+        const attachmentBlocks = (messageId: string, conversationId: string, roleId = expectedExecutionScope.roleId) => attachments.map((item) => ownedAttachmentBlock(item, {
+          messageId,
+          conversationId: parseConversationReference(conversationId)?.id || conversationId,
+          characterId: roleId,
+          conversationOwnerId: expectedExecutionScope.resourceOwnerId,
+          historicalRoleId: originalReply?.executionScope?.roleId,
+        })).filter((item): item is Record<string, unknown> => !!item);
         const assistantId = `${requestEnvelope.requestId}/assistant`;
         const previousCore = [...messages.value].reverse().find((message) => message.executionScope?.coreId && message.executionScope.coreId !== owned.coreId.value)?.executionScope?.coreId;
         const context = previousCore && convId.value ? {
@@ -236,10 +259,7 @@ export function useWebChatSend(
         } : undefined;
         let quote;
         if (originalReply) {
-          if (!originalReply.executionScope || !sameOwnedAuthority(originalReply.executionScope, expectedExecutionScope) || !originalReply.ownerId || !originalReply.characterId || !originalReply.sourceConversationId || typeof originalReply.fullContent !== "string") throw new Error("引用消息的服务、角色或归属已变化，请重新选择");
-          const source = parseConversationReference(originalReply.sourceConversationId);
-          const contentHash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(originalReply.fullContent))), (value) => value.toString(16).padStart(2, "0")).join("");
-          quote = { ownerId: originalReply.ownerId, characterId: originalReply.characterId, conversationId: source?.id || originalReply.sourceConversationId, messageId: originalReply.id, expectedRevision: originalReply.sourceRevision, contentHash, expectedExecutionScope: originalReply.executionScope };
+          quote = await ownedQuoteReferenceForMessage(originalReply, expectedExecutionScope);
         }
         const group = originalConversation ? await owned.groupState(originalConversation, originalRole) : null;
         if (sendGeneration !== draftGeneration || convId.value !== originalConversation || characterId.value !== originalRole) return;
@@ -283,7 +303,7 @@ export function useWebChatSend(
             }
             if (event.type === "started" && event.executionScope && event.deliveryId) {
               const userIndex = messages.value.findIndex((message) => message.id === userMsgLocalId);
-              if (userIndex >= 0) messages.value[userIndex] = { ...messages.value[userIndex], id: `${requestEnvelope.requestId}/user`, ownerId: event.executionScope.resourceOwnerId, sourceRevision: 1, status: "completed", executionScope: event.executionScope, conversationId: event.conversationId, sourceConversationId: event.conversationId };
+              if (userIndex >= 0) messages.value[userIndex] = { ...messages.value[userIndex], id: `${requestEnvelope.requestId}/user`, ownerId: event.executionScope.resourceOwnerId, sourceRevision: 1, status: "completed", executionScope: event.executionScope, conversationId: event.conversationId, sourceConversationId: event.conversationId, attachments: event.conversationId ? attachmentBlocks(`${requestEnvelope.requestId}/user`, event.conversationId) : messages.value[userIndex].attachments };
               const assistantId = `${event.executionScope.requestId}/assistant`;
               const existing = messages.value.findIndex((message) => message.uiKey === `group-delivery:${event.deliveryId}`);
               const assistant = { id: assistantId, uiKey: `group-delivery:${event.deliveryId}`, ownerId: event.executionScope.resourceOwnerId, requestId: event.executionScope.requestId, role: "assistant", content: "", reasoningContent: "", status: "streaming", reasoningComplete: false, outputComplete: false, createdAt: new Date().toISOString(), characterId: event.characterId, characterName: event.characterName, characterAvatar: groupAvatar(event.characterId), conversationId: event.conversationId, sourceConversationId: event.conversationId, executionScope: event.executionScope, groupRoundId: event.groupRoundId, deliveryId: event.deliveryId, deliveryIndex: event.deliveryIndex ?? 0 };
@@ -325,7 +345,7 @@ export function useWebChatSend(
             return;
           }
           const userIndex = messages.value.findIndex((message) => message.id === userMsgLocalId || message.id === `${requestEnvelope.requestId}/user`);
-          if (userIndex >= 0) messages.value[userIndex] = { ...messages.value[userIndex], id: response.userMessageId, ownerId: expectedExecutionScope.resourceOwnerId, sourceRevision: 1, status: "completed", executionScope: expectedExecutionScope, conversationId: response.conversationId, sourceConversationId: parseConversationReference(response.conversationId)?.id || response.conversationId };
+          if (userIndex >= 0) messages.value[userIndex] = { ...messages.value[userIndex], id: response.userMessageId, ownerId: expectedExecutionScope.resourceOwnerId, sourceRevision: 1, status: "completed", executionScope: expectedExecutionScope, conversationId: response.conversationId, sourceConversationId: parseConversationReference(response.conversationId)?.id || response.conversationId, attachments: attachmentBlocks(response.userMessageId, response.conversationId) };
           for (const delivery of response.deliveries) {
             const index = messages.value.findIndex((message) => message.uiKey === `group-delivery:${delivery.deliveryId}`);
             const assistant = {
@@ -371,7 +391,7 @@ if (convId.value === response.conversationId && characterId.value === originalRo
           if (convId.value !== activeConversation || characterId.value !== originalRole || sendGeneration !== draftGeneration) return;
           if (event.type === "started") {
             const userIndex = messages.value.findIndex((message) => message.id === userMsgLocalId);
-            if (userIndex >= 0) messages.value[userIndex] = { ...messages.value[userIndex], id: `${requestEnvelope.requestId}/user`, ownerId: event.executionScope?.resourceOwnerId, sourceRevision: 1, status: "completed", executionScope: event.executionScope, conversationId: event.conversationId };
+            if (userIndex >= 0) messages.value[userIndex] = { ...messages.value[userIndex], id: `${requestEnvelope.requestId}/user`, ownerId: event.executionScope?.resourceOwnerId, sourceRevision: 1, status: "completed", executionScope: event.executionScope, conversationId: event.conversationId, attachments: event.conversationId ? attachmentBlocks(`${requestEnvelope.requestId}/user`, event.conversationId) : messages.value[userIndex].attachments };
             if (event.conversationId && !convId.value) {
               convId.value = event.conversationId;
               activeConversation = event.conversationId;
@@ -406,7 +426,7 @@ if (convId.value === response.conversationId && characterId.value === originalRo
         }
         const index = messages.value.findIndex((message) => message.id === assistantId);
 				const userIndex = messages.value.findIndex((message) => message.id === `${requestEnvelope.requestId}/user` && message.ownerId === response.executionScope.resourceOwnerId);
-				if (userIndex >= 0) messages.value[userIndex] = { ...messages.value[userIndex], content: response.transcription || messages.value[userIndex].content, sourceRevision: response.userRevision || 1, sourceConversationId: response.resourceConversationId || parseConversationReference(response.conversationId)?.id || response.conversationId, characterId: response.executionScope.roleId };
+				if (userIndex >= 0) messages.value[userIndex] = { ...messages.value[userIndex], content: response.transcription || messages.value[userIndex].content, sourceRevision: response.userRevision || 1, sourceConversationId: response.resourceConversationId || parseConversationReference(response.conversationId)?.id || response.conversationId, characterId: response.executionScope.roleId, attachments: attachmentBlocks(`${requestEnvelope.requestId}/user`, response.resourceConversationId || response.conversationId, response.executionScope.roleId) };
         const assistant = { id: assistantId, uiKey: `request:${requestEnvelope.requestId}`, ownerId: response.executionScope.resourceOwnerId, sourceRevision: response.saved ? 1 : undefined, requestId: response.requestId, role: "assistant", content: response.reply, reasoningContent: response.reasoning, citationSnapshot: response.citationSnapshot || [], status: "completed", conversationId: response.conversationId, sourceConversationId: response.resourceConversationId || parseConversationReference(response.conversationId)?.id || response.conversationId, characterId: response.executionScope.roleId, executionScope: response.executionScope, saved: response.saved, memoryStatus: response.memoryStatus, createdAt: new Date().toISOString() };
         if (index >= 0) messages.value[index] = { ...messages.value[index], ...assistant };
         else messages.value.push(assistant);
@@ -446,7 +466,7 @@ if (convId.value === response.conversationId && characterId.value === originalRo
     }
   }
 
-  async function handleFileSend(file: File) { const attachment = await ownedFileAttachment(file, file.name); await doActualSend(`[文件] ${file.name}`, undefined, undefined, undefined, undefined, attachment); }
+  async function handleFileSend(file: File) { await doActualSend(`[文件] ${file.name}`, undefined, undefined, undefined, [{ file, kind: "file", name: file.name }]); }
 
   async function handleStop() {
     try {
@@ -508,7 +528,9 @@ if (convId.value === response.conversationId && characterId.value === originalRo
     handleRetry,
     handleClear,
     resetForNewDraft,
+    getPendingVideoFile: () => pendingVideoFile.value,
     isSubmitting,
     generating,
+    messageStyle,
   };
 }

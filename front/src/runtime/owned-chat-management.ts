@@ -17,15 +17,15 @@ export async function prepareOwnedChatRequest(body: Record<string, any> = {}, ro
   if (!await owned.refresh()) throw new Error(owned.notice.value || "设备对话服务尚未就绪");
   const role = roleId || body.characterId || owned.selectInitialRole(localStorage.getItem(`webchat-char-id:${owned.coreId.value}:${owned.roleOwnerId.value}`) || "");
   if (!role) throw new Error("请先在聊天页面选择需要管理的角色");
+  const origin = parseConversationReference(String(body.conversationId || ""));
   const prepared = previewKind === "message"
     ? await owned.resourcePreview("message", String(body.messageId || ""), role)
-    : await owned.data("working", role);
+    : origin ? await owned.query(String(body.conversationId), role) : await owned.data("working", role);
   const previewScope = prepared.executionScope;
   const supplied = body.expectedExecutionScope as OwnedExecutionScope | undefined;
-  const catalogScope = previewKind === "message" ? previewScope : owned.chatScope(role, previewScope.conversationRoleId);
+  const catalogScope = previewKind === "message" || origin ? previewScope : owned.chatScope(role, previewScope.conversationRoleId);
   const expected = (supplied || catalogScope) as OwnedExecutionScope;
   if (supplied && !sameOwnedAuthority(supplied, previewScope)) throw new Error("服务或数据归属已变化，请重新预览后操作");
-  const origin = parseConversationReference(String(body.conversationId || ""));
   const payload = { ...body, ...(origin ? { conversationId: origin.id, conversationOwnerId: origin.ownerId } : {}), targetDeviceId: expected.targetDeviceId, characterId: role, expectedExecutionScope: expected };
   return { owned, expected, payload: { requestId: crypto.randomUUID(), ...payload } };
 }
@@ -45,6 +45,24 @@ async function ownedChatRequest<T>(group: string, operation: string, body: Recor
 
 export function ownedChatRuntimeRequest<T = any>(operation: string, body: Record<string, any> = {}, roleId = ""): Promise<T> {
   return ownedChatRequest<T>("chat-runtime", operation, body, roleId);
+}
+
+export async function ownedChatRuntimeScopedRequest<T = any>(operation: string, body: Record<string, any>, expected: OwnedExecutionScope): Promise<T> {
+  const owned = useDeviceOwnedConversation();
+  if (!expected?.coreId || !expected.roleId || !expected.targetDeviceId || !expected.resourceOwnerId || !expected.roleOwnerId) throw new Error(`排队消息缺少完整执行归属: ${JSON.stringify(expected)}`);
+  const origin = parseConversationReference(String(body.conversationId || ""));
+  const payload = {
+    requestId: crypto.randomUUID(),
+    ...body,
+    ...(origin ? { conversationId: origin.id, conversationOwnerId: origin.ownerId, conversationOrigin: origin } : {}),
+    targetDeviceId: expected.targetDeviceId,
+    characterId: expected.roleId,
+    expectedExecutionScope: expected,
+  };
+  const response = await apiClient.post(`/api/device-mesh/v1/business/chat-runtime/${operation}`, payload);
+  const result = response.data?.code === 200 && response.data.data !== undefined ? response.data.data : response.data;
+  if (!result?.executionScope || owned.coreId.value !== expected.coreId || !sameOwnedAuthority(expected, result.executionScope)) throw new Error(`排队消息结果归属已变化，结果已丢弃: ${JSON.stringify(result)}`);
+  return result as T;
 }
 
 export function saveOwnedChatExport(value: { content: string; filename?: string; fileName?: string; mimeType: string }) {

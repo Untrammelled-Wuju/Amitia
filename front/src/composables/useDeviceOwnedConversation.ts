@@ -2,7 +2,7 @@ import { computed, ref } from "vue";
 import { apiClient } from "./useApi";
 import { getDeploymentConfig, getNativeProviderTransition } from "@/runtime/runtime-adapter";
 import { streamOwnedChat, streamOwnedGroupChat, type OwnedChatEvent, type OwnedChatRequest, type OwnedExecutionScope, type OwnedGroupChatRequest, type OwnedGroupChatResponse, type OwnedGroupDelivery, type OwnedGroupState } from "@/runtime/device-owned-chat";
-import { ownedImageURL, ownedAudioURL, ownedMessageText, ownedAttachmentURL } from "@/runtime/device-owned-attachments";
+import { ownedImageURL, ownedAudioURL, ownedVideoURL, ownedMessageText, ownedAttachmentBlock } from "@/runtime/device-owned-attachments";
 import { conversationReference, parseConversationReference, ownedConversationRow, type OwnedConversationOrigin } from "@/runtime/device-owned-conversation-reference";
 import { createOwnedConversationExport } from "@/runtime/device-owned-export";
 import { OwnedChatStateChangedError } from "@/runtime/owned-chat-poll";
@@ -277,7 +277,7 @@ export function useDeviceOwnedConversation() {
   }
 
   function selectInitialRole(saved?: string): string {
-    for (const requested of [policy.value?.selectedRole, saved]) {
+    for (const requested of [saved, policy.value?.selectedRole]) {
       if (requested && roles.value.some((role) => role.id === requested)) return requested;
     }
     return roles.value[0]?.id || "";
@@ -525,8 +525,9 @@ export function useDeviceOwnedConversation() {
         const key = `${snapshot.ownerId}:${row.id}`;
         if (seen.has(key)) continue;
         seen.add(key);
-        const files = (Array.isArray(row.attachments) ? row.attachments : []).filter((item: any) => ["file", "video"].includes(item?.kind)).map((item: any) => ({ ...item, url: ownedAttachmentURL(item), downloadUrl: ownedAttachmentURL(item) }));
-        resultMessages.push({ ...row, sourceConversationId: row.conversationId, attachments: files, ...(row.quote ? { replyToMessageId: row.quote.messageId, replyToRole: row.quote.role, replyToExcerpt: String(row.quote.content || "").slice(0, 100) } : {}), ...(result.conversationReference ? { conversationId: result.conversationReference } : {}), content: ownedMessageText(row), imageUrl: ownedImageURL(row.attachments) || row.imageUrl, audioUrl: ownedAudioURL(row.attachments) || row.audioUrl, uiKey: key, ownerId: snapshot.ownerId, executionScope: result.executionScope, status: row.status || "completed" });
+        const attachmentContext = { messageId: String(row.id), conversationId: String(row.conversationId || ""), characterId: String(row.characterId || result.executionScope.roleId), conversationOwnerId: snapshot.ownerId, historicalRoleId: row.characterId ? String(row.characterId) : undefined };
+        const files = (Array.isArray(row.attachments) ? row.attachments : []).map((item: any) => ownedAttachmentBlock(item, attachmentContext)).filter((item: any) => !!item);
+        resultMessages.push({ ...row, sourceConversationId: row.conversationId, attachments: files, ...(row.quote ? { replyToMessageId: row.quote.messageId, replyToRole: row.quote.role, replyToExcerpt: String(row.quote.content || "").slice(0, 100) } : {}), ...(result.conversationReference ? { conversationId: result.conversationReference } : {}), content: ownedMessageText(row), imageUrl: ownedImageURL(row.attachments, attachmentContext) || row.imageUrl, audioUrl: ownedAudioURL(row.attachments, attachmentContext) || row.audioUrl, videoUrl: ownedVideoURL(row.attachments, attachmentContext) || row.videoUrl, uiKey: key, ownerId: snapshot.ownerId, executionScope: result.executionScope, status: row.status || "completed" });
       }
     }
 		const failures = (result.deliveryFailures || []).filter((row) => row.ownerId === result.executionScope.resourceOwnerId && ["mesh.owned_resource_version", "mesh.owned_request_conflict"].includes(row.errorCode));

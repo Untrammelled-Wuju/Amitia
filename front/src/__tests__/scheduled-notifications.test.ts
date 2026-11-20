@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { deliverScheduledBrowserNotification, registerScheduledBrowserEndpoint } from '../runtime/scheduled-notifications';
 
-const entries: Array<{ title: string; options: NotificationOptions; onshow?: () => void; onclick?: () => void; onerror?: () => void; close: ReturnType<typeof vi.fn> }> = [];
+const entries: Array<{ title: string; options: NotificationOptions; onshow?: () => void; onclick?: () => void; onerror?: (event: Event) => void; close: ReturnType<typeof vi.fn> }> = [];
 beforeEach(() => {
   entries.length = 0;
   localStorage.clear();
@@ -35,7 +35,19 @@ it('does not show a browser notification when system permission is unavailable',
   (Notification as any).permission = 'denied';
   await deliverScheduledBrowserNotification({ requestId: 'notification', payload: { ackable: true } }, { acknowledge, navigate: vi.fn() });
   expect(entries).toHaveLength(0);
-  expect(acknowledge).toHaveBeenCalledWith('display_failed');
+  expect(acknowledge).toHaveBeenCalledWith('display_failed', 'Notification.permission = denied');
+});
+
+it('submits the original browser error event with the failure receipt', async () => {
+  const acknowledge = vi.fn().mockResolvedValue(undefined);
+  const error = new Error('Notification presentation failed', { cause: new Error('original cause') });
+  await deliverScheduledBrowserNotification({ requestId: 'notification', payload: { ackable: true } }, { acknowledge, navigate: vi.fn() });
+  entries[0]!.onerror!(new ErrorEvent('error', { error, message: error.message }));
+  const [state, detail] = acknowledge.mock.calls[0]!;
+  expect(state).toBe('display_failed');
+  expect(detail).toContain('Notification presentation failed');
+  expect(detail).toContain('original cause');
+  expect(JSON.parse(detail).error.stack).toBe(error.stack);
 });
 
 it('shows display-only notifications without writing a receipt the Core rejects', async () => {

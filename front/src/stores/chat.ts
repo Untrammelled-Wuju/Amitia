@@ -140,7 +140,13 @@ export const useChatStore = defineStore("chat", () => {
       const generation = ++sidebarGeneration;
       const role=owned.selectInitialRole(localStorage.getItem(`webchat-char-id:${owned.coreId.value}:${owned.roleOwnerId.value}`) || "");
       if (!role) { sidebar.value={pinned:[],recent:[],projects:[],removedProjects:[]};return; }
-      const conversations=await owned.conversations(role);
+      const roleConversations = await Promise.all(owned.roles.value.map(async (item) => ({
+        role: item.id,
+        conversations: await owned.conversations(item.id),
+      })));
+      const conversations = roleConversations.flatMap((item) => item.role === role
+        ? item.conversations
+        : item.conversations.filter((conversation) => conversation.source === "reminder" || conversation.source === "proactive"));
       const projectPage = await owned.projects(role, historicalProjectRole.value);
       if (generation !== sidebarGeneration) return;
       projectIntent.value = projectPage.executionScope;
@@ -164,8 +170,14 @@ export const useChatStore = defineStore("chat", () => {
     throw new Error(owned.notice.value || "设备对话服务尚未就绪");
   }
 
-  async function fetchSidebar() {
-    if (sidebarFetch) return sidebarFetch;
+  async function fetchSidebar(refreshAfterCurrent = false) {
+    if (sidebarFetch) {
+      if (refreshAfterCurrent) {
+        await sidebarFetch;
+        return fetchSidebar();
+      }
+      return sidebarFetch;
+    }
     const task = loadSidebar();
     const wrapped = task.finally(() => {
       if (sidebarFetch === wrapped) sidebarFetch = null;
@@ -256,7 +268,7 @@ export const useChatStore = defineStore("chat", () => {
     await fetchSidebar();
   }
 
-  async function markConversationRead(conversationId: string, lastTerminalTurnSequence = 0) {
+  async function markConversationRead(conversationId: string, lastTerminalTurnSequence = 0, characterId = "") {
     const rows = [sidebar.value.pinned, sidebar.value.recent, ...sidebar.value.projects.map((project) => project.conversations)];
     const conversation = rows.flat().find((row) => row.id === conversationId);
     let terminalSequence = Math.max(0, Number(lastTerminalTurnSequence || conversation?.lastTerminalTurnSequence || 0));
@@ -264,19 +276,24 @@ export const useChatStore = defineStore("chat", () => {
     if (conversation && !conversation.hasUnread && readSequence >= terminalSequence) return;
     if (owned.enabled.value) {
       if (terminalSequence <= 0) {
-        const role = owned.selectInitialRole();
+        const role = characterId || conversation?.characterId || owned.selectInitialRole();
         if (!role) return;
         const result = await owned.query(conversationId, role);
         const body = result.snapshot.resources.find((resource) => resource.kind === "conversation")?.body as Record<string, any> | undefined;
         terminalSequence = Math.max(0, Number(body?.lastTerminalTurnSequence || 0));
       }
-      await owned.edit("conversation",conversationId,{lastReadTurnSequence:terminalSequence});
+      await owned.edit("conversation",conversationId,{lastReadTurnSequence:terminalSequence}, { characterId: characterId || conversation?.characterId });
     } else {
       throw new Error(owned.notice.value || "设备对话服务尚未就绪");
     }
-    if (conversation) {
-      conversation.hasUnread = false;
-      conversation.lastReadTurnSequence = terminalSequence;
+    const currentRows = [sidebar.value.pinned, sidebar.value.recent, ...sidebar.value.projects.map((project) => project.conversations)];
+    const currentConversation = currentRows.flat().find((row) => row.id === conversationId);
+    if (currentConversation) {
+      currentConversation.lastReadTurnSequence = Math.max(Number(currentConversation.lastReadTurnSequence || 0), terminalSequence);
+      if (Number(currentConversation.lastTerminalTurnSequence || 0) <= terminalSequence) {
+        currentConversation.hasUnread = false;
+        currentConversation.unreadCompletedCount = 0;
+      }
     }
   }
 

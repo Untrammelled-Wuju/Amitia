@@ -11,6 +11,7 @@ export interface BuiltinRouteMigration {
 const migrationByRoot: Record<string, Omit<BuiltinRouteMigration, "path" | "root">> = {
   "/chat": { capability: "conversation.shell", priority: 100 },
   "/attention": { capability: "page.provider", priority: 99 },
+  "/main-panel": { capability: "page.provider", priority: 86 },
   "/developer": { capability: "page.provider", priority: 78 },
   "/call": { capability: "conversation.overlay", priority: 95 },
   "/extensions": { capability: "extension.center", priority: 90 },

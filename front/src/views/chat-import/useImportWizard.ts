@@ -5,6 +5,7 @@ import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { parseSpeakerNames } from "./utils";
 import { useOwnedMemoryManagement } from "@/composables/useOwnedMemoryManagement";
+import { originalErrorText } from "@/runtime/original-error";
 import {
   parseText,
   confirmImport,
@@ -108,14 +109,14 @@ export function useImportWizard() {
   }
 
   async function handleConfirm() {
-    if (editableItems.value.length === 0) return;
-    await ElMessageBox.confirm(
-      `确认导入 ${editableItems.value.length} 条消息？将创建一个新的会话。`,
-      "确认导入",
-      { type: "warning", confirmButtonText: "确认" },
-    );
+    if (confirming.value || editableItems.value.length === 0) return;
     confirming.value = true;
     try {
+      await ElMessageBox.confirm(
+        `确认导入 ${editableItems.value.length} 条消息？将创建一个新的会话。`,
+        "确认导入",
+        { type: "warning", confirmButtonText: "确认" },
+      );
       const result = await confirmImport({
         items: editableItems.value.map(
           ({ lineNo, _sensitive, ...item }) => item,
@@ -135,8 +136,8 @@ export function useImportWizard() {
 
       if (genSummary.value) await handleGenSummary();
       if (extractMemories.value) await handleExtractMemories();
-    } catch (err: any) {
-      if (err !== "cancel") ElMessage.error(err?.message || err || "导入失败");
+    } catch (cause) {
+      if (cause !== "cancel" && cause !== "close") ElMessage.error(originalErrorText(cause));
     } finally {
       confirming.value = false;
     }

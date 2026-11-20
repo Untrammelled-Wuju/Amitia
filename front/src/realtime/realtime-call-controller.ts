@@ -1,6 +1,6 @@
 import { RealtimeVoiceActivityDetector } from "./realtime-vad";
 import { OwnedRealtimeSession } from "./owned-realtime-session";
-import { ownedImageAttachment } from "../runtime/device-owned-attachments";
+import { uploadOwnedAttachment } from "../runtime/device-owned-attachments";
 import type { OwnedChatResponse, OwnedExecutionScope } from "../runtime/device-owned-chat";
 import { parseConversationReference } from "../runtime/device-owned-conversation-reference";
 
@@ -384,7 +384,7 @@ export class RealtimeCallController {
       runtime.lastSignature = signature;
       const blob = await canvasToBlob(runtime.canvas, "image/jpeg", runtime.source === "screen" ? 0.78 : 0.72);
       if (!blob || blob.size === 0 || blob.size > 2 * 1024 * 1024) return;
-      const attachment = await ownedImageAttachment(await blobToDataURL(blob));
+      const attachment = await uploadOwnedAttachment({ file: blob, kind: "image", name: `realtime-${runtime.source}-${runtime.sequence + 1}.jpg` });
       runtime.sequence++;
       this.ownedSession?.setVisual(attachment);
       this.options.onVision?.({ available: true, source: runtime.source, sequence: runtime.sequence });
@@ -473,11 +473,3 @@ function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number):
   return new Promise((resolve) => canvas.toBlob(resolve, type, quality));
 }
 
-function blobToDataURL(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => reject(reader.error || new Error("视觉帧编码失败"));
-    reader.readAsDataURL(blob);
-  });
-}

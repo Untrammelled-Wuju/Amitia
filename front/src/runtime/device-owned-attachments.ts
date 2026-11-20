@@ -1,64 +1,133 @@
+import { createAuthenticatedFetchInit } from "./request-auth";
+import { resolveApiUrl } from "./runtime-adapter";
+
 export interface OwnedAttachment {
+  artifactId: string;
+  ownerDeviceId: string;
+  storageDeviceId: string;
   kind: "image" | "audio" | "file" | "video";
   name: string;
   mimeType: string;
-  data: string;
   sha256: string;
+  sizeBytes: number;
 }
 
-const ownedFileMimes = ["text/plain", "text/markdown", "text/csv", "application/json", "application/xml", "text/xml", "application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"];
-const ownedVideoMimes = ["video/mp4", "video/webm", "video/quicktime"];
-export async function ownedFileAttachment(blob: Blob, name: string, kind: "file" | "video" = "file"): Promise<OwnedAttachment> {
-  const extensions: Record<string, string> = { txt: "text/plain", md: "text/markdown", csv: "text/csv", json: "application/json", xml: "application/xml", pdf: "application/pdf", docx: ownedFileMimes[7], mp4: "video/mp4", webm: "video/webm", mov: "video/quicktime" };
-  const mimeType = blob.type.split(";")[0].trim().toLowerCase() || extensions[name.split(".").pop()?.toLowerCase() || ""] || "";
-  if (!(kind === "file" ? ownedFileMimes : ownedVideoMimes).includes(mimeType) || !name || new TextEncoder().encode(name).length > 256 || /[\x00\r\n]/.test(name) || !blob.size || blob.size > 1048576 || !globalThis.crypto?.subtle) throw new Error(kind === "file" ? "请选择 UTF-8 文本、JSON、CSV、XML、PDF 或 DOCX 文件，单件不超过 1 MiB" : "请选择 MP4、WebM 或 MOV 视频，单段不超过 1 MiB");
-  const bytes = new Uint8Array(await blob.arrayBuffer());
-  if (!bytes.length || bytes.length !== blob.size) throw new Error("附件在读取期间发生变化");
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  let binary = "";
-  for (let offset = 0; offset < bytes.length; offset += 8192) binary += String.fromCharCode(...bytes.subarray(offset, offset + 8192));
-  return { kind, name, mimeType, data: btoa(binary), sha256: Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("") };
+export interface OwnedAttachmentInput {
+  file: Blob;
+  kind: OwnedAttachment["kind"];
+  name?: string;
 }
-export function ownedAttachmentURL(attachment: unknown): string | undefined {
+
+export interface OwnedAttachmentMessageContext {
+  messageId: string;
+  conversationId: string;
+  characterId?: string;
+  conversationOwnerId?: string;
+  historicalRoleId?: string;
+}
+
+interface ArtifactEnvelope {
+  artifactId: string;
+  ownerDeviceId: string;
+  storageDeviceId: string;
+  kind: OwnedAttachment["kind"];
+  filename: string;
+  mimeType: string;
+  blobDigest: string;
+  sizeBytes: number;
+}
+
+function originalError(payload: unknown, fallback: string): Error {
+  const row = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
+  const values = ["message", "msg", "error", "internalMessage", "detail", "cause", "rawError", "reason"]
+    .map((key) => typeof row[key] === "string" ? String(row[key]).trim() : "")
+    .filter(Boolean);
+  return new Error(values.length ? values.join("\n") : fallback);
+}
+
+function validAttachmentName(name: string): boolean {
+  return !!name && new TextEncoder().encode(name).length <= 256 && !/[\x00\r\n]/.test(name);
+}
+
+export async function uploadOwnedAttachment(input: OwnedAttachmentInput): Promise<OwnedAttachment> {
+  const name = String(input.name || (input.file as File).name || "attachment").trim();
+  if (!(input.file.size > 0) || !validAttachmentName(name)) {
+    throw new Error("附件为空或名称无效");
+  }
+  if (!["image", "audio", "video", "file"].includes(input.kind)) {
+    throw new Error("附件类型无效");
+  }
+  const mimeType = String(input.file.type || "").split(";", 1)[0].trim().toLowerCase() || "application/octet-stream";
+  const path = `/api/artifacts/v1/chat-uploads?${new URLSearchParams({ filename: name, kind: input.kind })}`;
+  const init = await createAuthenticatedFetchInit(path, {
+    method: "POST",
+    headers: { "Content-Type": mimeType },
+    body: input.file,
+  });
+  const response = await fetch(await resolveApiUrl(path), init);
+  const payload = await response.json().catch((error) => {
+    throw new Error(`附件上传响应无法解析: ${response.status} ${response.statusText}\n${String(error)}`);
+  });
+  if (!response.ok) {
+    throw originalError(payload, `附件上传失败: ${response.status} ${response.statusText}`);
+  }
+  const artifact = payload?.artifact as ArtifactEnvelope | undefined;
+  if (!artifact || !artifact.artifactId || !artifact.ownerDeviceId || !artifact.storageDeviceId || !artifact.filename || !artifact.mimeType || !/^sha256:[a-f0-9]{64}$/.test(String(artifact.blobDigest || "")) || !Number.isSafeInteger(artifact.sizeBytes) || artifact.sizeBytes <= 0) {
+    throw new Error(`附件上传响应缺少完整元数据:\n${JSON.stringify(payload)}`);
+  }
+  return {
+    artifactId: artifact.artifactId,
+    ownerDeviceId: artifact.ownerDeviceId,
+    storageDeviceId: artifact.storageDeviceId,
+    kind: artifact.kind,
+    name: artifact.filename,
+    mimeType: artifact.mimeType,
+    sha256: artifact.blobDigest.slice("sha256:".length),
+    sizeBytes: artifact.sizeBytes,
+  };
+}
+
+export function ownedAttachmentContentURL(attachment: unknown, context: OwnedAttachmentMessageContext): string | undefined {
   const row = attachment as Partial<OwnedAttachment>;
-  const allowed = row?.kind === "file" ? ownedFileMimes : row?.kind === "video" ? ownedVideoMimes : [];
-  return typeof row?.data === "string" && allowed.includes(String(row.mimeType)) && row.data.length <= Math.ceil(1048576 / 3) * 4 && /^[A-Za-z0-9+/]+={0,2}$/.test(row.data) ? `data:${row.mimeType};base64,${row.data}` : undefined;
+  if (!row?.artifactId || !row.ownerDeviceId || !row.storageDeviceId || !row.kind || !row.name || !row.mimeType || !/^[a-f0-9]{64}$/.test(String(row.sha256 || "")) || !Number.isSafeInteger(row.sizeBytes)) {
+    return undefined;
+  }
+  const query = new URLSearchParams({
+    conversationId: context.conversationId,
+    messageId: context.messageId,
+  });
+  if (context.conversationOwnerId) query.set("conversationOwnerId", context.conversationOwnerId);
+  if (context.characterId) query.set("characterId", context.characterId);
+  if (context.historicalRoleId) query.set("historicalRoleId", context.historicalRoleId);
+  return `/api/device-mesh/v1/business/attachments/${encodeURIComponent(row.artifactId)}/content?${query}`;
 }
 
-export async function ownedAudioAttachment(blob: Blob, name = "voice.webm"): Promise<OwnedAttachment> {
-	const mimeType = blob.type.split(";")[0].trim().toLowerCase();
-	if (!["audio/wav", "audio/webm"].includes(mimeType) || !blob.size || blob.size > 1048576 || !name || name.length > 256 || /[\x00\r\n]/.test(name) || !globalThis.crypto?.subtle) throw new Error("请选择 WAV 或 WebM 音频，单段不超过 1 MiB");
-	const bytes = new Uint8Array(await blob.arrayBuffer());
-	if (!bytes.length || bytes.length > 1048576 || bytes.length !== blob.size) throw new Error("音频大小无效或在读取时发生变化");
-	const digest = await crypto.subtle.digest("SHA-256", bytes);
-	const sha256 = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
-	let binary = "";
-	for (let offset = 0; offset < bytes.length; offset += 8192) binary += String.fromCharCode(...bytes.subarray(offset, offset + 8192));
-	return { kind: "audio", name, mimeType, data: btoa(binary), sha256 };
+export function ownedAttachmentBlock(attachment: unknown, context: OwnedAttachmentMessageContext): Record<string, unknown> | undefined {
+  const row = attachment as Partial<OwnedAttachment>;
+  const url = ownedAttachmentContentURL(row, context);
+  if (!url) return undefined;
+  return { ...row, id: row.artifactId, size: row.sizeBytes, url, downloadUrl: url };
 }
 
-export function ownedAudioURL(attachments: unknown): string | undefined {
-	if (!Array.isArray(attachments)) return undefined;
-	const audio = attachments.find((item) => item?.kind === "audio" && ["audio/wav", "audio/webm"].includes(item.mimeType) && typeof item.data === "string" && /^[A-Za-z0-9+/]+={0,2}$/.test(item.data) && item.data.length <= Math.ceil(1048576 / 3) * 4);
-	return audio ? `data:${audio.mimeType};base64,${audio.data}` : undefined;
+export function ownedAttachmentURL(attachment: unknown, context?: OwnedAttachmentMessageContext): string | undefined {
+  return context ? ownedAttachmentContentURL(attachment, context) : undefined;
+}
+
+export function ownedAudioURL(attachments: unknown, context?: OwnedAttachmentMessageContext): string | undefined {
+  if (!Array.isArray(attachments)) return undefined;
+  return ownedAttachmentURL(attachments.find((item) => item?.kind === "audio"), context);
+}
+
+export function ownedImageURL(attachments: unknown, context?: OwnedAttachmentMessageContext): string | undefined {
+  if (!Array.isArray(attachments)) return undefined;
+  return ownedAttachmentURL(attachments.find((item) => item?.kind === "image"), context);
+}
+
+export function ownedVideoURL(attachments: unknown, context?: OwnedAttachmentMessageContext): string | undefined {
+  if (!Array.isArray(attachments)) return undefined;
+  return ownedAttachmentURL(attachments.find((item) => item?.kind === "video"), context);
 }
 
 export function ownedMessageText(row: Record<string, unknown>): string {
-	return typeof row.transcription === "string" && row.transcription && row.content === row.transcriptionSourceContent ? row.transcription : String(row.content || "");
-}
-
-export async function ownedImageAttachment(uri: string, name = "image.png"): Promise<OwnedAttachment> {
-  const match = /^data:(image\/(?:png|jpeg|gif));base64,([A-Za-z0-9+/]+={0,2})$/.exec(uri);
-  if (!match || match[2].length > Math.ceil(1048576 / 3) * 4) throw new Error("请选择 PNG、JPEG 或 GIF 图片，单张不超过 1 MiB");
-  const bytes = Uint8Array.from(atob(match[2]), (value) => value.charCodeAt(0));
-  if (!bytes.length || bytes.length > 1048576 || !globalThis.crypto?.subtle) throw new Error("图片大小无效或当前连接无法校验附件完整性");
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  const sha256 = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
-  return { kind: "image", name: name.slice(0, 256), mimeType: match[1], data: match[2], sha256 };
-}
-
-export function ownedImageURL(attachments: unknown): string | undefined {
-  if (!Array.isArray(attachments)) return undefined;
-  const image = attachments.find((item) => item?.kind === "image" && ["image/png", "image/jpeg", "image/gif"].includes(item.mimeType) && typeof item.data === "string" && /^[A-Za-z0-9+/]+={0,2}$/.test(item.data) && item.data.length <= Math.ceil(1048576 / 3) * 4);
-  return image ? `data:${image.mimeType};base64,${image.data}` : undefined;
+  return typeof row.transcription === "string" && row.transcription && row.content === row.transcriptionSourceContent ? row.transcription : String(row.content || "");
 }

@@ -57,6 +57,7 @@ export function useConversationRuntime(
   ) => void | Promise<void>,
   onConversationActivityChanged?: (conversationId: string) => void | Promise<void>,
   groupSending?: Ref<boolean>,
+  characterId?: Ref<string>,
 ) {
   const owned = useDeviceOwnedConversation();
   const reducer = new AgentEventReducer();
@@ -434,7 +435,7 @@ export function useConversationRuntime(
       clear();
       return false;
     }
-    const snapshot = await ownedChatRuntimeRequest<ConversationSnapshot>("snapshot", { conversationId: id });
+    const snapshot = await ownedChatRuntimeRequest<ConversationSnapshot>("snapshot", { conversationId: id }, characterId?.value);
     if (epoch !== snapshotEpoch || id !== String(conversationId.value || "").trim()) return false;
     if (snapshot.conversation) snapshot.conversation.id = id;
     snapshot.turns = snapshot.turns?.map((turn) => ({ ...turn, conversationId: id }));
@@ -449,7 +450,7 @@ export function useConversationRuntime(
     const epoch = snapshotEpoch;
     const id = String(conversationId.value || "").trim();
     if (!id || !hasMoreTurnHistory.value || !turnHistoryCursor.value) return false;
-    const response = await ownedChatRuntimeRequest("turns", { conversationId: id, cursor: turnHistoryCursor.value, limit: 50 });
+    const response = await ownedChatRuntimeRequest("turns", { conversationId: id, cursor: turnHistoryCursor.value, limit: 50 }, characterId?.value);
     const rows = Array.isArray(response?.items) ? response.items.map((turn: any) => ({ ...turn, conversationId: id })) : [];
     if (epoch !== snapshotEpoch || id !== String(conversationId.value || "").trim()) return false;
     if (rows.length === 0) {
@@ -577,7 +578,7 @@ if (!signal.aborted && currentConnection(epoch, id)) await recoverFromSnapshot()
       const captured = snapshotEpoch;
       const path = "/api/device-mesh/v1/business/chat-runtime/events";
       const afterSequence = lastEventSequence.value;
-      const { payload, expected } = await prepareOwnedChatRequest({ conversationId: id, afterSequence });
+      const { payload, expected } = await prepareOwnedChatRequest({ conversationId: id, afterSequence }, characterId?.value);
       const canonicalId = String(payload.conversationId || id).trim();
       if (!currentConnection(epoch, id) || captured !== snapshotEpoch) return;
       if (owned.coreId.value !== expected.coreId) {

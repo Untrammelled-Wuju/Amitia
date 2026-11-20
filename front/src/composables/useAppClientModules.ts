@@ -33,6 +33,17 @@ export interface AppClientModule {
   actions: Record<string, (input?: unknown) => Promise<unknown>>;
 }
 
+function asFailure(cause: unknown): Error {
+  if (cause instanceof Error) return cause;
+  if (cause && typeof cause === "object") {
+    const record = cause as { message?: unknown; detail?: unknown };
+    const failure = new Error(String(record.message ?? record.detail ?? JSON.stringify(cause)));
+    (failure as Error & { cause?: unknown }).cause = cause;
+    return failure;
+  }
+  return new Error(String(cause));
+}
+
 function buildActionContext(): Record<string, unknown> {
   const appStore = useAppStore();
   const characterId = String(appStore.currentCharacter?.id ?? "").trim();
@@ -65,6 +76,16 @@ export function useAppClientModules(options: { enabled?: boolean; contributionId
 
   onMounted(async () => {
     if (!(options.enabled ?? APP_CLIENT_MODULES_ENABLED)) return;
+    try {
+      await loadModules();
+    } catch (cause) {
+      const failure = asFailure(cause);
+      error.value = failure;
+      console.error(`[app-client-modules] 客户端模块清单加载失败: ${failure.stack ?? failure.message}`);
+    }
+  });
+
+  async function loadModules() {
     const listed = await apiClient.get<{ contributions?: AppContributionSummary[] }>(
       "/api/extensions/ui/contributions",
     );
@@ -104,7 +125,7 @@ export function useAppClientModules(options: { enabled?: boolean; contributionId
           actions: buildActions(item.contribution_id, actionIds),
         });
       } catch (cause) {
-        const failure = cause instanceof Error ? cause : new Error(String(cause));
+        const failure = asFailure(cause);
         error.value = failure;
         console.error(`[app-client-module] ${item.extension_id}/${item.contribution_id} 加载失败: ${failure.stack ?? failure.message}`);
       }
@@ -115,7 +136,7 @@ export function useAppClientModules(options: { enabled?: boolean; contributionId
       (globalThis as unknown as { __dshHostCommand?: (input?: unknown) => Promise<unknown> }).__dshHostCommand = (input?: unknown) => command(input);
     }
     modules.value = loaded;
-  });
+  }
 
   return { modules, error };
 }

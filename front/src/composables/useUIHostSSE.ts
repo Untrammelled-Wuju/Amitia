@@ -4,6 +4,7 @@ import { ElNotification, ElMessageBox } from "element-plus";
 import { resolveApiUrl } from "../runtime/runtime-adapter";
 import { createAuthenticatedFetchInit } from "../runtime/request-auth";
 import { isNavigationAllowed } from "../navigation/nav-whitelist";
+import { useChatStore } from "../stores/chat";
 import { useExtensionUIStore } from "../stores/extensionUI";
 import { browserClientPluginRuntime, type BrowserDeclarativeClientPackage } from "../ui-runtime/clientPluginRuntime";
 import { resolveUIHostDeviceId } from "../ui-runtime/deviceIdentity";
@@ -103,6 +104,7 @@ hostClientId = `ui-host-${Date.now().toString(36)}-${Math.random().toString(36).
         "ui.dialog",
         "ui.navigate",
         ...(desktopStyleHost ? [] : ["ui.style"]),
+        ...(typeof window !== "undefined" && window.amitiaDesktop?.selectDirectory ? ["ui.directory.pick"] : []),
       ],
     });
     hostSessionId = String(result.hostSessionId ?? "").trim();
@@ -423,6 +425,68 @@ return null;
     }
   }
 
+  async function sendDirectoryPickResponse(
+    requestId: string,
+    path: string,
+    error: string,
+    responseHostClientId = hostClientId,
+    responseHostSessionId = hostSessionId,
+  ): Promise<void> {
+    try {
+      const url = await resolveApiUrl("/api/extensions/ui/directory-pick-response");
+      const init = await createAuthenticatedFetchInit("/api/extensions/ui/directory-pick-response", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          requestId,
+          path,
+          error,
+          hostClientId: responseHostClientId,
+          hostSessionId: responseHostSessionId,
+        }),
+      });
+      await fetch(url, init);
+    } catch (error) {
+      console.error("[original-error]", error);
+    }
+  }
+
+  async function handleDirectoryPick(event: MessageEvent) {
+    const envelope = parseEnvelope(event);
+    if (!envelope || !envelope.payload) return;
+    if (!shouldProcess(envelope)) return;
+    const requestId = String(envelope.payload.requestId ?? "").trim();
+    if (!requestId) {
+      console.error("[original-error]", new Error(`ui_directory_pick 缺少 requestId: ${JSON.stringify(envelope.payload)}`));
+      return;
+    }
+    const responseHostClientId = String(envelope.hostClientId ?? hostClientId).trim();
+    const responseHostSessionId = String(envelope.hostSessionId ?? hostSessionId).trim();
+    const picker = typeof window !== "undefined" ? window.amitiaDesktop?.selectDirectory : undefined;
+    if (!picker) {
+      await sendDirectoryPickResponse(
+        requestId,
+        "",
+        "当前宿主没有可用的系统目录选择器（window.amitiaDesktop.selectDirectory 不存在）",
+        responseHostClientId,
+        responseHostSessionId,
+      );
+      return;
+    }
+    try {
+      const picked = await picker();
+      await sendDirectoryPickResponse(requestId, picked ?? "", "", responseHostClientId, responseHostSessionId);
+    } catch (error) {
+      await sendDirectoryPickResponse(
+        requestId,
+        "",
+        error instanceof Error ? error.message : String(error),
+        responseHostClientId,
+        responseHostSessionId,
+      );
+    }
+  }
+
   function handleDialog(event: MessageEvent) {
     const envelope = parseEnvelope(event);
     if (!envelope || !envelope.payload) return;
@@ -538,25 +602,20 @@ return null;
   function dispatchEvent(eventName: string, data: string) {
     const event = new MessageEvent(eventName, { data });
     switch (eventName) {
+      case "scheduled_conversation_saved":
+        void useChatStore().fetchSidebar(true).catch((error) => console.error("[original-error]", error));
+        break;
       case "scheduled_notification": {
         if (window.amitiaDesktop) break;
         const envelope = parseEnvelope(event);
         if (!envelope || !envelope.payload || !shouldProcess(envelope)) break;
         void deliverScheduledBrowserNotification(envelope as ScheduledBrowserEnvelope, {
-          acknowledge: async (state) => {
+          acknowledge: async (state, error) => {
             const path = '/api/notifications/scheduled/' + encodeURIComponent(envelope.requestId) + '/ack';
-            const response = await fetch(await resolveApiUrl(path), await createAuthenticatedFetchInit(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state }) }));
+            const response = await fetch(await resolveApiUrl(path), await createAuthenticatedFetchInit(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state, error }) }));
             if (response.ok) return;
             const body = await response.text();
-            let detail = body;
-            try {
-              const parsed = JSON.parse(body) as Record<string, unknown>;
-              const candidate = parsed?.msg ?? parsed?.message ?? parsed?.error;
-              if (candidate !== undefined && candidate !== null && candidate !== '') detail = String(candidate);
-            } catch (parseError) {
-              console.error("[original-error]", parseError);
-            }
-            throw new Error('通知回执未确认（HTTP ' + response.status + '）：' + detail);
+            throw new Error('通知回执未确认（HTTP ' + response.status + '）：' + body);
           },
           navigate: (target) => { if (isNavigationAllowed(target, router)) void router.push(target); },
         }).catch((error) => {
@@ -572,6 +631,9 @@ return null;
         break;
       case "ui_dialog":
         handleDialog(event);
+        break;
+      case "ui_directory_pick":
+        void handleDirectoryPick(event);
         break;
       case "ui_client_runtime_command":
         void handleClientRuntimeCommand(event);

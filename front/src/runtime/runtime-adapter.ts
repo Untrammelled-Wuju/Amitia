@@ -63,6 +63,7 @@ export const DEVICE_LOCAL_ROUTE_PREFIXES = [
   "/api/imports",
   "/media",
   "/api/artifacts/v1/previews",
+  "/api/artifacts/v1/chat-uploads",
   "/internal/device-mesh",
 ] as const;
 

@@ -1,4 +1,4 @@
-import { shallowMount } from "@vue/test-utils";
+import { flushPromises, shallowMount } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ref } from "vue";
 import ActiveTasksView from "../views/tasks/ActiveTasksView.vue";
@@ -12,6 +12,9 @@ interface TaskViewState {
   form: { title: string; remindAt: string; characterId: string };
   openCreate(): Promise<void>;
   createTask(): Promise<void>;
+  trigger(task: { id: string; title: string; kind: string; generation: number; enabled: number }): Promise<void>;
+  history: Array<{ id: string; result?: { conversationId?: string } }>;
+  historyOpen: boolean;
 }
 
 vi.mock("@/composables/useApi", () => ({ apiClient: api }));
@@ -23,7 +26,7 @@ function openView() {
   const wrapper = shallowMount(ActiveTasksView, {
     global: {
       directives: { loading: {} },
-      stubs: { ElDialog: true, ElForm: true, ElFormItem: true, ElInput: true, ElSelect: true, ElOption: true, ElButton: true, ElEmpty: true },
+      stubs: { ElDialog: true, ElForm: true, ElFormItem: true, ElInput: true, ElSelect: true, ElOption: true, ElButton: true, ElEmpty: true, ElAlert: true, ElTag: true, RouterLink: true },
     },
   });
   const instance = wrapper.vm.$ as unknown as { setupState: TaskViewState };
@@ -64,6 +67,29 @@ describe("桌面主动任务所属角色", () => {
     coreId.value = "core-b";
     await view.createTask();
     expect(api.post).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it("提交后优先展示本次执行保存的对话和通知原始错误", async () => {
+    const { wrapper, view } = openView();
+    const run = {
+      id: "manual-trigger",
+      state: "partial",
+      result: {
+        conversationId: "new-chat",
+        messageSaved: true,
+        targets: [{ kind: "notification", state: "display_failed", error: "UNErrorDomain错误1" }],
+      },
+    };
+    api.get.mockImplementation(async (path: string) => ({
+      data: { data: path.endsWith("trigger-history") ? { items: [{ id: "other-trigger" }, run] } : [] },
+    }));
+    api.post.mockResolvedValue({ data: { data: { triggerId: run.id } } });
+    await view.trigger({ id: "task", title: "喝水", kind: "user_reminder", generation: 1, enabled: 1 });
+    await flushPromises();
+    expect(view.historyOpen).toBe(true);
+    expect(view.history[0]).toEqual(run);
+    expect(api.get).toHaveBeenCalledWith("/api/reminders/trigger-history", { params: { id: "task", kind: "user_reminder" } });
     wrapper.unmount();
   });
 });

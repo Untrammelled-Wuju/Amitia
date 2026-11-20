@@ -53,7 +53,9 @@ describe("项目中首次对话的保存确认", () => {
     await state.send.doActualSend("开始对话");
     expect(mocks.send).not.toHaveBeenCalled();
     expect(state.modelError.value).toBe("项目数据归属已变化，请重新选择项目");
-    expect(state.messages.value.at(-1)?.status).toBe("interrupted");
+    const assistant = state.messages.value.find((message) => message.role === "assistant");
+    expect(assistant?.status).toBe("failed");
+    expect(assistant?.error).toBe("项目数据归属已变化，请重新选择项目");
   });
 
   it("项目内首次回答失败时不会伪造成功状态", async () => {
@@ -62,7 +64,9 @@ describe("项目中首次对话的保存确认", () => {
     await state.send.doActualSend("开始对话");
     expect(state.convId.value).toBe("");
     expect(state.messages.value.find((message) => message.role === "user")?.status).toBe("failed");
-    expect(state.messages.value.find((message) => message.role === "assistant")?.status).toBe("interrupted");
+    const assistant = state.messages.value.find((message) => message.role === "assistant");
+    expect(assistant?.status).toBe("failed");
+    expect(assistant?.error).toBe("首次回答失败");
     expect(mocks.edit).not.toHaveBeenCalled();
   });
 });

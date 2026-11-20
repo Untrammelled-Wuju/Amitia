@@ -1,3 +1,5 @@
+import { sha256BlobHex } from "./sha256-stream";
+
 type DeviceKey = { privateKey: CryptoKey; publicKey: CryptoKey };
 const pendingKeys = new Map<string, Promise<DeviceKey>>();
 
@@ -54,6 +56,21 @@ export async function signWebRequest(deviceId: string, coreId: string, url: stri
     const headers = new Headers(init.headers);
     headers.delete("Content-Type");
     init = { ...init, headers };
+  }
+  if (init.body instanceof Blob) {
+    const encoder = new TextEncoder();
+    const digest = async (value: BufferSource) => Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", value)), (byte) => byte.toString(16).padStart(2, "0")).join("");
+    const target = new URL(url);
+    const headers = new Headers(init.headers);
+    const proof = {
+      publicKey: base64URL(await crypto.subtle.exportKey("raw", key.publicKey)),
+      audience: coreId, method: String(init.method || "GET").toUpperCase(), path: target.pathname + target.search,
+      bodyHash: await sha256BlobHex(init.body), tokenHash: await digest(encoder.encode((headers.get("Authorization") || "").trim())),
+      issuedAt: Math.floor(Date.now()/1000), nonce: crypto.randomUUID(), signature: "",
+    };
+    proof.signature = base64URL(await crypto.subtle.sign("Ed25519", key.privateKey, encoder.encode(JSON.stringify(proof))));
+    headers.set("X-Amitia-Device-Proof", base64URL(encoder.encode(JSON.stringify(proof)).buffer));
+    return { ...init, headers, redirect: "error", duplex: "half" } as RequestInit;
   }
   const request = new Request(url, init);
   const body = await request.clone().arrayBuffer();

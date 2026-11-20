@@ -81,10 +81,14 @@ SPDX-License-Identifier: AGPL-3.0-only
           <el-button
             type="primary"
             :loading="previewLoading"
+            :disabled="!hasCleanupCondition()"
             @click="previewCleanup"
           >
             预览清理结果
           </el-button>
+          <div class="form-hint">
+            至少选择一个条件（日期、天数、渠道或来源）才能预览清理范围
+          </div>
         </el-form-item>
       </el-form>
     </el-card>
@@ -181,6 +185,7 @@ const {
   confirmText,
   confirmLoading,
   cleanupResult,
+  hasCleanupCondition,
   previewCleanup,
   executeCleanup,
 } = useChatCleanup();

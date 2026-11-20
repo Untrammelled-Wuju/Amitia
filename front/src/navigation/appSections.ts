@@ -69,7 +69,9 @@ export const appSections: AppSectionDefinition[] = [
     id: "extensions",
     route: "/extensions",
     label: "扩展中心",
-    entries: [],
+    entries: [
+      { route: "/extension/page/dsh-compatible-page?extensionId=com.amitia%2Fdsh-compatible-host", label: "DSH 插件管理" },
+    ],
   },
 ];
 
