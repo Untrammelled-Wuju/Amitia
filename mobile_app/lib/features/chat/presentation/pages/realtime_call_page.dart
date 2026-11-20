@@ -13,6 +13,8 @@ import '../../../../core/backend_transport/providers/backend_transport_providers
 import '../../../../core/backend_transport/websocket/backend_websocket_client.dart';
 import '../../../../core/backend_transport/websocket/backend_websocket_message.dart';
 import '../../../../core/backend_transport/websocket/backend_websocket_session.dart';
+import '../../../../core/artifact/artifact_model.dart';
+import '../../../../core/artifact/artifact_providers.dart';
 import '../../../../core/notifications/notification_coordinator.dart';
 import '../../../../core/realtime/realtime_audio_bridge.dart';
 import '../../../../core/realtime/realtime_voice_activity_detector.dart';
@@ -22,6 +24,7 @@ import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/settings/current_character_provider.dart';
 import '../../../../core/runtime/backend/mobile_backend_providers.dart';
 import '../../../../core/services/device_owned_realtime_service.dart';
+import '../../../../core/services/device_owned_attachments.dart';
 import '../../../../core/services/owned_realtime_invitation.dart';
 import '../../../../core/services/owned_conversation_reference.dart';
 import '../../../../core/services/owned_speech_player.dart';
@@ -531,14 +534,34 @@ class _RealtimeCallPageState extends ConsumerState<RealtimeCallPage> {
     final owned = _owned;
     if (owned != null) {
       if (_state == 'connected' && _ownedTurn.isNotEmpty) {
-        try {
-          _queueOwned({
-            'type': 'visual',
-            'attachment': owned.image(frame.bytes, frame.mime),
-          });
-        } catch (error) {
-          if (mounted) setState(() => _visionStatus = error.toString());
-        }
+        final turn = _ownedTurn;
+        unawaited(() async {
+          try {
+            final service = await ref.read(artifactServiceProvider.future);
+            final artifact = await service.uploadBytes(
+              bytes: frame.bytes,
+              kind: ArtifactKind.image,
+              fileName: 'realtime.${frame.mime == 'image/png' ? 'png' : 'jpg'}',
+              mimeType: frame.mime,
+              source: 'realtime_visual',
+            );
+            if (!mounted ||
+                _owned != owned ||
+                _state != 'connected' ||
+                _ownedTurn != turn) {
+              return;
+            }
+            _queueOwned({
+              'type': 'visual',
+              'attachment': ownedAttachmentFromArtifact(
+                artifact,
+                kind: 'image',
+              ),
+            });
+          } catch (error) {
+            if (mounted) setState(() => _visionStatus = error.toString());
+          }
+        }());
       }
       return;
     }

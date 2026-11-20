@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../backend_transport/backend_service_api.dart';
 import '../native_bridge/device_timezone_cache.dart';
 import '../services/chat_service.dart';
+import '../services/owned_conversation_reference.dart';
 import 'notification_call_action_outbox.dart';
 import 'notification_platform_bridge.dart';
 import 'notification_reply_outbox.dart';
@@ -633,13 +634,18 @@ class NotificationCoordinator with WidgetsBindingObserver {
     switch (uri.host) {
       case 'chat':
         if (uri.pathSegments.isEmpty) return;
-        final conversationId = uri.pathSegments.first;
+        final id = uri.pathSegments.first;
+        final ownerId = uri.queryParameters['ownerId'];
+        final conversationId = ownerId == null || ownerId.isEmpty
+            ? id
+            : conversationReference({'ownerId': ownerId, 'id': id});
         _router.go(
           Uri(
             path: '/chat',
             queryParameters: <String, String>{
               'conversationId': conversationId,
               'messageId': ?uri.queryParameters['message'],
+              'characterId': ?uri.queryParameters['characterId'],
               'runId': ?uri.queryParameters['run'],
               'attentionId': ?uri.queryParameters['attentionId'],
             },

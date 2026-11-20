@@ -776,7 +776,10 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
 
   void _openConversation(ConversationDto conversation) {
     context.push(
-      '${AppRoutes.chat}?conversationId=${Uri.encodeQueryComponent(conversation.id)}',
+      Uri(path: AppRoutes.chat, queryParameters: {
+        'conversationId': conversation.id,
+        'characterId': conversation.characterId,
+      }).toString(),
     );
   }
 

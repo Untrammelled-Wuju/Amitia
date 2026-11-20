@@ -157,6 +157,7 @@ class MessageDto {
   final String? replyToMessageId;
   final String? replyToExcerpt;
   final List<Map<String, dynamic>> citationSnapshot;
+  final List<Map<String, dynamic>> attachments;
 
   MessageDto({
     this.resourceUri = '',
@@ -197,6 +198,7 @@ class MessageDto {
     this.replyToMessageId,
     this.replyToExcerpt,
     this.citationSnapshot = const <Map<String, dynamic>>[],
+    this.attachments = const <Map<String, dynamic>>[],
   });
 
   factory MessageDto.fromJson(Map<String, dynamic> json) {
@@ -246,6 +248,12 @@ class MessageDto {
       replyToExcerpt: json['replyToExcerpt'] as String?,
       citationSnapshot: json['citationSnapshot'] is List
           ? (json['citationSnapshot'] as List)
+                .whereType<Map>()
+                .map((entry) => Map<String, dynamic>.from(entry))
+                .toList(growable: false)
+          : const <Map<String, dynamic>>[],
+      attachments: json['attachments'] is List
+          ? (json['attachments'] as List)
                 .whereType<Map>()
                 .map((entry) => Map<String, dynamic>.from(entry))
                 .toList(growable: false)

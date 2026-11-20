@@ -13,6 +13,7 @@ import '../../../../core/models/reminder.dart';
 import '../../../../core/models/attention.dart';
 import '../../../../core/models/character.dart';
 import '../../../../core/models/conversation.dart';
+import '../../../../core/services/owned_conversation_reference.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
@@ -1228,7 +1229,9 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
                 ),
               ),
               AmitiaStatusBadge(
-                label: reminder.paused
+                label: reminder.state == 'expired'
+                    ? '已到期'
+                    : reminder.paused
                     ? '已暂停'
                     : reminder.isEnabled
                     ? '启用'
@@ -1240,6 +1243,15 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
             ],
           ),
           SizedBox(height: AppSpacing.sm),
+          if (reminder.state == 'expired' || reminder.paused || !reminder.isEnabled)
+            Text(
+              reminder.state == 'expired'
+                  ? '任务已到期，无法立即执行。需要再次提醒时请新建任务。'
+                  : reminder.paused
+                  ? '任务已暂停，恢复后可立即执行。'
+                  : '任务已停用，启用后可立即执行。',
+              style: AppTypography.caption(context),
+            ),
           Wrap(
             spacing: AppSpacing.sm,
             runSpacing: AppSpacing.xs,
@@ -1285,7 +1297,9 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
                 label: const Text('测试'),
               ),
               TextButton.icon(
-                onPressed: () => _trigger(reminder),
+                onPressed: reminder.state == 'expired' || reminder.paused || !reminder.isEnabled
+                    ? null
+                    : () => _trigger(reminder),
                 icon: const Icon(Icons.send_outlined, size: 16),
                 label: const Text('立即触发'),
               ),
@@ -1685,7 +1699,7 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
                   DropdownButtonFormField<String>(
                     value: selectedConversationId,
                     decoration: const InputDecoration(
-                      labelText: '目标会话（可选）',
+                      labelText: '来源会话（可选）',
                       border: OutlineInputBorder(),
                     ),
                     items: [
@@ -1945,7 +1959,7 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
             children: [
               _detail('标题', (result['title'] ?? reminder.title).toString()),
               _detail('渠道', (result['channel'] ?? reminder.channel).toString()),
-              _detail('目标会话', (result['conversationId'] ?? '').toString()),
+              _detail('来源会话', (result['conversationId'] ?? '').toString()),
               _detail('消息内容', (result['messageContent'] ?? '').toString()),
               _detail(
                 '执行时间',
@@ -2305,10 +2319,46 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
                         final targets = result['targets'] is List
                             ? result['targets'] as List
                             : const [];
+                        final conversationId = result['conversationId']
+                            ?.toString();
+                        final ownerId = result['ownerId']?.toString();
+                        final taskId = item['reminderId']?.toString();
+                        final matchingTasks = _reminders.where(
+                          (task) => task.id == taskId,
+                        );
+                        final characterId = matchingTasks.isEmpty
+                            ? ''
+                            : matchingTasks.first.characterId;
+                        final openConversation =
+                            result['messageSaved'] == true &&
+                            conversationId != null &&
+                            conversationId.isNotEmpty &&
+                            ownerId != null &&
+                            ownerId.isNotEmpty &&
+                            characterId.isNotEmpty;
                         return ListTile(
                           title: Text('${item['title']} · ${item['state']}'),
+                          trailing: openConversation
+                              ? TextButton(
+                                  onPressed: () {
+                                    final path = Uri(
+                                      path: '/chat',
+                                      queryParameters: {
+                                        'conversationId': conversationReference({
+                                          'id': conversationId,
+                                          'ownerId': ownerId,
+                                        }),
+                                        'characterId': characterId,
+                                      },
+                                    ).toString();
+                                    Navigator.of(sheetContext).pop();
+                                    if (mounted) context.go(path);
+                                  },
+                                  child: const Text('打开提醒对话'),
+                                )
+                              : null,
                           subtitle: Text(
-                            '${item['createdAt']}\n${item['lastError'] ?? ''}\n${targets.map((target) => '${target['kind']} ${target['id']}：${target['state']} ${target['error'] ?? ''}').join('\n')}',
+                            '${item['createdAt']}\n${item['reason'] ?? ''}\n${item['lastError'] ?? ''}\n${targets.map((target) => '${target['kind']} ${target['id']}：${target['state']} ${target['error'] ?? ''}').join('\n')}',
                           ),
                         );
                       }).toList(),

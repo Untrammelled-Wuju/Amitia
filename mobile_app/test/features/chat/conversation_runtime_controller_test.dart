@@ -35,6 +35,21 @@ class _FakeOwnedService extends DeviceOwnedChatService {
   Future<void> poll() async {}
 
   @override
+  Future<Map<String, dynamic>> runtime(
+    String operation, {
+    Map<String, dynamic> body = const {},
+    String characterId = '',
+  }) async {
+    owner.runtimeOperations.add(operation);
+    owner.runtimeBodies.add(Map<String, dynamic>.from(body));
+    return <String, dynamic>{
+      'items': operation == 'queue/list' ? owner.runtimeQueueItems : const [],
+      'accepted': true,
+      'status': 'queued',
+    };
+  }
+
+  @override
   Future<Map<String, dynamic>> query(
     String conversationId, {
     String? characterId,
@@ -141,6 +156,9 @@ class _FakeChatService extends ChatService {
   List<Map<String, dynamic>> submittedGroupMentions = const [];
   bool submittedGroupDiscussionMode = false;
   int submitCount = 0;
+  final List<String> runtimeOperations = <String>[];
+  final List<Map<String, dynamic>> runtimeBodies = <Map<String, dynamic>>[];
+  List<Map<String, dynamic>> runtimeQueueItems = const [];
   Completer<void>? mutation;
   List<MessageDto> Function(String)? snapshotMessages;
   List<AssistantTurnDto> snapshotTurns = [];
@@ -857,6 +875,93 @@ void main() {
     appearance.dispose();
     await events.close();
   });
+  test('排队文字保留引用归属、正文校验和附件', () async {
+    final events = StreamController<ChatStreamEvent>.broadcast();
+    final service = _FakeChatService(events);
+    final controller = ConversationRuntimeController(service);
+    await controller.openConversation('conversation-1', characterId: 'role');
+    final scope = <String, dynamic>{
+      'spaceId': 'space',
+      'coreId': 'core',
+      'initiatorDeviceId': 'device',
+      'targetDeviceId': 'device',
+      'roleOwnerId': 'device',
+      'resourceOwnerId': 'device',
+      'authorizationRealm': 'device',
+      'roleId': 'role',
+      'roleRevision': 1,
+      'providerEpoch': 1,
+      'targetProviderEpoch': 1,
+      'modeRevision': 1,
+      'permissionRevision': 1,
+      'targetPermissionRevision': 1,
+      'coordinated': false,
+      'requestId': 'view',
+      'turnId': '',
+      'executionId': '',
+    };
+    final quoted = ChatMessage(
+      id: 'original',
+      sourceOwnerId: 'device',
+      sourceScope: scope,
+      sourceConversationId: 'conversation-1',
+      sourceRevision: 3,
+      characterId: 'role',
+      role: MessageRole.assistant,
+      type: MessageType.text,
+      content: '原始回复',
+      time: DateTime.now(),
+      status: MessageStatus.sent,
+    );
+    events.add(
+      ChatStreamEvent(
+        'agent_ui_event',
+        _event(
+          sequence: 1,
+          id: 'queue-active-turn',
+          type: 'turn.started',
+          status: 'running',
+        ),
+      ),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    expect(controller.isGenerating, isTrue);
+    await controller.sendText(
+      '按这个继续',
+      replyToMessageId: quoted.id,
+      replyToExcerpt: '原始回复',
+      quotedMessage: quoted,
+    );
+    await controller.enqueueText(
+      '附件消息',
+      attachments: const [
+        {
+          'kind': 'file',
+          'name': 'notes.txt',
+          'mimeType': 'text/plain',
+          'artifactId': 'artifact-1',
+          'ownerDeviceId': 'device',
+          'storageDeviceId': 'device',
+          'sha256':
+              'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          'sizeBytes': 10,
+        },
+      ],
+    );
+    final index = service.runtimeOperations.indexOf('queue/enqueue');
+    final body = service.runtimeBodies[index];
+    final quote = body['quote'] as Map;
+    expect(quote['ownerId'], 'device');
+    expect(quote['conversationId'], 'conversation-1');
+    expect(quote['messageId'], 'original');
+    expect(quote['expectedRevision'], 3);
+    expect(quote['contentHash'], hasLength(64));
+    final attachmentBody = service
+        .runtimeBodies[service.runtimeOperations.lastIndexOf('queue/enqueue')];
+    expect((attachmentBody['attachments'] as List).single['name'], 'notes.txt');
+    controller.dispose();
+    await events.close();
+  });
   test('完成回执中的引用快照写入当前助手消息', () async {
     final events = StreamController<ChatStreamEvent>.broadcast();
     final service = _FakeChatService(events)
@@ -907,6 +1012,39 @@ void main() {
     events.addError(StateError('disconnected'));
     await Future<void>.delayed(const Duration(milliseconds: 80));
     expect(controller.automationStatus, isNull);
+    controller.dispose();
+    await events.close();
+  });
+  test('已中断回合不能继续作为排队消息引导目标', () async {
+    final events = StreamController<ChatStreamEvent>.broadcast();
+    final controller = ConversationRuntimeController(_FakeChatService(events));
+    await controller.openConversation('conversation-1');
+    events.add(
+      ChatStreamEvent(
+        'agent_ui_event',
+        _event(
+          sequence: 1,
+          id: 'turn-started-before-interrupt',
+          type: 'turn.started',
+          status: 'running',
+        ),
+      ),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    expect(controller.isGenerating, isTrue);
+    events.add(
+      ChatStreamEvent(
+        'agent_ui_event',
+        _event(
+          sequence: 2,
+          id: 'turn-interrupted',
+          type: 'turn.interrupted',
+          status: 'interrupted',
+        ),
+      ),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    expect(controller.isGenerating, isFalse);
     controller.dispose();
     await events.close();
   });
@@ -1031,25 +1169,38 @@ void main() {
     await events.close();
   });
 
-  test('Core解绑后原内联附件不能回退为本地模型请求', () async {
+  test('Core解绑后原附件引用不能回退为本地模型请求', () async {
     final events = StreamController<ChatStreamEvent>.broadcast();
     final service = _FakeChatService(events);
     service.owned.enabled = false;
     final controller = ConversationRuntimeController(service);
+    Map<String, dynamic> attachment(String kind, String name, String mime) => {
+      'kind': kind,
+      'artifactId': 'art-$kind',
+      'ownerDeviceId': 'device',
+      'storageDeviceId': 'device',
+      'name': name,
+      'mimeType': mime,
+      'sha256': List.filled(64, 'a').join(),
+      'sizeBytes': 3,
+    };
     await controller.sendImage(
-      resourceUri: 'data:image/png;base64,AQID',
-      displayUrl: 'data:image/png;base64,AQID',
+      resourceUri: 'amitia://artifacts/art-image',
+      displayUrl: 'amitia://artifacts/art-image',
       fileName: 'picture.png',
+      attachment: attachment('image', 'picture.png', 'image/png'),
     );
     await controller.sendVideo(
-      resourceUri: 'data:video/mp4;base64,AQID',
-      displayUrl: 'data:video/mp4;base64,AQID',
+      resourceUri: 'amitia://artifacts/art-video',
+      displayUrl: 'amitia://artifacts/art-video',
       fileName: 'clip.mp4',
+      attachment: attachment('video', 'clip.mp4', 'video/mp4'),
     );
     await controller.sendFile(
-      resourceUri: 'data:text/plain;base64,AQID',
+      resourceUri: 'amitia://artifacts/art-file',
       fileName: 'notes.txt',
       sizeBytes: 3,
+      attachment: attachment('file', 'notes.txt', 'text/plain'),
       mimeType: 'text/plain',
     );
     expect(service.submitCount, 0);

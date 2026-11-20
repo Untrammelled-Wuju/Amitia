@@ -27,6 +27,8 @@ enum ArtifactStatus {
 class ArtifactMetadata {
   final String id;
   final String ownerSpaceId;
+  final String ownerDeviceId;
+  final String storageDeviceId;
   final String workspaceId;
   final ArtifactKind kind;
   final String blobDigest;
@@ -46,6 +48,8 @@ class ArtifactMetadata {
   const ArtifactMetadata({
     required this.id,
     required this.ownerSpaceId,
+    required this.ownerDeviceId,
+    required this.storageDeviceId,
     required this.workspaceId,
     required this.kind,
     required this.blobDigest,
@@ -67,6 +71,8 @@ class ArtifactMetadata {
     return ArtifactMetadata(
       id: json['artifactId']?.toString() ?? '',
       ownerSpaceId: json['ownerSpaceId']?.toString() ?? '',
+      ownerDeviceId: json['ownerDeviceId']?.toString() ?? '',
+      storageDeviceId: json['storageDeviceId']?.toString() ?? '',
       workspaceId: json['workspaceId']?.toString() ?? '',
       kind: ArtifactKind.values.firstWhere(
         (k) => k.value == json['kind'],
@@ -86,32 +92,38 @@ class ArtifactMetadata {
       height: (json['height'] as num?)?.toInt() ?? 0,
       durationMs: (json['durationMs'] as num?)?.toInt() ?? 0,
       revision: (json['revision'] as num?)?.toInt() ?? 1,
-      createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '') ?? DateTime.now(),
-      updatedAt: DateTime.tryParse(json['updatedAt']?.toString() ?? '') ?? DateTime.now(),
+      createdAt:
+          DateTime.tryParse(json['createdAt']?.toString() ?? '') ??
+          DateTime.now(),
+      updatedAt:
+          DateTime.tryParse(json['updatedAt']?.toString() ?? '') ??
+          DateTime.now(),
     );
   }
 
   String get resourceUri => 'amitia://artifacts/$id';
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'owner_space_id': ownerSpaceId,
-        'workspace_id': workspaceId,
-        'kind': kind.value,
-        'blob_digest': blobDigest,
-        'size_bytes': sizeBytes,
-        'mime_type': mimeType,
-        'filename': filename,
-        'file_extension': fileExtension,
-        'status': status.value,
-        'source': source,
-        'width': width,
-        'height': height,
-        'duration_ms': durationMs,
-        'revision': revision,
-        'created_at': createdAt.toIso8601String(),
-        'updated_at': updatedAt.toIso8601String(),
-      };
+    'id': id,
+    'owner_space_id': ownerSpaceId,
+        'owner_device_id': ownerDeviceId,
+        'storage_device_id': storageDeviceId,
+    'workspace_id': workspaceId,
+    'kind': kind.value,
+    'blob_digest': blobDigest,
+    'size_bytes': sizeBytes,
+    'mime_type': mimeType,
+    'filename': filename,
+    'file_extension': fileExtension,
+    'status': status.value,
+    'source': source,
+    'width': width,
+    'height': height,
+    'duration_ms': durationMs,
+    'revision': revision,
+    'created_at': createdAt.toIso8601String(),
+    'updated_at': updatedAt.toIso8601String(),
+  };
 }
 
 String buildArtifactUri(String artifactId) => 'amitia://artifacts/$artifactId';

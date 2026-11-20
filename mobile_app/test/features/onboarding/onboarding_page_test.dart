@@ -1,3 +1,4 @@
+import 'package:amitia_app/app/app_routes.dart';
 import 'package:amitia_app/core/services/onboarding_completion_store.dart';
 import 'package:amitia_app/core/services/providers.dart';
 import 'package:amitia_app/features/onboarding/presentation/pages/onboarding_page.dart';
@@ -8,6 +9,35 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('未选择角色时进入消息列表，不调用角色接口', () async {
+    expect(
+      await resolveOnboardingDestination(' ', (_) async {
+        fail('未选择角色时不应读取角色接口');
+      }),
+      AppRoutes.conversations,
+    );
+  });
+
+  test('只有角色仍然存在才进入聊天', () async {
+    Future<bool> roleExists(String role) async => role == 'active-role';
+    expect(
+      await resolveOnboardingDestination('active-role', roleExists),
+      AppRoutes.chat,
+    );
+    expect(
+      await resolveOnboardingDestination('removed-role', roleExists),
+      AppRoutes.conversations,
+    );
+  });
+
+  test('角色接口失败保留原始错误', () async {
+    final error = StateError('role backend unavailable');
+    await expectLater(
+      resolveOnboardingDestination('active-role', (_) async => throw error),
+      throwsA(same(error)),
+    );
+  });
 
   Future<void> pumpOnboarding(
     WidgetTester tester, {

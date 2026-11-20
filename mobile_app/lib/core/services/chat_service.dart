@@ -249,7 +249,19 @@ class ChatService {
 
   Future<List<ConversationDto>> listConversations() async {
     await _requireOwned();
-    return owned.conversations();
+    final selectedRole = owned.selectRole(null);
+    final roles = owned.roles.map((role) => role['id'].toString()).toList();
+    final pages = await Future.wait(
+      roles.map((role) => owned.conversations(characterId: role)),
+    );
+    return [
+      for (var index = 0; index < roles.length; index++)
+        ...pages[index].where(
+          (item) => roles[index] == selectedRole ||
+              item.source == 'reminder' ||
+              item.source == 'proactive',
+        ),
+    ];
   }
 
   Future<List<ConversationDto>> archivedConversations({
@@ -299,7 +311,7 @@ class ChatService {
 
   Future<ConversationSidebarDto> conversationSidebar() async {
     await _requireOwned();
-    final rows = (await owned.conversations())
+    final rows = (await listConversations())
         .where((row) => row.archivedAt.isEmpty)
         .toList();
     final projects = (await owned.projects())
@@ -599,6 +611,7 @@ class ChatService {
     await owned.edit(
       'conversation',
       id,
+      characterId: characterId,
       changes: {'lastReadTurnSequence': terminalSequence},
     );
     return;

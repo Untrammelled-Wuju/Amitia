@@ -1124,6 +1124,42 @@ class DeviceOwnedChatService {
     );
   }
 
+  Future<Map<String, dynamic>> runtimeWithScope(
+    String operation, {
+    required Map<String, dynamic> expectedExecutionScope,
+    Map<String, dynamic> body = const {},
+    String characterId = '',
+  }) async {
+    if (!enabled) throw StateError('设备服务尚未就绪');
+    final role = selectRole(characterId);
+    if (_preSendScopeFields.any((key) => expectedExecutionScope[key] == null)) {
+      throw StateError('排队消息缺少完整执行归属: ${jsonEncode(expectedExecutionScope)}');
+    }
+    final origin = parseConversationReference(
+      body['conversationId']?.toString() ?? '',
+    );
+    final result = await _api.post<Map<String, dynamic>>(
+      '/api/device-mesh/v1/business/chat-runtime/$operation',
+      data: {
+        'requestId':
+            'chat-control-${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(1 << 32)}',
+        ...body,
+        if (origin != null) 'conversationId': origin['id'],
+        if (origin != null) 'conversationOwnerId': origin['ownerId'],
+        if (origin != null) 'conversationOrigin': origin,
+        'targetDeviceId': expectedExecutionScope['targetDeviceId'],
+        'characterId': role,
+        'expectedExecutionScope': expectedExecutionScope,
+      },
+    );
+    if (result?['executionScope'] is! Map ||
+        _authorityStamp(result!['executionScope'] as Map) !=
+            _authorityStamp(expectedExecutionScope)) {
+      throw StateError('排队消息结果归属已变化，结果已丢弃: ${jsonEncode(result)}');
+    }
+    return result;
+  }
+
   Stream<Map<String, dynamic>> runtimeEvents({
     required String conversationId,
     required int afterSequence,
@@ -1591,6 +1627,8 @@ class DeviceOwnedChatService {
       query['snapshot'],
     ].whereType<Map>()) {
       final owner = (snapshot['ownerId'] ?? '').toString();
+      final scope = query['executionScope'];
+      final scopeRole = scope is Map ? (scope['roleId'] ?? '').toString() : '';
       final rows = (snapshot['resources'] as List? ?? [])
           .whereType<Map>()
           .where((row) => row['kind'] == 'message')
@@ -1606,22 +1644,88 @@ class DeviceOwnedChatService {
             },
           );
       for (final row in rows) {
-        final file = ownedFileMetadata(row['attachments']);
         final id = (row['id'] ?? '').toString();
         if (id.isEmpty ||
             !const ['user', 'assistant'].contains(row['role']) ||
             !seen.add('$owner:$id'))
           continue;
+        final conversationId =
+            (query['conversationReference'] ?? row['conversationId'] ?? '')
+                .toString();
+        final sourceConversationId = (row['conversationId'] ?? conversationId)
+            .toString();
+        final characterId = (row['characterId'] ?? scopeRole).toString();
+        final historicalRoleId = (row['characterId'] ?? '').toString();
+        final attachments = (row['attachments'] as List? ?? [])
+            .map(ownedAttachment)
+            .whereType<Map<String, dynamic>>()
+            .map(
+              (item) => {
+                ...item,
+                if (ownedAttachmentContentURI(
+                      item,
+                      conversationId: sourceConversationId,
+                      messageId: id,
+                      characterId: characterId,
+                      conversationOwnerId: owner,
+                      historicalRoleId: historicalRoleId,
+                    )
+                    case final uri?)
+                  'url': uri,
+              },
+            )
+            .toList(growable: false);
+        final file = ownedFileMetadata(
+          attachments,
+          conversationId: sourceConversationId,
+          messageId: id,
+          characterId: characterId,
+          conversationOwnerId: owner,
+          historicalRoleId: historicalRoleId,
+        );
         result.add(
           MessageDto.fromJson({
             ...Map<String, dynamic>.from(row),
             if (query['conversationReference'] != null)
               'conversationId': query['conversationReference'],
             'imageUrl':
-                ownedImageURL(row['attachments']) ?? row['imageUrl'] ?? '',
+                ownedImageURL(
+                  attachments,
+                  conversationId: sourceConversationId,
+                  messageId: id,
+                  characterId: characterId,
+                  conversationOwnerId: owner,
+                  historicalRoleId: historicalRoleId,
+                ) ??
+                row['imageUrl'] ??
+                '',
             'content': ownedMessageText(row),
             'audioUrl':
-                ownedAudioURL(row['attachments']) ?? row['audioUrl'] ?? '',
+                ownedAudioURL(
+                  attachments,
+                  conversationId: sourceConversationId,
+                  messageId: id,
+                  characterId: characterId,
+                  conversationOwnerId: owner,
+                  historicalRoleId: historicalRoleId,
+                ) ??
+                row['audioUrl'] ??
+                '',
+            'videoUrl':
+                ownedVideoURL(
+                  attachments,
+                  conversationId: sourceConversationId,
+                  messageId: id,
+                  characterId: characterId,
+                  conversationOwnerId: owner,
+                  historicalRoleId: historicalRoleId,
+                ) ??
+                row['videoUrl'] ??
+                '',
+            'attachments': attachments,
+            'sourceOwnerId': owner,
+            'sourceConversationId': sourceConversationId,
+            'sourceScope': query['executionScope'],
             if (file != null) ...{
               'msgType': file['kind'],
               'resourceUri': file['uri'],
@@ -1630,9 +1734,6 @@ class DeviceOwnedChatService {
               'fileSizeBytes': file['sizeBytes'],
               if (file['kind'] == 'video') 'videoUrl': file['uri'],
             },
-            'sourceOwnerId': owner,
-            'sourceConversationId': row['conversationId'],
-            'sourceScope': query['executionScope'],
           }),
         );
       }

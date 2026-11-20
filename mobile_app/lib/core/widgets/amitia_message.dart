@@ -1697,7 +1697,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
         !_controller.value.composing.isCollapsed) {
       return KeyEventResult.ignored;
     }
-    if (event is KeyDownEvent && !widget.generating) _send();
+    if (event is KeyDownEvent) _send();
     return KeyEventResult.handled;
   }
 
@@ -2661,7 +2661,6 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
                                           return;
                                         }
                                         if (widget.sendOnEnter &&
-                                            !widget.generating &&
                                             _controller
                                                 .value
                                                 .composing
@@ -2778,6 +2777,15 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
                                     widget.extensionTrailing!,
                                     const SizedBox(width: 4),
                                   ],
+                                  if (widget.generating &&
+                                      !_voiceMode &&
+                                      (_hasText ||
+                                          _selectedSkillNames.isNotEmpty))
+                                    _ComposerRoundButton(
+                                      icon: Icons.stop_rounded,
+                                      tooltip: '停止生成',
+                                      onTap: () => widget.onStop?.call(),
+                                    ),
                                   if (!_voiceMode &&
                                       (_hasText ||
                                           _selectedSkillNames.isNotEmpty))

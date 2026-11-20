@@ -562,13 +562,16 @@ void main() {
       providerKey: () => 'https://provider',
     );
     for (final kind in ['file', 'video']) {
-      final uri =
-          'data:${kind == 'file' ? 'text/plain' : 'video/mp4'};base64,AQIDBA==';
-      final attachment = ownedFileAttachment(
-        uri,
-        name: kind == 'file' ? 'notes.txt' : 'clip.mp4',
-        kind: kind,
-      );
+      final attachment = {
+        'artifactId': 'art-$kind',
+        'ownerDeviceId': 'a',
+        'storageDeviceId': 'core',
+        'kind': kind,
+        'name': kind == 'file' ? 'notes.txt' : 'clip.mp4',
+        'mimeType': kind == 'file' ? 'text/plain' : 'video/mp4',
+        'sha256': 'a' * 64,
+        'sizeBytes': 1048577,
+      };
       final rows = service.messages({
         'executionScope': scope(),
         'snapshot': {
@@ -591,8 +594,11 @@ void main() {
       });
       expect(rows, hasLength(1));
       expect(rows.single.msgType, kind);
-      expect(rows.single.resourceUri, uri);
-      expect(rows.single.fileSizeBytes, 4);
+      expect(
+        rows.single.resourceUri,
+        contains('/api/device-mesh/v1/business/attachments/art-$kind/content?'),
+      );
+      expect(rows.single.fileSizeBytes, 1048577);
       expect(rows.single.fileName, attachment['name']);
       expect(rows.single.sourceOwnerId, 'a');
       expect(rows.single.sourceRevision, 3);

@@ -1,126 +1,208 @@
-import 'dart:convert';
-import 'package:crypto/crypto.dart';
+import '../artifact/artifact_model.dart';
 
-const ownedFileMimes = {
-  'txt': 'text/plain',
-  'md': 'text/markdown',
-  'csv': 'text/csv',
-  'json': 'application/json',
-  'xml': 'application/xml',
-  'pdf': 'application/pdf',
-  'docx':
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-};
-
-const ownedVideoMimes = {
-  'mp4': 'video/mp4',
-  'webm': 'video/webm',
-  'mov': 'video/quicktime',
-};
-
-Map<String, dynamic> ownedFileAttachment(
-  String uri, {
-  required String name,
-  String kind = 'file',
+Map<String, dynamic> ownedAttachmentFromArtifact(
+  ArtifactMetadata artifact, {
+  String? kind,
 }) {
-  final allowed = kind == 'file'
-      ? {...ownedFileMimes.values, 'text/xml'}
-      : kind == 'video'
-      ? ownedVideoMimes.values.toSet()
-      : <String>{};
-  final match = RegExp(
-    r'^data:([^;,]+);base64,([A-Za-z0-9+/]+={0,2})$',
-  ).firstMatch(uri);
-  if (match == null ||
-      !allowed.contains(match.group(1)) ||
-      match.group(2)!.length > ((1048576 + 2) ~/ 3) * 4 ||
-      name.isEmpty ||
-      utf8.encode(name).length > 256 ||
-      name.contains(RegExp(r'[\x00\r\n]'))) {
-    throw StateError('附件格式或名称无效，单件不超过 1 MiB');
-  }
-  final List<int> bytes;
-  try {
-    bytes = base64Decode(match.group(2)!);
-  } on FormatException {
-    throw StateError('附件编码无效');
-  }
-  if (bytes.isEmpty ||
-      bytes.length > 1048576 ||
-      base64Encode(bytes) != match.group(2)) {
-    throw StateError('附件编码或大小无效');
+  final sha256 = artifact.blobDigest.startsWith('sha256:')
+      ? artifact.blobDigest.substring(7)
+      : '';
+  if (artifact.id.isEmpty ||
+      artifact.ownerDeviceId.isEmpty ||
+      artifact.storageDeviceId.isEmpty ||
+      artifact.filename.isEmpty ||
+      artifact.mimeType.isEmpty ||
+      !RegExp(r'^[a-f0-9]{64}$').hasMatch(sha256) ||
+      artifact.sizeBytes <= 0) {
+    throw StateError('附件元数据不完整');
   }
   return {
-    'kind': kind,
-    'name': name,
-    'mimeType': match.group(1),
-    'data': match.group(2),
-    'sha256': sha256.convert(bytes).toString(),
+    'artifactId': artifact.id,
+    'ownerDeviceId': artifact.ownerDeviceId,
+    'storageDeviceId': artifact.storageDeviceId,
+    'kind': kind ?? artifact.kind.value,
+    'name': artifact.filename,
+    'mimeType': artifact.mimeType,
+    'sha256': sha256,
+    'sizeBytes': artifact.sizeBytes,
   };
 }
 
-Map<String, dynamic>? ownedFileMetadata(dynamic attachments) {
-  if (attachments is! List) return null;
-  for (final item in attachments.whereType<Map>()) {
-    if (item['kind'] != 'file' && item['kind'] != 'video') continue;
-    try {
-      final uri = 'data:${item['mimeType']};base64,${item['data']}';
-      final verified = ownedFileAttachment(
-        uri,
-        name: item['name'] as String,
-        kind: item['kind'] as String,
-      );
-      if (verified['sha256'] != item['sha256']) continue;
-      return {
-        ...verified,
-        'uri': uri,
-        'sizeBytes': base64Decode(verified['data'] as String).length,
-      };
-    } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
-  }
-  return null;
-}
-
-Map<String, dynamic> ownedAudioAttachment(
-  String uri, {
-  String name = 'voice.wav',
-}) {
-  final match = RegExp(
-    r'^data:(audio/(?:wav|webm));base64,([A-Za-z0-9+/]+={0,2})$',
-  ).firstMatch(uri);
-  if (match == null ||
-      match.group(2)!.length > ((1048576 + 2) ~/ 3) * 4 ||
+Map<String, dynamic>? ownedAttachment(dynamic value) {
+  if (value is! Map) return null;
+  final row = Map<String, dynamic>.from(value);
+  final artifactId = (row['artifactId'] ?? '').toString();
+  final ownerDeviceId = (row['ownerDeviceId'] ?? '').toString();
+  final storageDeviceId = (row['storageDeviceId'] ?? '').toString();
+  final kind = (row['kind'] ?? '').toString();
+  final name = (row['name'] ?? '').toString();
+  final mimeType = (row['mimeType'] ?? '').toString();
+  final sha256 = (row['sha256'] ?? '').toString();
+  final sizeBytes = (row['sizeBytes'] as num?)?.toInt() ?? -1;
+  if (artifactId.isEmpty ||
+      artifactId.length > 256 ||
+      RegExp(r'[\x00\r\n/\\]').hasMatch(artifactId) ||
+      ownerDeviceId.isEmpty ||
+      ownerDeviceId.length > 256 ||
+      RegExp(r'[\x00\r\n/\\]').hasMatch(ownerDeviceId) ||
+      storageDeviceId.isEmpty ||
+      storageDeviceId.length > 256 ||
+      RegExp(r'[\x00\r\n/\\]').hasMatch(storageDeviceId) ||
+      !const ['image', 'audio', 'video', 'file'].contains(kind) ||
       name.isEmpty ||
       name.length > 256 ||
-      name.contains(RegExp(r'[\x00\r\n]')))
-    throw StateError('请选择 WAV 或 WebM 音频，单段不超过 1 MiB');
-  final bytes = base64Decode(match.group(2)!);
-  if (bytes.isEmpty || bytes.length > 1048576) throw StateError('音频大小无效');
+      RegExp(r'[\x00\r\n]').hasMatch(name) ||
+      mimeType.isEmpty ||
+      !RegExp(r'^[a-f0-9]{64}$').hasMatch(sha256) ||
+      sizeBytes < 0) {
+    return null;
+  }
   return {
-    'kind': 'audio',
+    'artifactId': artifactId,
+    'ownerDeviceId': ownerDeviceId,
+    'storageDeviceId': storageDeviceId,
+    'kind': kind,
     'name': name,
-    'mimeType': match.group(1),
-    'data': match.group(2),
-    'sha256': sha256.convert(bytes).toString(),
+    'mimeType': mimeType,
+    'sha256': sha256,
+    'sizeBytes': sizeBytes,
   };
 }
 
-String? ownedAudioURL(dynamic attachments) {
+String? ownedAttachmentContentURI(
+  dynamic value, {
+  required String conversationId,
+  required String messageId,
+  required String characterId,
+  required String conversationOwnerId,
+  String historicalRoleId = '',
+}) {
+  final attachment = ownedAttachment(value);
+  if (attachment == null ||
+      conversationId.isEmpty ||
+      messageId.isEmpty ||
+      characterId.isEmpty ||
+      conversationOwnerId.isEmpty) {
+    return null;
+  }
+  final query = <String, String>{
+    'conversationId': conversationId,
+    'messageId': messageId,
+    'characterId': characterId,
+    'conversationOwnerId': conversationOwnerId,
+    if (historicalRoleId.isNotEmpty) 'historicalRoleId': historicalRoleId,
+  };
+  final encoded = Uri(queryParameters: query).query;
+  return '/api/device-mesh/v1/business/attachments/${Uri.encodeComponent(attachment['artifactId'] as String)}/content?$encoded';
+}
+
+Map<String, dynamic>? ownedFileMetadata(
+  dynamic attachments, {
+  String conversationId = '',
+  String messageId = '',
+  String characterId = '',
+  String conversationOwnerId = '',
+  String historicalRoleId = '',
+}) {
   if (attachments is! List) return null;
-  for (final item in attachments.whereType<Map>()) {
-    if (item['kind'] != 'audio' ||
-        !const ['audio/wav', 'audio/webm'].contains(item['mimeType']) ||
-        item['data'] is! String)
+  for (final item in attachments) {
+    final attachment = ownedAttachment(item);
+    if (attachment == null ||
+        !const ['file', 'video'].contains(attachment['kind'])) {
       continue;
-    final data = item['data'] as String;
-    if (data.length <= ((1048576 + 2) ~/ 3) * 4 &&
-        RegExp(r'^[A-Za-z0-9+/]+={0,2}$').hasMatch(data))
-      return 'data:${item['mimeType']};base64,$data';
+    }
+    final uri = ownedAttachmentContentURI(
+      attachment,
+      conversationId: conversationId,
+      messageId: messageId,
+      characterId: characterId,
+      conversationOwnerId: conversationOwnerId,
+      historicalRoleId: historicalRoleId,
+    );
+    if (uri == null) continue;
+    return {...attachment, 'uri': uri};
   }
   return null;
 }
+
+String? ownedAttachmentURL(
+  dynamic attachments, {
+  required String kind,
+  required String conversationId,
+  required String messageId,
+  required String characterId,
+  required String conversationOwnerId,
+  String historicalRoleId = '',
+}) {
+  if (attachments is! List) return null;
+  for (final item in attachments) {
+    final attachment = ownedAttachment(item);
+    if (attachment == null || attachment['kind'] != kind) continue;
+    return ownedAttachmentContentURI(
+      attachment,
+      conversationId: conversationId,
+      messageId: messageId,
+      characterId: characterId,
+      conversationOwnerId: conversationOwnerId,
+      historicalRoleId: historicalRoleId,
+    );
+  }
+  return null;
+}
+
+String? ownedImageURL(
+  dynamic attachments, {
+  String conversationId = '',
+  String messageId = '',
+  String characterId = '',
+  String conversationOwnerId = '',
+  String historicalRoleId = '',
+}) =>
+    ownedAttachmentURL(
+      attachments,
+      kind: 'image',
+      conversationId: conversationId,
+      messageId: messageId,
+      characterId: characterId,
+      conversationOwnerId: conversationOwnerId,
+      historicalRoleId: historicalRoleId,
+    );
+
+String? ownedAudioURL(
+  dynamic attachments, {
+  String conversationId = '',
+  String messageId = '',
+  String characterId = '',
+  String conversationOwnerId = '',
+  String historicalRoleId = '',
+}) =>
+    ownedAttachmentURL(
+      attachments,
+      kind: 'audio',
+      conversationId: conversationId,
+      messageId: messageId,
+      characterId: characterId,
+      conversationOwnerId: conversationOwnerId,
+      historicalRoleId: historicalRoleId,
+    );
+
+String? ownedVideoURL(
+  dynamic attachments, {
+  String conversationId = '',
+  String messageId = '',
+  String characterId = '',
+  String conversationOwnerId = '',
+  String historicalRoleId = '',
+}) =>
+    ownedAttachmentURL(
+      attachments,
+      kind: 'video',
+      conversationId: conversationId,
+      messageId: messageId,
+      characterId: characterId,
+      conversationOwnerId: conversationOwnerId,
+      historicalRoleId: historicalRoleId,
+    );
 
 String ownedMessageText(Map row) {
   return row['transcription'] is String &&
@@ -128,50 +210,4 @@ String ownedMessageText(Map row) {
           row['content'] == row['transcriptionSourceContent']
       ? row['transcription'] as String
       : (row['content'] ?? '').toString();
-}
-
-Map<String, dynamic> ownedImageAttachment(
-  String uri, {
-  String name = 'image.png',
-}) {
-  final match = RegExp(
-    r'^data:(image/(?:png|jpeg|gif));base64,([A-Za-z0-9+/]+={0,2})$',
-  ).firstMatch(uri);
-  if (match == null || match.group(2)!.length > ((1048576 + 2) ~/ 3) * 4) {
-    throw StateError('请选择 PNG、JPEG 或 GIF 图片，单张不超过 1 MiB');
-  }
-  final bytes = base64Decode(match.group(2)!);
-  if (bytes.isEmpty ||
-      bytes.length > 1048576 ||
-      name.isEmpty ||
-      name.length > 256 ||
-      name.contains(RegExp(r'[\x00\r\n]'))) {
-    throw StateError('图片大小或名称无效');
-  }
-  return {
-    'kind': 'image',
-    'name': name,
-    'mimeType': match.group(1),
-    'data': match.group(2),
-    'sha256': sha256.convert(bytes).toString(),
-  };
-}
-
-String? ownedImageURL(dynamic attachments) {
-  if (attachments is! List) return null;
-  for (final item in attachments.whereType<Map>()) {
-    if (item['kind'] != 'image' ||
-        !const [
-          'image/png',
-          'image/jpeg',
-          'image/gif',
-        ].contains(item['mimeType']) ||
-        item['data'] is! String)
-      continue;
-    final data = item['data'] as String;
-    if (data.length <= ((1048576 + 2) ~/ 3) * 4 &&
-        RegExp(r'^[A-Za-z0-9+/]+={0,2}$').hasMatch(data))
-      return 'data:${item['mimeType']};base64,$data';
-  }
-  return null;
 }

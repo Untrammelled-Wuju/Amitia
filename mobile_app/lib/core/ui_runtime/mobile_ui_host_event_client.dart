@@ -81,6 +81,10 @@ final mobileUIHostEventClientProvider = Provider<MobileUIHostEventClient?>((
             changes: changes,
           );
     },
+    refreshConversations: () {
+      ref.invalidate(conversationListProvider);
+      ref.invalidate(conversationSidebarProvider);
+    },
     activeConversationId: () => ref.read(activeConversationIdProvider),
     applyClientRuntimeSnapshot: (conversationId, state) {
       ref
@@ -110,6 +114,7 @@ class MobileUIHostEventClient {
       Map<String, dynamic> changes,
     )
     applyStyleCommand,
+    required void Function() refreshConversations,
     required String Function() activeConversationId,
     required void Function(
       String conversationId,
@@ -119,6 +124,7 @@ class MobileUIHostEventClient {
     required void Function(String conversationId) invalidateClientRuntime,
   }) : _extensionService = extensionService,
        _applyStyleCommand = applyStyleCommand,
+       _refreshConversations = refreshConversations,
        _activeConversationId = activeConversationId,
        _applyClientRuntimeSnapshot = applyClientRuntimeSnapshot,
        _invalidateClientRuntime = invalidateClientRuntime;
@@ -131,6 +137,7 @@ class MobileUIHostEventClient {
     Map<String, dynamic> changes,
   )
   _applyStyleCommand;
+  final void Function() _refreshConversations;
   final String Function() _activeConversationId;
   final void Function(String conversationId, Map<String, dynamic> sessionState)
   _applyClientRuntimeSnapshot;
@@ -282,6 +289,11 @@ class MobileUIHostEventClient {
   }
 
   void _dispatchEvent(String eventType, Map<String, dynamic> envelope) {
+    if (eventType == 'scheduled_conversation_saved') {
+      _refreshConversations();
+      return;
+    }
+
     if (eventType == 'mcp_interaction_pending') {
       MCPInteractionEvents.notifyPending();
       return;

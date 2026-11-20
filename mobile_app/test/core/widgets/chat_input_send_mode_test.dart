@@ -4,6 +4,34 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('allows sending and stopping while a reply is running', (
+    tester,
+  ) async {
+    final messages = <String>[];
+    var stopped = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: AmitiaChatInput(
+            generating: true,
+            sendOnEnter: true,
+            onSend: messages.add,
+            onStop: () {
+              stopped = true;
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.enterText(find.byType(TextField), 'queued input');
+    await tester.pump();
+    await tester.tap(find.byTooltip('停止生成'));
+    expect(stopped, isTrue);
+    await tester.tap(find.byType(TextField));
+    await tester.testTextInput.receiveAction(TextInputAction.send);
+    await tester.pump();
+    expect(messages, ['queued input']);
+  });
   testWidgets('soft keyboard sends only when enabled', (tester) async {
     final messages = <String>[];
     for (final enabled in [false, true]) {

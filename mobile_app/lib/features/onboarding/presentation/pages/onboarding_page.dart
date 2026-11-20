@@ -16,12 +16,23 @@ import '../../../../core/services/core_configuration_guard.dart';
 import '../../../../core/services/onboarding_completion_store.dart';
 import '../../../../core/services/onboarding_service.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/settings/current_character_provider.dart';
 import '../steps/onboarding_center_step.dart';
 import '../steps/onboarding_model_step.dart';
 import '../steps/onboarding_runtime_step.dart';
 import '../widgets/onboarding_consent_gate.dart';
 import '../widgets/onboarding_controls.dart';
 import '../widgets/onboarding_step_scaffold.dart';
+
+Future<String> resolveOnboardingDestination(
+  String selectedRole,
+  Future<bool> Function(String) roleExists,
+) async {
+  final role = selectedRole.trim();
+  return role.isNotEmpty && await roleExists(role)
+      ? AppRoutes.chat
+      : AppRoutes.conversations;
+}
 
 class OnboardingPage extends ConsumerStatefulWidget {
   const OnboardingPage({super.key});
@@ -673,11 +684,19 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
   }
 
   Future<void> _completeOnboarding() async {
+    final destination = await resolveOnboardingDestination(
+      ref.read(currentCharacterIdProvider),
+      (selectedRole) async {
+        final roles = await ref.read(characterListProvider.future);
+        return roles.any((role) => role.id == selectedRole);
+      },
+    );
+    if (!mounted) return;
     await markOnboardingCompleted();
     ref.invalidate(onboardingGateProvider);
     await ref.read(onboardingGateProvider.future);
     if (!mounted) return;
-    context.go(AppRoutes.chat);
+    context.go(destination);
   }
 
   Future<void> _finish() async {

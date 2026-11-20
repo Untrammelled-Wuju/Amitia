@@ -1,6 +1,5 @@
 import 'dart:typed_data';
 import 'package:just_audio/just_audio.dart';
-import 'device_owned_attachments.dart';
 import 'dart:convert';
 
 class OwnedAudioSource extends StreamAudioSource {
@@ -10,10 +9,13 @@ class OwnedAudioSource extends StreamAudioSource {
   OwnedAudioSource._(this._bytes, this.mimeType);
 
   factory OwnedAudioSource.fromDataURI(String uri) {
-    final attachment = ownedAudioAttachment(uri);
+    final comma = uri.indexOf(',');
+    if (comma <= 5) throw StateError('音频数据地址无效');
+    final header = uri.substring(5, comma);
+    final mimeType = header.split(';').first;
     return OwnedAudioSource._(
-      base64Decode(attachment['data'] as String),
-      attachment['mimeType'] as String,
+      base64Decode(uri.substring(comma + 1)),
+      mimeType,
     );
   }
 

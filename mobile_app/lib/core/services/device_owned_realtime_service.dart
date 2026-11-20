@@ -1,8 +1,5 @@
 import 'dart:convert';
 import 'dart:math';
-import 'dart:typed_data';
-
-import 'package:crypto/crypto.dart';
 
 import '../backend_transport/backend_service_api.dart';
 import 'device_owned_speech_service.dart';
@@ -186,18 +183,4 @@ class DeviceOwnedRealtimeService {
     );
   }
 
-  Map<String, dynamic> image(Uint8List bytes, String mime) {
-    assertConnection();
-    if (bytes.isEmpty ||
-        bytes.length > 1048576 ||
-        !const ['image/jpeg', 'image/png'].contains(mime))
-      throw StateError('实时视觉帧必须为 PNG/JPEG，最大 1 MiB');
-    return {
-      'kind': 'image',
-      'name': 'realtime.${mime == 'image/png' ? 'png' : 'jpg'}',
-      'mimeType': mime,
-      'data': base64Encode(bytes),
-      'sha256': sha256.convert(bytes).toString(),
-    };
-  }
 }

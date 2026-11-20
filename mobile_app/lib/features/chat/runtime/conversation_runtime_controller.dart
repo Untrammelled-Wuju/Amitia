@@ -10,6 +10,7 @@ import '../../../core/services/chat_service.dart';
 import '../../../core/services/device_owned_attachments.dart';
 import '../../../core/services/device_owned_chat_service.dart';
 import '../../../core/services/device_owned_realtime_service.dart';
+import '../../../core/services/owned_conversation_reference.dart';
 import '../../../core/services/owned_quote_reference.dart';
 import '../../../core/services/providers.dart';
 import '../../../core/settings/chat_permission_preferences.dart';
@@ -78,6 +79,12 @@ class ConversationRuntimeController extends ChangeNotifier {
       const Duration(seconds: 30),
       (_) => unawaited(_pollOwnedState()),
     );
+    _queuePoll = Timer.periodic(const Duration(seconds: 2), (_) {
+      final id = _conversationId?.trim() ?? '';
+      if (id.isNotEmpty && (_isConversationVisible?.call(id) ?? true)) {
+        unawaited(refreshQueuedMessages());
+      }
+    });
   }
 
   final ChatService _chatService;
@@ -115,6 +122,15 @@ class ConversationRuntimeController extends ChangeNotifier {
   bool _automationStateUncertain = false;
   String _turnHistoryCursor = '';
   Timer? _ownedPoll;
+  Timer? _queuePoll;
+  bool _queuePolling = false;
+  bool _queueBusy = false;
+  int _queueEpoch = 0;
+  String _queueConversation = '';
+  String _queueRole = '';
+  Map<String, dynamic>? _queueScope;
+  String _queueError = '';
+  List<Map<String, dynamic>> _queuedMessages = [];
   bool _ownedPolling = false;
   String _ownedNotice = '';
   String _ownedRequestId = '';
@@ -135,10 +151,213 @@ class ConversationRuntimeController extends ChangeNotifier {
   String get conversationTitle => _conversationTitle;
   ConversationWorkspaceDto? get workspace => _workspace;
   bool get sending => _sending;
+  List<Map<String, dynamic>> get queuedMessages =>
+      List.unmodifiable(_queuedMessages);
+  bool get queueBusy => _queueBusy;
+  String get queueError => _queueError;
+
+  Future<void> refreshQueuedMessages({bool force = false}) async {
+    final id = _conversationId?.trim() ?? '';
+    final role = _characterId?.trim() ?? '';
+    if (_disposed || id.isEmpty || role.isEmpty) return;
+    if (_queueConversation != id || _queueRole != role) {
+      _queueConversation = id;
+      _queueRole = role;
+      _queuedMessages = [];
+      _queueError = '';
+      _queueEpoch++;
+      _queuePolling = false;
+      notifyListeners();
+    }
+    if (_queuePolling && !force) return;
+    final epoch = _queueEpoch;
+    _queuePolling = true;
+    try {
+      final body = {'conversationId': id};
+      final result = _queueScope == null
+          ? await _chatService.owned.runtime(
+              'queue/list',
+              body: body,
+              characterId: role,
+            )
+          : await _chatService.owned.runtimeWithScope(
+              'queue/list',
+              expectedExecutionScope: _queueScope!,
+              body: body,
+              characterId: role,
+            );
+      if (_disposed ||
+          _conversationId != id ||
+          _characterId != role ||
+          _queueEpoch != epoch)
+        return;
+      final raw = result['items'];
+      if (raw is! List) throw StateError('排队消息响应缺少 items: $result');
+      final items = raw
+          .map((item) => Map<String, dynamic>.from(item as Map))
+          .toList();
+      if (result['executionScope'] is Map) {
+        _queueScope = Map<String, dynamic>.from(
+          result['executionScope'] as Map,
+        );
+      }
+      if (jsonEncode(items) != jsonEncode(_queuedMessages) ||
+          _queueError.isNotEmpty) {
+        _queuedMessages = items;
+        _queueError = '';
+        notifyListeners();
+      }
+    } catch (error, stackTrace) {
+      if (!_disposed &&
+          _conversationId == id &&
+          _characterId == role &&
+          _queueEpoch == epoch) {
+        _queueScope = null;
+        final detail = '$error\n$stackTrace';
+        if (_queueError != detail) {
+          _queueError = detail;
+          notifyListeners();
+        }
+      }
+    } finally {
+      if (_queueEpoch == epoch) _queuePolling = false;
+    }
+  }
+
+  Future<void> _queueAction(String operation, Map<String, dynamic> body) async {
+    final id = _conversationId?.trim() ?? '';
+    final role = _characterId?.trim() ?? '';
+    if (id.isEmpty || role.isEmpty) throw StateError('当前会话或角色不可用');
+    if (_queueBusy) throw StateError('正在处理排队消息，请稍后重试');
+    _queueEpoch++;
+    _queueBusy = true;
+    notifyListeners();
+    try {
+      final requestBody = {'conversationId': id, ...body};
+      final result = _queueScope == null
+          ? await _chatService.owned.runtime(
+              operation,
+              body: requestBody,
+              characterId: role,
+            )
+          : await _chatService.owned.runtimeWithScope(
+              operation,
+              expectedExecutionScope: _queueScope!,
+              body: requestBody,
+              characterId: role,
+            );
+      if (result['executionScope'] is Map) {
+        _queueScope = Map<String, dynamic>.from(
+          result['executionScope'] as Map,
+        );
+      }
+      _queueEpoch++;
+      if (!_disposed && _conversationId == id && _characterId == role) {
+        await refreshQueuedMessages(force: true);
+      }
+    } catch (error) {
+      _queueScope = null;
+      rethrow;
+    } finally {
+      _queueBusy = false;
+      if (!_disposed) notifyListeners();
+    }
+  }
+
+  Future<void> enqueueText(
+    String message, {
+    List<Map<String, dynamic>> attachments = const [],
+    ChatMessage? quotedMessage,
+    String? replyToExcerpt,
+  }) async {
+    final conversationId = _conversationId?.trim() ?? '';
+    final origin = parseConversationReference(conversationId);
+    final previousCore =
+        _conversationCoreId.isNotEmpty &&
+            _conversationCoreId != _chatService.owned.coreId &&
+            conversationId.isNotEmpty
+        ? _conversationCoreId
+        : '';
+    final context = previousCore.isEmpty
+        ? null
+        : <String, dynamic>{
+            'previousCoreId': previousCore,
+            'conversationId': conversationId,
+            'summary':
+                _chatService.owned.previousSummary(
+                  previousCore,
+                  conversationId,
+                ) ??
+                '',
+            'messages': _messages.messages
+                .where(
+                  (row) =>
+                      (row.role == MessageRole.user ||
+                          row.role == MessageRole.assistant) &&
+                      row.status != MessageStatus.sending &&
+                      row.status != MessageStatus.queued &&
+                      row.status != MessageStatus.error,
+                )
+                .toList()
+                .reversed
+                .take(128)
+                .toList()
+                .reversed
+                .map(
+                  (row) => <String, dynamic>{
+                    'id': row.id,
+                    'ownerId': row.sourceOwnerId,
+                    'role': row.role.name,
+                    'content': row.content,
+                    'status': row.status.name,
+                  },
+                )
+                .toList(),
+          };
+    await _queueAction('queue/enqueue', {
+      'message': message,
+      'modelConfigId': _modelConfigId,
+      'reasoningEffort': _reasoningEffort,
+      'reasoningEnabled': _reasoningEnabled,
+      'permissionMode': _permissionMode,
+      'messageStyle': _appearancePreferences?.messageStyle.name ?? 'flow',
+      if (quotedMessage != null) 'quote': ownedQuoteReference(quotedMessage),
+      if (replyToExcerpt != null && replyToExcerpt.isNotEmpty)
+        'replyExcerpt': replyToExcerpt,
+      if (context != null) 'context': context,
+      if (origin != null) 'conversationOrigin': origin,
+      if (attachments.isNotEmpty) 'attachments': attachments,
+      if (_group != null) ...{
+        'mentions': _groupDiscussionMode
+            ? <Map<String, dynamic>>[]
+            : groupMentionsFromText(message, _group!.activeMembers),
+        'group': {
+          'expectedMembershipRevision': _group!.membershipRevision,
+          'expectedSettingsRevision': _group!.settingsRevision,
+          'mode': _groupDiscussionMode ? 'discussion' : 'standard',
+        },
+      },
+    });
+  }
+
+  Future<void> reorderQueuedMessages(List<String> ids) =>
+      _queueAction('queue/reorder', {'queueOrder': ids});
+  Future<void> deleteQueuedMessage(String id) =>
+      _queueAction('queue/delete', {'queuedRequestId': id});
+  Future<void> steerQueuedMessage(String id) => _queueAction('queue/steer', {
+    'queuedRequestId': id,
+    'turnId': activeTurnId,
+  });
   bool get isGenerating {
     final active = _agentReducer.turn(_agentReducer.activeTurnId);
     return _sending ||
-        active != null && active.status != 'needs_reconciliation';
+        active != null &&
+            !const [
+              'completed',
+              'failed',
+              'interrupted',
+              'needs_reconciliation',
+            ].contains(active.status);
   }
 
   String get activityPreview {
@@ -214,6 +433,14 @@ class ConversationRuntimeController extends ChangeNotifier {
 
   void setCharacterId(String? characterId) {
     final value = characterId?.trim() ?? '';
+    if ((_characterId ?? '') != value) {
+      _queueEpoch++;
+      _queueConversation = '';
+      _queueRole = '';
+      _queueScope = null;
+      _queuedMessages = [];
+      _queueError = '';
+    }
     _characterId = value.isEmpty ? null : value;
   }
 
@@ -442,7 +669,15 @@ class ConversationRuntimeController extends ChangeNotifier {
     ChatMessage? quotedMessage,
   }) async {
     final value = text.trim();
-    if (value.isEmpty || _sending || _ownedRequestId.isNotEmpty) return;
+    if (value.isEmpty) return;
+    if (isGenerating || _ownedRequestId.isNotEmpty) {
+      await enqueueText(
+        value,
+        quotedMessage: quotedMessage,
+        replyToExcerpt: replyToExcerpt,
+      );
+      return;
+    }
     await _send(
       ChatMessage(
         id: _localId('u'),
@@ -462,9 +697,13 @@ class ConversationRuntimeController extends ChangeNotifier {
 
   Future<void> sendCode(String language, String code) async {
     final body = code.trim();
-    if (body.isEmpty || _sending || _ownedRequestId.isNotEmpty) return;
+    if (body.isEmpty) return;
     final lang = language.trim().isEmpty ? 'text' : language.trim();
     final content = '```$lang\n$body\n```';
+    if (isGenerating || _ownedRequestId.isNotEmpty) {
+      await enqueueText(content);
+      return;
+    }
     await _send(
       ChatMessage(
         id: _localId('u'),
@@ -482,11 +721,15 @@ class ConversationRuntimeController extends ChangeNotifier {
     required String resourceUri,
     required String displayUrl,
     required String fileName,
+    required Map<String, dynamic> attachment,
     String mimeType = 'image/*',
     String text = '',
   }) async {
-    if (_sending || _ownedRequestId.isNotEmpty) return;
     final content = text.trim().isEmpty ? '[图片]' : text.trim();
+    if (isGenerating || _ownedRequestId.isNotEmpty) {
+      await enqueueText(content, attachments: [attachment]);
+      return;
+    }
     await _send(
       ChatMessage(
         id: _localId('u'),
@@ -499,9 +742,11 @@ class ConversationRuntimeController extends ChangeNotifier {
         resourceUri: resourceUri,
         mediaUrl: displayUrl,
         mimeType: mimeType,
+        attachments: [attachment],
       ),
       message: content,
       imageUrl: resourceUri,
+      attachments: [attachment],
     );
   }
 
@@ -509,12 +754,16 @@ class ConversationRuntimeController extends ChangeNotifier {
     required String resourceUri,
     required String displayUrl,
     required String fileName,
+    required Map<String, dynamic> attachment,
     String mimeType = 'video/*',
     int durationMs = 0,
     String text = '',
   }) async {
-    if (_sending || _ownedRequestId.isNotEmpty) return;
     final content = text.trim().isEmpty ? '[视频]' : text.trim();
+    if (isGenerating || _ownedRequestId.isNotEmpty) {
+      await enqueueText(content, attachments: [attachment]);
+      return;
+    }
     await _send(
       ChatMessage(
         id: _localId('u'),
@@ -528,9 +777,11 @@ class ConversationRuntimeController extends ChangeNotifier {
         mediaUrl: displayUrl,
         mimeType: mimeType,
         durationMs: durationMs,
+        attachments: [attachment],
       ),
       message: content,
       videoUrl: resourceUri,
+      attachments: [attachment],
     );
   }
 
@@ -538,12 +789,16 @@ class ConversationRuntimeController extends ChangeNotifier {
     required String resourceUri,
     required String displayUrl,
     required String fileName,
+    required Map<String, dynamic> attachment,
     String mimeType = 'audio/*',
     int durationMs = 0,
     String text = '',
   }) async {
-    if (_sending || _ownedRequestId.isNotEmpty) return;
     final content = text.trim().isEmpty ? '[语音]' : text.trim();
+    if (isGenerating || _ownedRequestId.isNotEmpty) {
+      await enqueueText(content, attachments: [attachment]);
+      return;
+    }
     await _send(
       ChatMessage(
         id: _localId('u'),
@@ -557,10 +812,12 @@ class ConversationRuntimeController extends ChangeNotifier {
         mediaUrl: displayUrl,
         mimeType: mimeType,
         durationMs: durationMs,
+        attachments: [attachment],
       ),
       message: content,
       audioUrl: resourceUri,
       audioDuration: durationMs / 1000.0,
+      attachments: [attachment],
     );
   }
 
@@ -568,10 +825,14 @@ class ConversationRuntimeController extends ChangeNotifier {
     required String resourceUri,
     required String fileName,
     required int sizeBytes,
+    required Map<String, dynamic> attachment,
     String mimeType = 'application/octet-stream',
   }) async {
-    if (_sending || _ownedRequestId.isNotEmpty) return;
     final content = '[文件] $fileName\n$resourceUri';
+    if (isGenerating || _ownedRequestId.isNotEmpty) {
+      await enqueueText('[文件] $fileName', attachments: [attachment]);
+      return;
+    }
     await _send(
       ChatMessage(
         id: _localId('u'),
@@ -584,8 +845,10 @@ class ConversationRuntimeController extends ChangeNotifier {
         fileSizeKB: (sizeBytes / 1024).ceil(),
         resourceUri: resourceUri,
         mimeType: mimeType,
+        attachments: [attachment],
       ),
       message: content,
+      attachments: [attachment],
     );
   }
 
@@ -607,6 +870,7 @@ class ConversationRuntimeController extends ChangeNotifier {
     String? videoUrl,
     String? replyToMessageId,
     ChatMessage? quotedMessage,
+    List<Map<String, dynamic>> attachments = const [],
   }) async {
     if (_sending || _ownedRequestId.isNotEmpty) return;
     try {
@@ -618,6 +882,7 @@ class ConversationRuntimeController extends ChangeNotifier {
           audioUrl: audioUrl,
           videoUrl: videoUrl,
           quotedMessage: quotedMessage,
+          attachments: attachments,
         );
         return;
       }
@@ -674,32 +939,10 @@ class ConversationRuntimeController extends ChangeNotifier {
     String? audioUrl,
     String? videoUrl,
     ChatMessage? quotedMessage,
+    List<Map<String, dynamic>> attachments = const [],
   }) async {
-    final attachments = <Map<String, dynamic>>[
-      if ((audioUrl ?? '').isNotEmpty)
-        ownedAudioAttachment(
-          audioUrl!,
-          name: localMessage.fileName ?? 'voice.wav',
-        ),
-      if ((imageUrl ?? '').isNotEmpty)
-        ownedImageAttachment(
-          imageUrl!,
-          name: localMessage.fileName ?? 'image.png',
-        ),
-      if ((videoUrl ?? '').isNotEmpty)
-        ownedFileAttachment(
-          videoUrl!,
-          name: localMessage.fileName ?? 'video.mp4',
-          kind: 'video',
-        ),
-      if (localMessage.type == MessageType.file)
-        ownedFileAttachment(
-          localMessage.resourceUri ?? '',
-          name: localMessage.fileName ?? '',
-        ),
-    ];
     if (attachments.length > 2 ||
-        ((audioUrl ?? '').isNotEmpty &&
+        ((attachments.any((row) => row['kind'] == 'audio')) &&
             attachments.any(
               (row) => row['kind'] != 'audio' && row['kind'] != 'image',
             ))) {
@@ -1984,6 +2227,7 @@ class ConversationRuntimeController extends ChangeNotifier {
       replyToMessageId: dto.replyToMessageId,
       replyToExcerpt: dto.replyToExcerpt,
       citationSnapshot: dto.citationSnapshot,
+      attachments: dto.attachments,
     );
   }
 
@@ -2073,49 +2317,55 @@ class ConversationRuntimeController extends ChangeNotifier {
     }
     _messages.remove(message);
     notifyListeners();
+    final attachment = message.attachments.isEmpty
+        ? null
+        : ownedAttachment(message.attachments.first);
+    if (attachment == null &&
+        message.type != MessageType.text &&
+        message.type != MessageType.code &&
+        message.type != MessageType.emote &&
+        message.type != MessageType.agentTask &&
+        message.type != MessageType.toolCall &&
+        message.type != MessageType.systemNotice) {
+      throw StateError('原始附件引用不可用，请重新选择附件');
+    }
     switch (message.type) {
       case MessageType.image:
-        if (message.resourceUri == null || message.mediaUrl == null) {
-          return sendText(message.content);
-        }
         return sendImage(
-          resourceUri: message.resourceUri!,
-          displayUrl: message.mediaUrl!,
+          resourceUri: message.resourceUri ?? '',
+          displayUrl: message.mediaUrl ?? '',
           fileName: message.fileName ?? 'image',
           mimeType: message.mimeType ?? 'image/*',
           text: message.content == '[图片]' ? '' : message.content,
+          attachment: attachment!,
         );
       case MessageType.video:
-        if (message.resourceUri == null || message.mediaUrl == null) {
-          return sendText(message.content);
-        }
         return sendVideo(
-          resourceUri: message.resourceUri!,
-          displayUrl: message.mediaUrl!,
+          resourceUri: message.resourceUri ?? '',
+          displayUrl: message.mediaUrl ?? '',
           fileName: message.fileName ?? 'video',
           mimeType: message.mimeType ?? 'video/*',
           durationMs: message.durationMs ?? 0,
           text: message.content == '[视频]' ? '' : message.content,
+          attachment: attachment!,
         );
       case MessageType.audio:
-        if (message.resourceUri == null || message.mediaUrl == null) {
-          return sendText(message.content);
-        }
         return sendVoice(
-          resourceUri: message.resourceUri!,
-          displayUrl: message.mediaUrl!,
+          resourceUri: message.resourceUri ?? '',
+          displayUrl: message.mediaUrl ?? '',
           fileName: message.fileName ?? 'audio',
           mimeType: message.mimeType ?? 'audio/*',
           durationMs: message.durationMs ?? 0,
           text: message.content == '[语音]' ? '' : message.content,
+          attachment: attachment!,
         );
       case MessageType.file:
-        if (message.resourceUri == null) return sendText(message.content);
         return sendFile(
-          resourceUri: message.resourceUri!,
-          fileName: message.fileName ?? 'file',
+          resourceUri: message.resourceUri ?? '',
+          fileName: message.fileName ?? '文件',
           sizeBytes: (message.fileSizeKB ?? 0) * 1024,
           mimeType: message.mimeType ?? 'application/octet-stream',
+          attachment: attachment!,
         );
       case MessageType.code:
       case MessageType.emote:
@@ -2231,6 +2481,12 @@ class ConversationRuntimeController extends ChangeNotifier {
     if (_conversationId != id) {
       _disconnectRuntime();
       _conversationId = id;
+      _queueEpoch++;
+      _queueConversation = '';
+      _queueRole = '';
+      _queueScope = null;
+      _queuedMessages = [];
+      _queueError = '';
       _conversationTitle = '';
       _messages.clear();
       _agentReducer.reset(
@@ -2371,6 +2627,12 @@ class ConversationRuntimeController extends ChangeNotifier {
     _disconnectRuntime();
     _draftEpoch++;
     _conversationId = null;
+    _queueEpoch++;
+    _queueConversation = '';
+    _queueRole = '';
+    _queueScope = null;
+    _queuedMessages = [];
+    _queueError = '';
     _conversationTitle = '';
     _messages.clear();
     _agentReducer.reset(
@@ -2492,6 +2754,7 @@ class ConversationRuntimeController extends ChangeNotifier {
       replyToExcerpt: message.replyToExcerpt,
       assistantTurn: assistantTurn ?? message.assistantTurn,
       citationSnapshot: citationSnapshot ?? message.citationSnapshot,
+      attachments: message.attachments,
     );
   }
 
@@ -2724,6 +2987,7 @@ class ConversationRuntimeController extends ChangeNotifier {
   @override
   void dispose() {
     _ownedPoll?.cancel();
+    _queuePoll?.cancel();
     _disposed = true;
     _disconnectRuntime();
     _streamScheduler.dispose();

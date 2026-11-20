@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'artifact_model.dart';
 
@@ -38,6 +39,14 @@ class UploadTask {
 typedef UploadProgressCallback = void Function(UploadTask task);
 
 abstract class ArtifactService {
+  Future<ArtifactMetadata> uploadChatFile({
+    required String filePath,
+    required ArtifactKind kind,
+    String? fileName,
+    String? mimeType,
+    UploadProgressCallback? onProgress,
+  });
+
   Future<ArtifactMetadata> uploadFile({
     required String filePath,
     required ArtifactKind kind,
@@ -53,6 +62,14 @@ abstract class ArtifactService {
     required String fileName,
     required String mimeType,
     String source = 'ui_provider',
+    UploadProgressCallback? onProgress,
+  });
+
+  Future<ArtifactMetadata> uploadChatAttachment({
+    required Uint8List bytes,
+    required ArtifactKind kind,
+    required String fileName,
+    required String mimeType,
     UploadProgressCallback? onProgress,
   });
 
@@ -100,6 +117,60 @@ class HttpArtifactService implements ArtifactService {
   HttpArtifactService({required Dio dio, required String baseUrl})
     : _dio = dio,
       _baseUrl = baseUrl.replaceAll(RegExp(r'/$'), '');
+
+  @override
+  Future<ArtifactMetadata> uploadChatFile({
+    required String filePath,
+    required ArtifactKind kind,
+    String? fileName,
+    String? mimeType,
+    UploadProgressCallback? onProgress,
+  }) async {
+    final file = File(filePath);
+    final actualFileName = fileName ?? file.path.split('/').last;
+    final actualMimeType = mimeType ?? _detectMimeType(actualFileName);
+    final length = await file.length();
+    if (length <= 0) throw ArtifactServiceException('empty_upload');
+    final response = await _dio.post(
+      '$_baseUrl/api/artifacts/v1/chat-uploads',
+      queryParameters: {'filename': actualFileName, 'kind': kind.value},
+      data: file.openRead(),
+      onSendProgress: (sent, total) {
+        onProgress?.call(UploadTask(
+          id: '',
+          fileName: actualFileName,
+          kind: kind,
+          totalBytes: total > 0 ? total : length,
+          loadedBytes: sent,
+          state: UploadState.uploading,
+        ));
+      },
+      options: Options(
+        headers: {
+          Headers.contentTypeHeader: actualMimeType,
+          Headers.contentLengthHeader: length,
+        },
+        validateStatus: (status) => status != null && status < 600,
+      ),
+    );
+    final data = response.data;
+    final artifact = data is Map ? data['artifact'] : null;
+    if (response.statusCode != 200 || artifact is! Map) {
+      throw ArtifactServiceException(
+        'chat_attachment_upload_failed: ${response.statusCode}\n${_originalError(response.data)}',
+      );
+    }
+    final metadata = ArtifactMetadata.fromJson(Map<String, dynamic>.from(artifact));
+    if (metadata.ownerDeviceId.isEmpty ||
+        metadata.storageDeviceId.isEmpty ||
+        !RegExp(r'^sha256:[a-f0-9]{64}$').hasMatch(metadata.blobDigest) ||
+        metadata.sizeBytes <= 0) {
+      throw ArtifactServiceException(
+        'chat_attachment_response_invalid: ${_originalError(response.data)}',
+      );
+    }
+    return metadata;
+  }
 
   @override
   Future<ArtifactMetadata> uploadFile({
@@ -216,6 +287,62 @@ class HttpArtifactService implements ArtifactService {
   }
 
   @override
+  Future<ArtifactMetadata> uploadChatAttachment({
+    required Uint8List bytes,
+    required ArtifactKind kind,
+    required String fileName,
+    required String mimeType,
+    UploadProgressCallback? onProgress,
+  }) async {
+    if (bytes.isEmpty) throw ArtifactServiceException('empty_upload');
+    final response = await _dio.post(
+      '$_baseUrl/api/artifacts/v1/chat-uploads',
+      data: bytes,
+      queryParameters: {'filename': fileName, 'kind': kind.value},
+      onSendProgress: (sent, total) {
+        onProgress?.call(
+          UploadTask(
+            id: '',
+            fileName: fileName,
+            kind: kind,
+            totalBytes: total,
+            loadedBytes: sent,
+            state: UploadState.uploading,
+          ),
+        );
+      },
+      options: Options(
+        contentType: mimeType,
+        headers: {'Content-Type': mimeType},
+        validateStatus: (status) => status != null && status < 600,
+      ),
+    );
+    if (response.statusCode != 200) {
+      throw ArtifactServiceException(
+        'chat_attachment_upload_failed: ${response.statusCode} ${response.data}',
+      );
+    }
+    final data = response.data;
+    if (data is Map && data['artifact'] is Map) {
+      final metadata = ArtifactMetadata.fromJson(
+        Map<String, dynamic>.from(data['artifact'] as Map),
+      );
+      if (metadata.ownerDeviceId.isEmpty ||
+          metadata.storageDeviceId.isEmpty ||
+          !RegExp(r'^sha256:[a-f0-9]{64}$').hasMatch(metadata.blobDigest) ||
+          metadata.sizeBytes <= 0) {
+        throw ArtifactServiceException(
+          'invalid_chat_attachment_response: ${_originalError(data)}',
+        );
+      }
+      return metadata;
+    }
+    throw ArtifactServiceException(
+      'invalid_chat_attachment_response: ${response.data}',
+    );
+  }
+
+  @override
   Future<ArtifactMetadata> getMetadata(String artifactId) async {
     final response = await _dio.get('$_baseUrl/api/artifacts/v1/$artifactId');
     if (response.statusCode != 200) {
@@ -292,6 +419,28 @@ class HttpArtifactService implements ArtifactService {
               '$_baseUrl/${ticketPath.replaceFirst(RegExp(r'^/+'), '')}',
             );
     }
+    if (value.startsWith('/api/device-mesh/v1/business/attachments/')) {
+      final ticketPath = value.replaceFirst(
+        RegExp(r'/content(?=(\?|$))'),
+        '/ticket',
+      );
+      final response = await _dio.get('$_baseUrl$ticketPath');
+      final data = response.data;
+      final payload = data is Map && data['data'] is Map
+          ? data['data'] as Map
+          : data;
+      final mediaPath = payload is Map
+          ? (payload['url'] ?? '').toString().trim()
+          : '';
+      if (mediaPath.isEmpty) {
+        throw ArtifactServiceException('invalid_chat_attachment_ticket_response');
+      }
+      return Uri.parse(mediaPath).hasScheme
+          ? Uri.parse(mediaPath)
+          : Uri.parse(
+              '$_baseUrl/${mediaPath.replaceFirst(RegExp(r'^/+'), '')}',
+            );
+    }
     if (parsed.hasScheme &&
         const [
           'http',
@@ -334,6 +483,10 @@ class HttpArtifactService implements ArtifactService {
     required String fileName,
     required String mimeType,
   }) async {
+    final resolved = await resolveDownloadUri(rawUrl);
+    if (resolved.scheme == 'http' || resolved.scheme == 'https') {
+      return launchUrl(resolved, mode: LaunchMode.externalApplication);
+    }
     final bytes = await _downloadBytes(rawUrl);
     if (bytes.isEmpty) throw ArtifactServiceException('empty_download');
     final safeName = _safeFileName(fileName, mimeType);
@@ -357,7 +510,7 @@ class HttpArtifactService implements ArtifactService {
     if (picked == null) {
       throw ArtifactServiceException('user_cancelled');
     }
-    return uploadFile(
+    return uploadChatFile(
       filePath: picked.path,
       kind: ArtifactKind.image,
       fileName: picked.name,
@@ -375,7 +528,7 @@ class HttpArtifactService implements ArtifactService {
     if (picked == null) {
       throw ArtifactServiceException('user_cancelled');
     }
-    return uploadFile(
+    return uploadChatFile(
       filePath: picked.path,
       kind: ArtifactKind.video,
       fileName: picked.name,
@@ -395,7 +548,7 @@ class HttpArtifactService implements ArtifactService {
     if (file.path == null || file.path!.isEmpty) {
       throw ArtifactServiceException('file_path_unavailable');
     }
-    return uploadFile(
+    return uploadChatFile(
       filePath: file.path!,
       kind: ArtifactKind.fromMime(_detectMimeType(file.name)),
       fileName: file.name,
@@ -408,8 +561,7 @@ class HttpArtifactService implements ArtifactService {
     UploadProgressCallback? onProgress,
   }) async {
     final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: const ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'webm'],
+      type: FileType.audio,
       withReadStream: true,
     );
     if (result == null || result.files.isEmpty) {
@@ -419,7 +571,7 @@ class HttpArtifactService implements ArtifactService {
     if (file.path == null || file.path!.isEmpty) {
       throw ArtifactServiceException('file_path_unavailable');
     }
-    return uploadFile(
+    return uploadChatFile(
       filePath: file.path!,
       kind: ArtifactKind.audio,
       fileName: file.name,
@@ -559,6 +711,27 @@ class HttpArtifactService implements ArtifactService {
     final dot = fileName.lastIndexOf('.');
     if (dot <= 0 || dot == fileName.length - 1) return null;
     return <String>[fileName.substring(dot + 1).toLowerCase()];
+  }
+
+  String _originalError(dynamic payload) {
+    if (payload is Map) {
+      final values = <String>[];
+      for (final key in const [
+        'message',
+        'msg',
+        'error',
+        'internalMessage',
+        'detail',
+        'cause',
+        'rawError',
+        'reason',
+      ]) {
+        final value = payload[key]?.toString().trim() ?? '';
+        if (value.isNotEmpty && !values.contains(value)) values.add(value);
+      }
+      if (values.isNotEmpty) return values.join('\n');
+    }
+    return payload?.toString() ?? 'unknown error';
   }
 }
 

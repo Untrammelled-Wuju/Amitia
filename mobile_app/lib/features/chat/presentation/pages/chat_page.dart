@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import '../../../../core/settings/chat_input_preferences.dart';
 import '../../../../core/settings/chat_appearance_preferences.dart';
 import 'dart:convert';
@@ -62,11 +63,44 @@ import '../../../../shared/models/models.dart';
 import '../chat_route_state.dart';
 import '../widgets/agent_approval_guard.dart';
 import '../widgets/chat_error_notice.dart';
+import '../widgets/queued_messages_panel.dart';
 import '../../runtime/runtime_error_detail.dart';
 import '../widgets/automation_status_indicator.dart';
 import '../widgets/floating_chat_composer_layout.dart';
 import 'realtime_call_page.dart';
 import '../../../workbench/presentation/pages/workbench_page.dart';
+
+Future<Map<String, dynamic>> uploadOwnedAttachment(
+  ArtifactService service,
+  Uint8List bytes, {
+  required String name,
+  required ArtifactKind kind,
+  required String mimeType,
+}) async {
+  final artifact = await service.uploadChatAttachment(
+    bytes: bytes,
+    kind: kind,
+    fileName: name,
+    mimeType: mimeType,
+  );
+  return ownedAttachmentFromArtifact(artifact, kind: kind.value);
+}
+
+Future<Map<String, dynamic>> uploadOwnedAttachmentFile(
+  ArtifactService service, {
+  required String filePath,
+  required String name,
+  required ArtifactKind kind,
+  required String mimeType,
+}) async {
+  final artifact = await service.uploadChatFile(
+    filePath: filePath,
+    kind: kind,
+    fileName: name,
+    mimeType: mimeType,
+  );
+  return ownedAttachmentFromArtifact(artifact, kind: kind.value);
+}
 
 class ChatPage extends ConsumerStatefulWidget {
   const ChatPage({
@@ -102,9 +136,13 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   List<WorkspaceMountDto> _recentWorkspaces = const <WorkspaceMountDto>[];
   bool _workspaceBusy = false;
   final RealtimeAudioBridge _realtimeAudio = RealtimeAudioBridge();
-  final BytesBuilder _voicePcm = BytesBuilder(copy: false);
-  int _voicePcmLimit = 1048576 - 44;
-  bool _voicePcmOverflow = false;
+  Directory? _voiceTempDirectory;
+  File? _voiceTempFile;
+  RandomAccessFile? _voicePcmWriter;
+  Future<void> _voiceWriteChain = Future<void>.value();
+  int _voicePcmBytes = 0;
+  Object? _voiceWriteError;
+  StackTrace? _voiceWriteStackTrace;
   StreamSubscription<Uint8List>? _voiceInputSubscription;
   bool _voiceRecording = false;
   String _routeSyncedConversationId = '';
@@ -540,6 +578,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     _conversationCollectionRefreshTimer?.cancel();
     unawaited(_voiceInputSubscription?.cancel());
     unawaited(_realtimeAudio.stopCapture());
+    unawaited(_cleanupVoiceTemp(reportErrors: false));
     _runtime.removeListener(_onRuntimeChanged);
     if (_runtimeRegistry.visibleConversationId ==
         (_runtime.conversationId?.trim() ?? '')) {
@@ -1018,6 +1057,32 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   }
 
   void _onSend(String text) {
+    if (_runtime.isGenerating || _runtime.sending) {
+      final conversation = _runtime.conversationId;
+      final reply = _replyTarget;
+      unawaited(() async {
+        try {
+          await _runtime.enqueueText(
+            text,
+            quotedMessage: reply,
+            replyToExcerpt: reply == null ? null : _replyExcerpt(reply),
+          );
+          if (mounted &&
+              _runtime.conversationId == conversation &&
+              reply != null) {
+            setState(() => _replyTarget = null);
+          }
+        } catch (error, stackTrace) {
+          if (!mounted) return;
+          if (_runtime.conversationId == conversation &&
+              _composerController.text.isEmpty) {
+            _composerController.text = text;
+          }
+          await _showQueueError(error, stackTrace, message: text);
+        }
+      }());
+      return;
+    }
     _composerDraftTimer?.cancel();
     unawaited(_persistComposerDraftNow(_activeComposerDraftKey, value: ''));
     final reply = _replyTarget;
@@ -1030,6 +1095,57 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       replyToMessageId: reply?.id,
       quotedMessage: reply,
       replyToExcerpt: reply == null ? null : _replyExcerpt(reply),
+    );
+  }
+
+  Future<void> _showQueueError(
+    Object error,
+    StackTrace stackTrace, {
+    String? message,
+    String title = '排队消息操作失败',
+  }) async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: SingleChildScrollView(
+          child: SelectableText(
+            '$error\n$stackTrace${message == null ? '' : '\n\n未入队的消息：\n$message'}',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('关闭'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _runQueueAction(Future<void> Function() action) async {
+    try {
+      await action();
+    } catch (error, stackTrace) {
+      await _showQueueError(error, stackTrace);
+    }
+  }
+
+  Widget _buildQueuedMessages() {
+    return QueuedMessagesPanel(
+      items: _runtime.queuedMessages,
+      busy: _runtime.queueBusy,
+      canSteer: _runtime.isGenerating,
+      error: _runtime.queueError,
+      onReorder: (ids) =>
+          unawaited(_runQueueAction(() => _runtime.reorderQueuedMessages(ids))),
+      onSteer: (id) =>
+          unawaited(_runQueueAction(() => _runtime.steerQueuedMessage(id))),
+      onDelete: (id) =>
+          unawaited(_runQueueAction(() => _runtime.deleteQueuedMessage(id))),
+      onShowError: (detail) =>
+          unawaited(_showQueueError(detail, StackTrace.current)),
     );
   }
 
@@ -1333,39 +1449,59 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   Future<void> _startRecordedVoice() async {
     if (_voiceRecording) return;
     await _voiceInputSubscription?.cancel();
-    _voicePcm.clear();
-    _voicePcmOverflow = false;
+    await _cleanupVoiceTemp();
+    _voiceWriteError = null;
+    _voiceWriteStackTrace = null;
+    _voicePcmBytes = 0;
+    _voiceWriteChain = Future<void>.value();
     try {
-      final owned = await ref.read(chatServiceProvider).owned.refresh();
-      if (!mounted) return;
-      _voicePcmLimit = owned ? 1048576 - 44 : 32 * 1024 * 1024 - 44;
+      final directory = await Directory.systemTemp.createTemp(
+        'amitia-voice-recording-',
+      );
+      final file = File(
+        '${directory.path}/voice-${DateTime.now().microsecondsSinceEpoch}.wav',
+      );
+      final writer = await file.open(mode: FileMode.write);
+      await writer.writeFrom(_wavHeader(0));
+      await writer.flush();
+      _voiceTempDirectory = directory;
+      _voiceTempFile = file;
+      _voicePcmWriter = writer;
       _voiceInputSubscription = _realtimeAudio.inputPcm.listen((chunk) {
-        if (_voicePcmOverflow) return;
-        if (chunk.length > _voicePcmLimit - _voicePcm.length) {
-          _voicePcmOverflow = true;
-          _voicePcm.clear();
-          unawaited(
-            _realtimeAudio.stopCapture().catchError((Object error) {
-              if (mounted) amitiaSnackBar(context, '停止录音失败：$error');
-            }),
-          );
-          if (mounted) {
-            amitiaSnackBar(context, '录音超过大小上限，请结束录音后重新录制');
-          }
-          return;
-        }
-        _voicePcm.add(chunk);
+        if (_voiceWriteError != null) return;
+        _voiceWriteChain = _voiceWriteChain
+            .then((_) async {
+              final currentWriter = _voicePcmWriter;
+              if (currentWriter == null) {
+                throw StateError('录音临时文件已关闭');
+              }
+              await currentWriter.writeFrom(chunk);
+              _voicePcmBytes += chunk.length;
+            })
+            .catchError((Object error, StackTrace stackTrace) {
+              _voiceWriteError = error;
+              _voiceWriteStackTrace = stackTrace;
+              unawaited(
+                _realtimeAudio.stopCapture().catchError((Object stopError) {
+                  if (mounted) amitiaSnackBar(context, '停止录音失败：$stopError');
+                }),
+              );
+              if (mounted) {
+                amitiaSnackBar(context, '录音写入磁盘失败：$error\n$stackTrace');
+              }
+            });
       });
       await _realtimeAudio.startCapture();
       _voiceRecording = true;
     } catch (error) {
       await _voiceInputSubscription?.cancel();
       _voiceInputSubscription = null;
+      await _cleanupVoiceTemp();
       if (mounted) amitiaSnackBar(context, '无法开始录音：$error');
     }
   }
 
-  Future<Uint8List?> _stopRecordedVoice() async {
+  Future<File?> _stopRecordedVoice() async {
     if (!_voiceRecording) return null;
     _voiceRecording = false;
     try {
@@ -1373,66 +1509,90 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     } finally {
       await _voiceInputSubscription?.cancel();
       _voiceInputSubscription = null;
+      await _voiceWriteChain;
     }
-    final pcm = _voicePcm.takeBytes();
-    if (_voicePcmOverflow) {
-      if (mounted) amitiaSnackBar(context, '录音超过大小上限，未发送截断音频');
+    final writer = _voicePcmWriter;
+    final file = _voiceTempFile;
+    _voicePcmWriter = null;
+    if (_voiceWriteError != null || writer == null || file == null) {
+      if (mounted && _voiceWriteError != null) {
+        amitiaSnackBar(
+          context,
+          '录音写入失败：$_voiceWriteError\n${_voiceWriteStackTrace ?? ''}',
+        );
+      }
+      await _cleanupVoiceTemp();
       return null;
     }
-    if (pcm.isEmpty) return null;
-    return _encodeWavPcm16(pcm);
+    try {
+      await writer.setPosition(0);
+      await writer.writeFrom(_wavHeader(_voicePcmBytes));
+      await writer.flush();
+    } finally {
+      await writer.close();
+    }
+    if (_voicePcmBytes == 0) {
+      await _cleanupVoiceTemp();
+      return null;
+    }
+    return file;
   }
 
   Future<void> _cancelRecordedVoice() async {
     await _stopRecordedVoice();
-    _voicePcm.clear();
+    await _cleanupVoiceTemp();
     if (mounted) amitiaSnackBar(context, '已取消录音');
   }
 
   Future<void> _finishRecordedVoice({required bool transcribe}) async {
     final wav = await _stopRecordedVoice();
     if (!mounted || wav == null) return;
-    if (transcribe) {
-      await _transcribeRecordedVoice(wav);
-    } else {
-      await _sendRecordedVoice(wav);
+    try {
+      if (transcribe) {
+        await _transcribeRecordedVoice(wav);
+      } else {
+        await _sendRecordedVoice(wav);
+      }
+    } finally {
+      await _cleanupVoiceTemp();
     }
   }
 
-  Future<void> _sendRecordedVoice(Uint8List wav) async {
+  Future<void> _sendRecordedVoice(File wav) async {
     try {
+      final service = await ref.read(artifactServiceProvider.future);
+      final artifact = await service.uploadChatFile(
+        filePath: wav.path,
+        kind: ArtifactKind.audio,
+        fileName: 'voice.wav',
+        mimeType: 'audio/wav',
+      );
+      final attachment = ownedAttachmentFromArtifact(
+        artifact,
+        kind: ArtifactKind.audio.value,
+      );
       if (await ref.read(chatServiceProvider).owned.refresh()) {
-        if (wav.isEmpty || wav.length > 1048576) {
-          throw StateError('语音超过 1 MiB，请缩短录音');
-        }
-        final uri = 'data:audio/wav;base64,${base64Encode(wav)}';
-        ownedAudioAttachment(uri, name: 'voice.wav');
+        final uri = 'amitia://artifacts/${attachment['artifactId']}';
         if (!mounted) return;
         _autoFollowOutput = true;
         await _runtime.sendVoice(
           resourceUri: uri,
-          displayUrl: uri,
+          displayUrl: service.contentUrl(attachment['artifactId'] as String),
           fileName: 'voice.wav',
+          attachment: attachment,
           mimeType: 'audio/wav',
           durationMs: _pcmDurationMs(wav),
         );
         return;
       }
-      final service = await ref.read(artifactServiceProvider.future);
-      final artifact = await service.uploadBytes(
-        bytes: wav,
-        kind: ArtifactKind.audio,
-        fileName: 'voice-${DateTime.now().millisecondsSinceEpoch}.wav',
-        mimeType: 'audio/wav',
-        source: 'chat_composer',
-      );
       if (!mounted) return;
       _autoFollowOutput = true;
       await _runtime.sendVoice(
-        resourceUri: artifact.resourceUri,
-        displayUrl: service.contentUrl(artifact.id),
-        fileName: artifact.filename,
-        mimeType: artifact.mimeType,
+        resourceUri: 'amitia://artifacts/${attachment['artifactId']}',
+        displayUrl: service.contentUrl(attachment['artifactId'] as String),
+        fileName: attachment['name'] as String,
+        attachment: attachment,
+        mimeType: attachment['mimeType'] as String,
         durationMs: _pcmDurationMs(wav),
       );
     } catch (error) {
@@ -1440,7 +1600,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     }
   }
 
-  Future<void> _transcribeRecordedVoice(Uint8List wav) async {
+  Future<void> _transcribeRecordedVoice(File wav) async {
     final connection = ref.read(backendConnectionProvider).asData?.value;
     if (connection is! BackendConnectionAvailable) {
       if (mounted) amitiaSnackBar(context, '后端未连接，无法转文字');
@@ -1451,8 +1611,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       final uploadResponse = await dio.post(
         '/api/asr/upload',
         data: FormData.fromMap({
-          'audio': MultipartFile.fromBytes(
-            wav,
+          'audio': await MultipartFile.fromFile(
+            wav.path,
             filename: 'voice.wav',
             contentType: DioMediaType.parse('audio/wav'),
           ),
@@ -1513,7 +1673,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     }
   }
 
-  Uint8List _encodeWavPcm16(Uint8List pcm, {int sampleRate = 16000}) {
+  Uint8List _wavHeader(int pcmLength, {int sampleRate = 16000}) {
     final header = ByteData(44);
     void ascii(int offset, String value) {
       for (var index = 0; index < value.length; index++) {
@@ -1522,7 +1682,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     }
 
     ascii(0, 'RIFF');
-    header.setUint32(4, 36 + pcm.length, Endian.little);
+    header.setUint32(4, 36 + pcmLength, Endian.little);
     ascii(8, 'WAVE');
     ascii(12, 'fmt ');
     header.setUint32(16, 16, Endian.little);
@@ -1533,16 +1693,45 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     header.setUint16(32, 2, Endian.little);
     header.setUint16(34, 16, Endian.little);
     ascii(36, 'data');
-    header.setUint32(40, pcm.length, Endian.little);
-    final bytes = BytesBuilder(copy: false);
-    bytes.add(header.buffer.asUint8List());
-    bytes.add(pcm);
-    return bytes.takeBytes();
+    header.setUint32(40, pcmLength, Endian.little);
+    return header.buffer.asUint8List();
   }
 
-  int _pcmDurationMs(Uint8List wav) {
-    if (wav.length <= 44) return 0;
-    return ((wav.length - 44) * 1000 / (16000 * 2)).round();
+  int _pcmDurationMs(File wav) {
+    final length = wav.lengthSync();
+    if (length <= 44) return 0;
+    return ((length - 44) * 1000 / (16000 * 2)).round();
+  }
+
+  Future<void> _cleanupVoiceTemp({bool reportErrors = true}) async {
+    final writer = _voicePcmWriter;
+    _voicePcmWriter = null;
+    if (writer != null) {
+      try {
+        await writer.close();
+      } catch (error, stackTrace) {
+        if (reportErrors && mounted) {
+          amitiaSnackBar(context, '关闭录音文件失败：$error\n$stackTrace');
+        }
+      }
+    }
+    final directory = _voiceTempDirectory;
+    _voiceTempDirectory = null;
+    _voiceTempFile = null;
+    _voicePcmBytes = 0;
+    _voiceWriteError = null;
+    _voiceWriteStackTrace = null;
+    if (directory != null) {
+      try {
+        await directory.delete(recursive: true);
+      } on FileSystemException catch (error, stackTrace) {
+        if (reportErrors &&
+            !error.message.contains('No such file') &&
+            mounted) {
+          amitiaSnackBar(context, '清理录音临时文件失败：$error\n$stackTrace');
+        }
+      }
+    }
   }
 
   String _replyExcerpt(ChatMessage message) {
@@ -1575,73 +1764,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   Future<void> _pickAndSendFile() async {
     await _withArtifactUpload((service) async {
-      if (await ref.read(chatServiceProvider).owned.refresh()) {
-        final selection = await FilePicker.platform.pickFiles(
-          withReadStream: true,
-          allowMultiple: false,
-        );
-        if (selection == null || selection.files.isEmpty) return;
-        final picked = selection.files.single;
-        final mime = switch ((picked.extension ?? '').toLowerCase()) {
-          'png' => 'image/png',
-          'jpg' || 'jpeg' => 'image/jpeg',
-          'gif' => 'image/gif',
-          _ =>
-            ownedFileMimes[(picked.extension ?? '').toLowerCase()] ??
-                ownedVideoMimes[(picked.extension ?? '').toLowerCase()] ??
-                '',
-        };
-        if (mime.isEmpty)
-          throw StateError('请选择图片、文本、PDF、DOCX 或 MP4、WebM、MOV 视频');
-        if (picked.size > 1048576) throw StateError('附件单件不超过 1 MiB');
-        final content = BytesBuilder(copy: false);
-        if (picked.readStream != null) {
-          await for (final chunk in picked.readStream!) {
-            if (content.length + chunk.length > 1048576)
-              throw StateError('图片单张不超过 1 MiB');
-            content.add(chunk);
-          }
-        } else if (picked.bytes != null && picked.bytes!.length <= 1048576) {
-          content.add(picked.bytes!);
-        } else {
-          throw StateError('无法读取所选图片');
-        }
-        final bytes = content.takeBytes();
-        final uri = 'data:$mime;base64,${base64Encode(bytes)}';
-        if (!mounted) return;
-        if (!mime.startsWith('image/')) {
-          final video = mime.startsWith('video/');
-          ownedFileAttachment(
-            uri,
-            name: picked.name,
-            kind: video ? 'video' : 'file',
-          );
-          if (video) {
-            await _runtime.sendVideo(
-              resourceUri: uri,
-              displayUrl: uri,
-              fileName: picked.name,
-              mimeType: mime,
-            );
-          } else {
-            await _runtime.sendFile(
-              resourceUri: uri,
-              fileName: picked.name,
-              sizeBytes: bytes.length,
-              mimeType: mime,
-            );
-          }
-          return;
-        }
-        ownedImageAttachment(uri, name: picked.name);
-        await _runtime.sendImage(
-          resourceUri: uri,
-          displayUrl: uri,
-          fileName: picked.name,
-          mimeType: mime,
-        );
-        return;
-      }
       final artifact = await service.pickAndUploadFile();
       switch (artifact.kind) {
         case ArtifactKind.image:
@@ -1658,6 +1780,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             resourceUri: artifact.resourceUri,
             fileName: artifact.filename,
             sizeBytes: artifact.sizeBytes,
+            attachment: ownedAttachmentFromArtifact(artifact),
             mimeType: artifact.mimeType,
           );
           return;
@@ -1667,32 +1790,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   Future<void> _pickAndSendImage(bool camera) async {
     await _withArtifactUpload((service) async {
-      if (await ref.read(chatServiceProvider).owned.refresh()) {
-        final picked = await ImagePicker().pickImage(
-          source: camera ? ImageSource.camera : ImageSource.gallery,
-        );
-        if (picked == null) return;
-        if (await picked.length() > 1048576) throw StateError('图片单张不超过 1 MiB');
-        final bytes = await picked.readAsBytes();
-        final extension = picked.name.split('.').last.toLowerCase();
-        final mime =
-            picked.mimeType ??
-            switch (extension) {
-              'png' => 'image/png',
-              'jpg' || 'jpeg' => 'image/jpeg',
-              'gif' => 'image/gif',
-              _ => '',
-            };
-        final uri = 'data:$mime;base64,${base64Encode(bytes)}';
-        ownedImageAttachment(uri, name: picked.name);
-        await _runtime.sendImage(
-          resourceUri: uri,
-          displayUrl: uri,
-          fileName: picked.name,
-          mimeType: mime,
-        );
-        return;
-      }
       final artifact = await service.pickAndUploadImage(
         source: camera ? ImageSource.camera : ImageSource.gallery,
       );
@@ -1702,26 +1799,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   Future<void> _pickAndSendVideo(bool camera) async {
     await _withArtifactUpload((service) async {
-      if (await ref.read(chatServiceProvider).owned.refresh()) {
-        final picked = await ImagePicker().pickVideo(
-          source: camera ? ImageSource.camera : ImageSource.gallery,
-        );
-        if (picked == null) return;
-        if (await picked.length() > 1048576) throw StateError('视频单段不超过 1 MiB');
-        final bytes = await picked.readAsBytes();
-        final extension = picked.name.split('.').last.toLowerCase();
-        final mime = ownedVideoMimes[extension] ?? picked.mimeType ?? '';
-        final uri = 'data:$mime;base64,${base64Encode(bytes)}';
-        ownedFileAttachment(uri, name: picked.name, kind: 'video');
-        if (!mounted) return;
-        await _runtime.sendVideo(
-          resourceUri: uri,
-          displayUrl: uri,
-          fileName: picked.name,
-          mimeType: mime,
-        );
-        return;
-      }
       final artifact = await service.pickAndUploadVideo(
         source: camera ? ImageSource.camera : ImageSource.gallery,
       );
@@ -1731,42 +1808,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   Future<void> _pickAndSendAudio() async {
     await _withArtifactUpload((service) async {
-      if (await ref.read(chatServiceProvider).owned.refresh()) {
-        final selection = await FilePicker.platform.pickFiles(
-          type: FileType.custom,
-          allowedExtensions: ['wav', 'webm'],
-          withReadStream: true,
-        );
-        if (selection == null || !mounted) return;
-        final file = selection.files.single;
-        if (file.size > 1048576) throw StateError('音频单段不超过 1 MiB');
-        final data = BytesBuilder(copy: false);
-        if (file.readStream != null) {
-          await for (final chunk in file.readStream!) {
-            if (data.length + chunk.length > 1048576)
-              throw StateError('音频单段不超过 1 MiB');
-            data.add(chunk);
-          }
-        } else if (file.bytes != null && file.bytes!.length <= 1048576) {
-          data.add(file.bytes!);
-        } else {
-          throw StateError('无法读取所选音频');
-        }
-        final mime = file.extension?.toLowerCase() == 'wav'
-            ? 'audio/wav'
-            : 'audio/webm';
-        final uri = 'data:$mime;base64,${base64Encode(data.takeBytes())}';
-        ownedAudioAttachment(uri, name: file.name);
-        if (!mounted) return;
-        _autoFollowOutput = true;
-        await _runtime.sendVoice(
-          resourceUri: uri,
-          displayUrl: uri,
-          fileName: file.name,
-          mimeType: mime,
-        );
-        return;
-      }
       final artifact = await service.pickAndUploadAudio();
       await _sendAudioArtifact(service, artifact);
     });
@@ -1781,6 +1822,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       resourceUri: artifact.resourceUri,
       displayUrl: service.contentUrl(artifact.id),
       fileName: artifact.filename,
+      attachment: ownedAttachmentFromArtifact(artifact),
       mimeType: artifact.mimeType,
     );
   }
@@ -1794,6 +1836,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       resourceUri: artifact.resourceUri,
       displayUrl: service.contentUrl(artifact.id),
       fileName: artifact.filename,
+      attachment: ownedAttachmentFromArtifact(artifact),
       mimeType: artifact.mimeType,
       durationMs: artifact.durationMs,
     );
@@ -1808,6 +1851,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       resourceUri: artifact.resourceUri,
       displayUrl: service.contentUrl(artifact.id),
       fileName: artifact.filename,
+      attachment: ownedAttachmentFromArtifact(artifact),
       mimeType: artifact.mimeType,
       durationMs: artifact.durationMs,
     );
@@ -1819,21 +1863,18 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     try {
       final service = await ref.read(artifactServiceProvider.future);
       await action(service);
-    } on ArtifactServiceException catch (error) {
+    } on ArtifactServiceException catch (error, stackTrace) {
       if (error.message != 'user_cancelled' && mounted) {
-        amitiaSnackBar(context, '附件处理失败：${error.message}');
+        await _showQueueError(error, stackTrace, title: '附件处理失败');
       }
-    } catch (error) {
+    } catch (error, stackTrace) {
       if (mounted) {
-        amitiaSnackBar(
-          context,
-          '附件处理失败：${error.toString().replaceFirst('Exception: ', '')}',
-        );
+        await _showQueueError(error, stackTrace, title: '附件处理失败');
       }
     }
   }
 
-  Future<ArtifactMetadata> _uploadProviderBase64(
+  Future<Map<String, dynamic>> _uploadProviderBase64(
     ArtifactService service, {
     required String encoded,
     required ArtifactKind kind,
@@ -1860,36 +1901,61 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
     try {
       final bytes = base64Decode(payload);
-      return await service.uploadBytes(
-        bytes: bytes,
+      return await uploadOwnedAttachment(
+        service,
+        bytes,
         kind: kind,
-        fileName: fallbackFileName,
+        name: fallbackFileName,
         mimeType: mimeType,
-        source: 'ui_provider',
       );
     } on FormatException {
       throw ArtifactServiceException('invalid_base64_payload');
     }
   }
 
-  String _artifactDisplayUrl(ArtifactService service, String resourceUri) {
-    final artifactId = parseArtifactUri(resourceUri);
-    return artifactId == null ? resourceUri : service.contentUrl(artifactId);
+  String? _providerLocalFilePath(Map<dynamic, dynamic> input) {
+    for (final key in const ['filePath', 'localPath', 'path', 'fileUri']) {
+      final raw = input[key]?.toString().trim() ?? '';
+      if (raw.isEmpty) continue;
+      final uri = Uri.tryParse(raw);
+      final path = uri?.scheme == 'file' ? uri!.toFilePath() : raw;
+      if (path.isNotEmpty && File(path).existsSync()) return path;
+    }
+    return null;
   }
 
   Future<void> _sendProviderImage(Map<dynamic, dynamic> input) async {
     final encoded = input['imageBase64']?.toString().trim() ?? '';
     final resourceUri = input['resourceUri']?.toString().trim() ?? '';
+    final localPath = _providerLocalFilePath(input);
     final text = input['text']?.toString() ?? '';
     final fileName = (input['fileName'] ?? input['filename'] ?? 'image.png')
         .toString();
     final mimeType = (input['mimeType'] ?? 'image/png').toString();
-    if (encoded.isEmpty && resourceUri.isEmpty) {
+    if (encoded.isEmpty && resourceUri.isEmpty && localPath == null) {
       final camera = input['source']?.toString() == 'camera';
       await _pickAndSendImage(camera);
       return;
     }
     await _withArtifactUpload((service) async {
+      if (localPath != null) {
+        final artifact = await uploadOwnedAttachmentFile(
+          service,
+          filePath: localPath,
+          name: fileName,
+          kind: ArtifactKind.image,
+          mimeType: mimeType,
+        );
+        await _runtime.sendImage(
+          resourceUri: 'amitia://artifacts/${artifact['artifactId']}',
+          displayUrl: service.contentUrl(artifact['artifactId'] as String),
+          fileName: artifact['name'] as String,
+          attachment: artifact,
+          mimeType: artifact['mimeType'] as String,
+          text: text,
+        );
+        return;
+      }
       if (encoded.isNotEmpty) {
         final artifact = await _uploadProviderBase64(
           service,
@@ -1899,19 +1965,26 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           fallbackFileName: fileName,
         );
         await _runtime.sendImage(
-          resourceUri: artifact.resourceUri,
-          displayUrl: service.contentUrl(artifact.id),
-          fileName: artifact.filename,
-          mimeType: artifact.mimeType,
+          resourceUri: 'amitia://artifacts/${artifact['artifactId']}',
+          displayUrl: service.contentUrl(artifact['artifactId'] as String),
+          fileName: artifact['name'] as String,
+          attachment: artifact,
+          mimeType: artifact['mimeType'] as String,
           text: text,
         );
         return;
       }
+      final artifactId = parseArtifactUri(resourceUri);
+      if (artifactId == null) throw StateError('图片来源不是已保存的聊天制品');
+      final artifact = ownedAttachmentFromArtifact(
+        await service.getMetadata(artifactId),
+      );
       await _runtime.sendImage(
         resourceUri: resourceUri,
-        displayUrl: _artifactDisplayUrl(service, resourceUri),
-        fileName: fileName,
-        mimeType: mimeType,
+        displayUrl: service.contentUrl(artifactId),
+        fileName: artifact['name'] as String,
+        attachment: artifact,
+        mimeType: artifact['mimeType'] as String,
         text: text,
       );
     });
@@ -1920,18 +1993,38 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   Future<void> _sendProviderVideo(Map<dynamic, dynamic> input) async {
     final encoded = input['videoBase64']?.toString().trim() ?? '';
     final resourceUri = input['resourceUri']?.toString().trim() ?? '';
+    final localPath = _providerLocalFilePath(input);
     final text = input['text']?.toString() ?? '';
     final fileName = (input['fileName'] ?? input['filename'] ?? 'video.mp4')
         .toString();
     final mimeType = (input['mimeType'] ?? 'video/mp4').toString();
     final durationMs =
         int.tryParse((input['durationMs'] ?? '0').toString()) ?? 0;
-    if (encoded.isEmpty && resourceUri.isEmpty) {
+    if (encoded.isEmpty && resourceUri.isEmpty && localPath == null) {
       final camera = input['source']?.toString() == 'camera';
       await _pickAndSendVideo(camera);
       return;
     }
     await _withArtifactUpload((service) async {
+      if (localPath != null) {
+        final artifact = await uploadOwnedAttachmentFile(
+          service,
+          filePath: localPath,
+          name: fileName,
+          kind: ArtifactKind.video,
+          mimeType: mimeType,
+        );
+        await _runtime.sendVideo(
+          resourceUri: 'amitia://artifacts/${artifact['artifactId']}',
+          displayUrl: service.contentUrl(artifact['artifactId'] as String),
+          fileName: artifact['name'] as String,
+          attachment: artifact,
+          mimeType: artifact['mimeType'] as String,
+          durationMs: durationMs,
+          text: text,
+        );
+        return;
+      }
       if (encoded.isNotEmpty) {
         final artifact = await _uploadProviderBase64(
           service,
@@ -1941,22 +2034,27 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           fallbackFileName: fileName,
         );
         await _runtime.sendVideo(
-          resourceUri: artifact.resourceUri,
-          displayUrl: service.contentUrl(artifact.id),
-          fileName: artifact.filename,
-          mimeType: artifact.mimeType,
-          durationMs: artifact.durationMs > 0
-              ? artifact.durationMs
-              : durationMs,
+          resourceUri: 'amitia://artifacts/${artifact['artifactId']}',
+          displayUrl: service.contentUrl(artifact['artifactId'] as String),
+          fileName: artifact['name'] as String,
+          attachment: artifact,
+          mimeType: artifact['mimeType'] as String,
+          durationMs: durationMs,
           text: text,
         );
         return;
       }
+      final artifactId = parseArtifactUri(resourceUri);
+      if (artifactId == null) throw StateError('视频来源不是已保存的聊天制品');
+      final artifact = ownedAttachmentFromArtifact(
+        await service.getMetadata(artifactId),
+      );
       await _runtime.sendVideo(
         resourceUri: resourceUri,
-        displayUrl: _artifactDisplayUrl(service, resourceUri),
-        fileName: fileName,
-        mimeType: mimeType,
+        displayUrl: service.contentUrl(artifactId),
+        fileName: artifact['name'] as String,
+        attachment: artifact,
+        mimeType: artifact['mimeType'] as String,
         durationMs: durationMs,
         text: text,
       );
@@ -1965,30 +2063,55 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   Future<void> _sendProviderFile(Map<dynamic, dynamic> input) async {
     final resourceUri = input['resourceUri']?.toString().trim() ?? '';
-    if (resourceUri.isEmpty) {
+    final localPath = _providerLocalFilePath(input);
+    if (resourceUri.isEmpty && localPath == null) {
       await _pickAndSendFile();
       return;
     }
-    final fileName = (input['fileName'] ?? input['filename'] ?? '文件')
-        .toString()
-        .trim();
-    final sizeBytes = int.tryParse((input['sizeBytes'] ?? '0').toString()) ?? 0;
-    final mimeType = (input['mimeType'] ?? 'application/octet-stream')
-        .toString();
-    await _runtime.sendFile(
-      resourceUri: resourceUri,
-      fileName: fileName.isEmpty ? '文件' : fileName,
-      sizeBytes: sizeBytes,
-      mimeType: mimeType,
-    );
+    await _withArtifactUpload((service) async {
+      if (localPath != null) {
+        final name = (input['fileName'] ?? input['filename'] ?? 'attachment')
+            .toString();
+        final mimeType = (input['mimeType'] ?? 'application/octet-stream')
+            .toString();
+        final artifact = await uploadOwnedAttachmentFile(
+          service,
+          filePath: localPath,
+          name: name,
+          kind: ArtifactKind.file,
+          mimeType: mimeType,
+        );
+        await _runtime.sendFile(
+          resourceUri: 'amitia://artifacts/${artifact['artifactId']}',
+          fileName: artifact['name'] as String,
+          sizeBytes: artifact['sizeBytes'] as int,
+          attachment: artifact,
+          mimeType: artifact['mimeType'] as String,
+        );
+        return;
+      }
+      final artifactId = parseArtifactUri(resourceUri);
+      if (artifactId == null) throw StateError('文件来源不是已保存的聊天制品');
+      final artifact = ownedAttachmentFromArtifact(
+        await service.getMetadata(artifactId),
+      );
+      await _runtime.sendFile(
+        resourceUri: resourceUri,
+        fileName: artifact['name'] as String,
+        sizeBytes: artifact['sizeBytes'] as int,
+        attachment: artifact,
+        mimeType: artifact['mimeType'] as String,
+      );
+    });
   }
 
   Future<void> _sendProviderVoice(Map<dynamic, dynamic> input) async {
     final encoded =
         (input['audioBase64'] ?? input['voiceBase64'])?.toString().trim() ?? '';
     final resourceUri = input['resourceUri']?.toString().trim() ?? '';
+    final localPath = _providerLocalFilePath(input);
     final text = input['text']?.toString() ?? '';
-    if (encoded.isEmpty && resourceUri.isEmpty) {
+    if (encoded.isEmpty && resourceUri.isEmpty && localPath == null) {
       if (text.trim().isNotEmpty) {
         _composerController.text = text;
         _composerController.selection = TextSelection.collapsed(
@@ -2005,6 +2128,25 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final durationMs =
         int.tryParse((input['durationMs'] ?? '0').toString()) ?? 0;
     await _withArtifactUpload((service) async {
+      if (localPath != null) {
+        final artifact = await uploadOwnedAttachmentFile(
+          service,
+          filePath: localPath,
+          name: fileName,
+          kind: ArtifactKind.audio,
+          mimeType: mimeType,
+        );
+        await _runtime.sendVoice(
+          resourceUri: 'amitia://artifacts/${artifact['artifactId']}',
+          displayUrl: service.contentUrl(artifact['artifactId'] as String),
+          fileName: artifact['name'] as String,
+          attachment: artifact,
+          mimeType: artifact['mimeType'] as String,
+          durationMs: durationMs,
+          text: text,
+        );
+        return;
+      }
       if (encoded.isNotEmpty) {
         final artifact = await _uploadProviderBase64(
           service,
@@ -2014,22 +2156,27 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           fallbackFileName: fileName,
         );
         await _runtime.sendVoice(
-          resourceUri: artifact.resourceUri,
-          displayUrl: service.contentUrl(artifact.id),
-          fileName: artifact.filename,
-          mimeType: artifact.mimeType,
-          durationMs: artifact.durationMs > 0
-              ? artifact.durationMs
-              : durationMs,
+          resourceUri: 'amitia://artifacts/${artifact['artifactId']}',
+          displayUrl: service.contentUrl(artifact['artifactId'] as String),
+          fileName: artifact['name'] as String,
+          attachment: artifact,
+          mimeType: artifact['mimeType'] as String,
+          durationMs: durationMs,
           text: text,
         );
         return;
       }
+      final artifactId = parseArtifactUri(resourceUri);
+      if (artifactId == null) throw StateError('语音来源不是已保存的聊天制品');
+      final artifact = ownedAttachmentFromArtifact(
+        await service.getMetadata(artifactId),
+      );
       await _runtime.sendVoice(
         resourceUri: resourceUri,
-        displayUrl: _artifactDisplayUrl(service, resourceUri),
-        fileName: fileName,
-        mimeType: mimeType,
+        displayUrl: service.contentUrl(artifactId),
+        fileName: artifact['name'] as String,
+        attachment: artifact,
+        mimeType: artifact['mimeType'] as String,
         durationMs: durationMs,
         text: text,
       );
@@ -2038,7 +2185,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   void _onSendCode(String lang, String code) {
     _autoFollowOutput = true;
-    _runtime.sendCode(lang, code);
+    unawaited(_runQueueAction(() => _runtime.sendCode(lang, code)));
   }
 
   bool _shouldShowAssistantIdentity(int index) {
@@ -2557,12 +2704,38 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             if (input is Map) {
               final videoBase64 = input['videoBase64']?.toString().trim() ?? '';
               final imageBase64 = input['imageBase64']?.toString().trim() ?? '';
-              if (videoBase64.isNotEmpty) {
+              final mimeType =
+                  input['mimeType']?.toString().toLowerCase() ?? '';
+              final hasResource = [
+                input['resourceUri'],
+                input['filePath'],
+                input['localPath'],
+                input['path'],
+                input['fileUri'],
+              ].any((value) => (value?.toString().trim() ?? '').isNotEmpty);
+              if (videoBase64.isNotEmpty ||
+                  hasResource &&
+                      (mimeType.startsWith('video/') ||
+                          input['videoBase64'] != null)) {
                 await _sendProviderVideo(input);
                 return null;
               }
-              if (imageBase64.isNotEmpty) {
+              if (imageBase64.isNotEmpty ||
+                  hasResource &&
+                      (mimeType.startsWith('image/') ||
+                          input['imageBase64'] != null)) {
                 await _sendProviderImage(input);
+                return null;
+              }
+              if (hasResource &&
+                  (mimeType.startsWith('audio/') ||
+                      input['audioBase64'] != null ||
+                      input['voiceBase64'] != null)) {
+                await _sendProviderVoice(input);
+                return null;
+              }
+              if (hasResource && mimeType == 'application/pdf') {
+                await _sendProviderFile(input);
                 return null;
               }
               final text = input['text']?.toString() ?? '';
@@ -3123,6 +3296,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               ],
             ),
           ),
+        _buildQueuedMessages(),
         UIProviderHost(
           capability: UICapability.conversationComposer,
           context: providerContext,

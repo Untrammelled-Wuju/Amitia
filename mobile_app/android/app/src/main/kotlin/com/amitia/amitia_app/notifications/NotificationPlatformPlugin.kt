@@ -210,38 +210,37 @@ class NotificationPlatformPlugin : FlutterPlugin, MethodChannel.MethodCallHandle
                     "sound" to "true",
                     "deepLink" to "amitia://settings/notifications",
                 )
-                if (scenario == "task") {
-                    if (!NotificationManagerCompat.from(appContext).areNotificationsEnabled()) {
-                        result.error("NOTIFICATIONS_DISABLED", "请先允许系统通知", null)
-                    } else {
-                        startTaskScenario(now, common)
-                        result.success(true)
-                    }
-                } else {
-                    val data = when (scenario) {
-                        "message" -> common + mapOf(
+                val data = when (scenario) {
+                    "task" -> common
+                    "message" -> common + mapOf(
                             "deepLink" to "amitia://chat/local-scenario",
                             "type" to "message.received",
                             "conversationId" to "local-scenario",
                             "characterId" to "amitia-scenario",
                             "title" to "Amitia Test",
                             "body" to "Local notification scenario: a new message arrived.",
-                        )
-                        "reminder" -> common + mapOf(
+                    )
+                    "reminder" -> common + mapOf(
                             "type" to "reminder.triggered",
                             "messageId" to now,
                             "title" to "Amitia reminder test",
                             "body" to "Local reminder notification, independent of cloud push.",
-                        )
-                        else -> null
-                    }
-                    if (data == null) {
-                        result.error("UNKNOWN_SCENARIO", "Unsupported local scenario", null)
-                    } else {
-                        NotificationRenderer.handleRemoteMessage(appContext, data)
-                        result.success(true)
+                    )
+                    else -> {
+                        result.error("UNKNOWN_SCENARIO", "Unsupported local scenario", scenario)
+                        return
                     }
                 }
+                if (!NotificationManagerCompat.from(appContext).areNotificationsEnabled()) {
+                    result.error("NOTIFICATIONS_DISABLED", "请先允许系统通知", mapOf("areNotificationsEnabled" to false))
+                    return
+                }
+                if (scenario == "task") {
+                    startTaskScenario(now, data)
+                } else {
+                    NotificationRenderer.handleRemoteMessage(appContext, data)
+                }
+                result.success(true)
             }
             "openLiveUpdateSettings" -> {
                 val fallback = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
