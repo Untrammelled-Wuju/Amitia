@@ -67,6 +67,88 @@ async function until(expression) {
   throw new Error(`页面断言超时 ${expression}\n${await evaluate("document.body.innerText.slice(0, 1200)")}`);
 }
 
+async function verifyGameExit(injectFailure) {
+  const visibleDialogs = "[...document.querySelectorAll('.is-message-box:not(.fade-in-linear-leave-active) .el-message-box')].filter(node => node.getClientRects().length && node.innerText.includes('唯一租约会被释放'))";
+  const requests = new Set();
+  const observe = ({ data }) => {
+    const { method, params } = JSON.parse(data);
+    if (method === "Network.requestWillBeSent" && params.request.method === "POST" &&
+        new URL(params.request.url).pathname === "/api/game-mode/release") {
+      requests.add(params.requestId);
+    }
+  };
+  const click = async (label, count = 1, inDialog = false) => {
+    await until(`(() => {
+      const scope = ${inDialog ? `(${visibleDialogs}).at(-1)` : "document.querySelector('.game-mode-page')"};
+      const button = [...(scope?.querySelectorAll('button') ?? [])].find(node =>
+        node.getClientRects().length && !node.disabled && node.innerText.trim() === ${JSON.stringify(label)});
+      if (!button) return false;
+      for (let i = 0; i < ${count}; i++) button.click();
+      return true;
+    })()`);
+  };
+  await evaluate("location.hash = '/game-center'");
+  await until("document.querySelector('.current-game-card')?.innerText.includes('等待进入')");
+  await click("进入游戏模式");
+  await until("document.querySelector('.current-game-card')?.innerText.includes('本机正在使用')");
+  socket.addEventListener("message", observe);
+  await command("Network.enable");
+  try {
+    await click("退出游戏模式", 2);
+    await until(`(${visibleDialogs}).length > 0`);
+    await delay(350);
+    const dialogCount = await evaluate(`(${visibleDialogs}).length`);
+    if (dialogCount !== 1) {
+      for (let i = 0; i < dialogCount; i++) {
+        await click("取消", 1, true);
+        await delay(400);
+      }
+      await click("退出游戏模式");
+      await click("退出", 1, true);
+      await until("document.querySelector('.current-game-card')?.innerText.includes('等待进入')");
+    }
+    assert.equal(dialogCount, 1, "连续两次触发退出时的确认框数量");
+    await click("取消", 1, true);
+    await until(`(${visibleDialogs}).length === 0`);
+    await until("document.querySelector('.current-game-card')?.innerText.includes('本机正在使用')");
+    assert.equal(requests.size, 0, "取消必须保留租约");
+    if (injectFailure) {
+      let aborted = false;
+      interceptRequest = async ({ requestId, request }) => {
+        if (request.method === "POST" && !aborted) {
+          aborted = true;
+          await command("Fetch.failRequest", { requestId, errorReason: "ConnectionReset" });
+        } else {
+          await command("Fetch.continueRequest", { requestId });
+        }
+      };
+      await command("Fetch.enable", { patterns: [{ urlPattern: "*/api/game-mode/release" }] });
+      try {
+        await click("退出游戏模式");
+        await click("退出", 1, true);
+        await until("document.querySelector('.game-mode-page .el-alert')?.innerText.includes('Network Error')");
+        await until("document.querySelector('.current-game-card')?.innerText.includes('本机正在使用')");
+        assert.equal(aborted, true);
+        assert.equal(requests.size, 1, "只有一次请求被断开");
+      } finally {
+        await command("Fetch.disable");
+        interceptRequest = undefined;
+      }
+      requests.clear();
+      console.log("断开释放请求后显示原始网络错误并保留租约");
+    }
+    await click("退出游戏模式", 2);
+    await click("退出", 1, true);
+    await until("document.querySelector('.current-game-card')?.innerText.includes('等待进入')");
+    assert.equal(requests.size, 1, "确认后只能释放一次租约");
+    await command("Page.reload");
+    await until("document.querySelector('.current-game-card')?.innerText.includes('等待进入')");
+    console.log("连点只出现一个确认框，取消保持租约，确认发起一次释放，刷新后保持未占用");
+  } finally {
+    socket.removeEventListener("message", observe);
+  }
+}
+
 async function verifyUninstallPolling() {
   const path = "/creative-workshop/pet/installations";
   const resource = "/api/desktop-pets/installations";
@@ -145,7 +227,7 @@ try {
       await until(`(() => {
         const parent = [...document.querySelectorAll(${JSON.stringify(container)})]
           .find(node => node.innerText.includes(${JSON.stringify(containingText)}));
-        const control = [...(parent?.querySelectorAll('button, a, label, [role=button], [role=option], [role=tab]') ?? [])].find(node =>
+        const control = [...(parent?.querySelectorAll('button, a, label, [role=button], [role=combobox], [role=option], [role=tab]') ?? [])].find(node =>
           node.getClientRects().length && !node.disabled &&
           (node.innerText.trim() === ${label} || node.title === ${label} || node.getAttribute('aria-label') === ${label}));
         if (!control) return false;
@@ -187,6 +269,18 @@ try {
       }
     } else if (action === "expect") {
       await until(`document.body.innerText.includes(${JSON.stringify(value)})`);
+    } else if (action === "dialogs") {
+      const [title, expected] = JSON.parse(value);
+      const count = await evaluate(`[...document.querySelectorAll('.is-message-box:not(.fade-in-linear-leave-active) .el-message-box__title')]
+        .filter(node => node.getClientRects().length && node.innerText.trim() === ${JSON.stringify(title)}).length`);
+      assert.equal(count, expected, title);
+    } else if (action === "clickselector") {
+      await until(`(() => {
+        const node = [...document.querySelectorAll(${JSON.stringify(value)})].find(item => item.getClientRects().length && !item.disabled);
+        if (!node) return false;
+        node.click();
+        return true;
+      })()`);
     } else if (action === "absent") {
       await until(`!document.body.innerText.includes(${JSON.stringify(value)})`);
     } else if (action === "expectall") {
@@ -207,6 +301,8 @@ try {
         }
       };
       await command("Fetch.enable", { patterns: [{ urlPattern: `*${value}` }] });
+    } else if (action === "gameexit" || action === "gameexitfault") {
+      await verifyGameExit(action === "gameexitfault");
     } else if (action === "uninstallpoll") {
       await verifyUninstallPolling();
     } else if (action === "runtime") {

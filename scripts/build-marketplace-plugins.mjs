@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto"
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { basename, dirname, join, resolve } from "node:path"
+import { dirname, join, resolve } from "node:path"
 import { spawnSync } from "node:child_process"
 import { fileURLToPath } from "node:url"
 import { inspectPackage } from "../sdk/plugin-cli/dist/archive.js"
@@ -51,10 +51,7 @@ function buildPlugins() {
     ["com.amitia/plugin-market", nodeBinary, [join(root, "plugins-builtin/plugin-market/scripts/build-package.mjs"), "--source", join(root, "plugins-builtin/plugin-market"), "--output", join(pluginRoot, "plugin-market")]],
     ["com.amitia/emote", nodeBinary, [join(root, "plugins-code/emote/scripts/build-package.mjs"), "--source", join(root, "plugins-code/emote"), "--output", join(pluginRoot, "Emote")]],
     ["com.amitia/lifestyle", nodeBinary, [join(root, "plugins-code/lifestyle/scripts/build-package.mjs"), "--source", join(root, "plugins-code/lifestyle"), "--output", join(pluginRoot, "lifestyle")]],
-    ...["browser-profile", "calendar", "email", "phone", "wallet"].map((name) => {
-      const manifest = readManifest(join(root, "plugins-code/agent-identities", name, "amitia-extension.json"))
-      return [manifest.plugin.id, nodeBinary, [join(root, "plugins-code/agent-identities/scripts/build-package.mjs"), "--package", join(root, "plugins-code/agent-identities", name)]]
-    }),
+    ["com.amitia/dsh-compatible-host", nodeBinary, [join(root, "plugins-code/dsh-compatible-host/scripts/build-package.mjs")]],
     ...["qq-clawbot", "qq-personal", "wechat"].map((name) => {
       const manifest = readManifest(join(root, "plugins-code/channels", name, "amitia-extension.json"))
       return [manifest.plugin.id, nodeBinary, [join(root, "plugins-code/channels", name, "scripts/build-package.mjs")]]
@@ -72,27 +69,23 @@ function expectedPackages() {
     ["plugins-builtin/plugin-market/amitia-extension.json", "plugin-market"],
     ["plugins-code/emote/amitia-extension.json", "Emote"],
     ["plugins-code/lifestyle/amitia-extension.json", "lifestyle"],
-    ["plugins-code/agent-identities/browser-profile/amitia-extension.json", "agent-identities"],
-    ["plugins-code/agent-identities/calendar/amitia-extension.json", "agent-identities"],
-    ["plugins-code/agent-identities/email/amitia-extension.json", "agent-identities"],
-    ["plugins-code/agent-identities/phone/amitia-extension.json", "agent-identities"],
-    ["plugins-code/agent-identities/wallet/amitia-extension.json", "agent-identities"],
+    ["plugins-code/dsh-compatible-host/amitia-extension.json", ""],
     ["plugins-code/channels/qq-clawbot/amitia-extension.json", ""],
     ["plugins-code/channels/qq-personal/amitia-extension.json", ""],
     ["plugins-code/channels/wechat/amitia-extension.json", ""],
   ]
   return specs.map(([manifestPath, directory]) => {
     const manifest = readManifest(join(root, manifestPath))
-    const name = String(manifest.plugin.id).replaceAll("/", ".")
-    const fileName = directory === "Emote"
+    const extensionID = manifest.plugin.id
+    const fileName = extensionID === "com.amitia/emote"
       ? `amitia-emote-${manifest.plugin.version}.amitiax`
-      : directory === "plugin-market"
+      : extensionID === "com.amitia/plugin-market"
         ? `amitia-plugin-market-${manifest.plugin.version}.amitiax`
-      : directory === "lifestyle"
-        ? `amitia-lifestyle-${manifest.plugin.version}.amitiax`
-      : directory === "agent-identities"
-          ? `${basename(dirname(join(root, manifestPath)))}-${manifest.plugin.version}.amitiax`
-          : packageName(manifest)
+        : extensionID === "com.amitia/lifestyle"
+          ? `amitia-lifestyle-${manifest.plugin.version}.amitiax`
+          : extensionID === "com.amitia/dsh-compatible-host"
+            ? `amitia-dsh-compatible-host-${manifest.plugin.version}.amitiax`
+            : packageName(manifest)
     return {
       manifest,
       path: directory ? join(pluginRoot, directory, fileName) : join(pluginRoot, fileName),

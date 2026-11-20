@@ -62,36 +62,33 @@ function packagePaths() {
     ["plugins-builtin/plugin-market/amitia-extension.json", "plugin-market"],
     ["plugins-code/emote/amitia-extension.json", "Emote"],
     ["plugins-code/lifestyle/amitia-extension.json", "lifestyle"],
-    ["plugins-code/agent-identities/browser-profile/amitia-extension.json", "agent-identities"],
-    ["plugins-code/agent-identities/calendar/amitia-extension.json", "agent-identities"],
-    ["plugins-code/agent-identities/email/amitia-extension.json", "agent-identities"],
-    ["plugins-code/agent-identities/phone/amitia-extension.json", "agent-identities"],
-    ["plugins-code/agent-identities/wallet/amitia-extension.json", "agent-identities"],
+    ["plugins-code/dsh-compatible-host/amitia-extension.json", ""],
     ["plugins-code/channels/qq-clawbot/amitia-extension.json", ""],
     ["plugins-code/channels/qq-personal/amitia-extension.json", ""],
     ["plugins-code/channels/wechat/amitia-extension.json", ""],
   ]
   return specs.map(([manifestPath, directory]) => {
     const manifest = JSON.parse(readFileSync(join(root, manifestPath), "utf8"))
-    const name = String(manifest.plugin.id).replaceAll("/", ".")
-    const fileName = directory === "Emote"
+    const extensionID = manifest.plugin.id
+    const name = String(extensionID).replaceAll("/", ".")
+    const fileName = extensionID === "com.amitia/emote"
       ? `amitia-emote-${manifest.plugin.version}.amitiax`
-      : directory === "plugin-market"
+      : extensionID === "com.amitia/plugin-market"
         ? `amitia-plugin-market-${manifest.plugin.version}.amitiax`
-      : directory === "lifestyle"
-        ? `amitia-lifestyle-${manifest.plugin.version}.amitiax`
-      : directory === "agent-identities"
-          ? `${basename(dirname(join(root, manifestPath)))}-${manifest.plugin.version}.amitiax`
-          : `${name}-${manifest.plugin.version}.amitiax`
+        : extensionID === "com.amitia/lifestyle"
+          ? `amitia-lifestyle-${manifest.plugin.version}.amitiax`
+          : extensionID === "com.amitia/dsh-compatible-host"
+            ? `amitia-dsh-compatible-host-${manifest.plugin.version}.amitiax`
+            : `${name}-${manifest.plugin.version}.amitiax`
     return directory ? join(root, "plugin", directory, fileName) : join(root, "plugin", fileName)
   })
 }
 
 function categoryFor(extensionID) {
-  if (extensionID.startsWith("com.amitia/agent-identity-")) return "agent-identities"
   if (extensionID.startsWith("com.amitia/channel-")) return "channels"
   if (extensionID === "com.amitia/lifestyle") return "lifestyle"
   if (extensionID === "com.amitia/plugin-market") return "developer"
+  if (extensionID === "com.amitia/dsh-compatible-host") return "developer"
   return "productivity"
 }
 
@@ -110,13 +107,13 @@ async function main() {
   const filter = (process.env.AMITIA_PLUGIN_FILTER || "").trim()
   for (const path of packagePaths()) {
     if (!existsSync(path)) throw new Error(`package not found: ${path}`)
-    const sbomPath = `${path}.sbom.json`
-    if (!existsSync(sbomPath)) throw new Error(`SBOM not found: ${sbomPath}`)
     const data = readFileSync(path)
     const files = entries(data)
     const manifest = JSON.parse(files.get("manifest.json").toString("utf8"))
     const extensionID = manifest.plugin.id
     if (filter && extensionID !== filter) continue
+    const sbomPath = `${path}.sbom.json`
+    if (!existsSync(sbomPath)) throw new Error(`SBOM not found: ${sbomPath}`)
     const category = categories.get(categoryFor(extensionID))
     if (!category) throw new Error(`marketplace category not found: ${categoryFor(extensionID)}`)
     const form = new FormData()
