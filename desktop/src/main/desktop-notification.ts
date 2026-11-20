@@ -80,10 +80,5 @@ export function createDesktopNotification(
   platform: NodeJS.Platform = process.platform,
 ): Notification | null {
   if (!Notification.isSupported()) return null;
-  try {
-    return new Notification(desktopNotificationOptions(payload, platform));
-  } catch (error) {
-  console.error("[original-error]", error);
-return null;
-  }
+  return new Notification(desktopNotificationOptions(payload, platform));
 }

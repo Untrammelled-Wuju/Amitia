@@ -1,21 +1,23 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import type { BrowserWindow } from 'electron';
 import type { BusinessCoreClient } from './business-core-client';
+import { dialog } from 'electron';
 
-const notifications = vi.hoisted(() => ({ entries: [] as Array<{ options: Record<string, unknown>; handlers: Record<string, () => void>; show: ReturnType<typeof vi.fn> }>, supported: true }));
+const notifications = vi.hoisted(() => ({ entries: [] as Array<{ options: Record<string, unknown>; handlers: Record<string, (...args: unknown[]) => void>; show: ReturnType<typeof vi.fn> }>, supported: true }));
 const identityMock = vi.hoisted(() => vi.fn());
 const invalidateSessionMock = vi.hoisted(() => vi.fn());
 vi.mock('electron', () => ({
   Notification: class {
     static isSupported() { return notifications.supported; }
     private entry;
-    constructor(options: Record<string, unknown>) { this.entry = { options, handlers: {} as Record<string, () => void>, show: vi.fn() }; notifications.entries.push(this.entry); }
-    on(name: string, handler: () => void) { this.entry.handlers[name] = handler; }
+    constructor(options: Record<string, unknown>) { this.entry = { options, handlers: {} as Record<string, (...args: unknown[]) => void>, show: vi.fn() }; notifications.entries.push(this.entry); }
+    on(name: string, handler: (...args: unknown[]) => void) { this.entry.handlers[name] = handler; }
     show() { this.entry.show(); }
   },
   app: { getVersion: () => '26.2.0-beta.15', getLocale: () => 'zh-CN' },
   nativeTheme: { shouldUseDarkColors: false },
-  dialog: {},
+  dialog: { showMessageBox: vi.fn().mockResolvedValue({ response: 1 }) },
+  shell: { openExternal: vi.fn().mockResolvedValue(undefined) },
   BrowserWindow: class {},
 }));
 vi.mock('./device-mesh/local-agent-client', () => ({ getMeshIdentity: identityMock, getMeshCloudAuth: vi.fn() }));
@@ -31,7 +33,7 @@ function fixture() {
   const send = vi.fn();
   const win = { isDestroyed: () => false, show: vi.fn(), focus: vi.fn(), webContents: { send } };
   const host = new UIHostSSE({ businessCore: { fetch, fetchLocal: vi.fn() } as unknown as BusinessCoreClient, mainWindow: () => win as unknown as BrowserWindow });
-  const dispatch = (id: string, expiresAt?: string, payload: Record<string, unknown> = {}) => (host as unknown as { parseAndDispatch(raw: string): void }).parseAndDispatch('event: scheduled_notification\ndata: ' + JSON.stringify({ requestId: id, expiresAt, payload: { title: '喝水', body: '休息一下', conversationId: 'conversation', characterId: 'role', ownerId: 'core', sound: false, ...payload } }));
+  const dispatch = (id: string, expiresAt?: string, payload: Record<string, unknown> = {}) => (host as unknown as { parseAndDispatch(raw: string): void }).parseAndDispatch('event: scheduled_notification\ndata: ' + JSON.stringify({ requestId: id, expiresAt, payload: { title: '喝水', body: '休息一下', conversationId: 'conversation', characterId: 'role', ownerId: 'core', sound: false, ackable: true, ...payload } }));
   return { fetch, send, win, dispatch };
 }
 
@@ -143,6 +145,17 @@ it('notifies the desktop snapshot host for extension and ui changes without poll
 it('reports actual OS failure instead of reporting a successful display', () => {
   const f = fixture();
   f.dispatch('notification');
-  notifications.entries[0]!.handlers.failed!();
-  expect(f.fetch).toHaveBeenLastCalledWith('/api/notifications/scheduled/notification/ack', expect.objectContaining({ body: JSON.stringify({ state: 'display_failed' }) }));
+  const error = '未能完成操作。（UNErrorDomain错误1。）';
+  notifications.entries[0]!.handlers.failed!({}, error);
+  expect(f.fetch).toHaveBeenLastCalledWith('/api/notifications/scheduled/notification/ack', expect.objectContaining({ body: JSON.stringify({ state: 'display_failed', error }) }));
+  if (process.platform === 'darwin') {
+    expect(dialog.showMessageBox).toHaveBeenCalledWith(f.win, expect.objectContaining({ detail: error, buttons: ['打开通知设置', '关闭'] }));
+  }
+});
+
+it('does not write a receipt for display-only notifications', () => {
+  const f = fixture();
+  f.dispatch('notification', undefined, { ackable: false });
+  notifications.entries[0]!.handlers.failed!({}, 'desktop OS error');
+  expect(f.fetch).not.toHaveBeenCalled();
 });

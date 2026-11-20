@@ -89,6 +89,8 @@ export function isCoreErrorLine(line: string): boolean {
 }
 
 export function getCorePath(): string {
+  const developmentCore = process.env.AMITIA_DEV_CORE_PATH?.trim();
+  if (isDevMode() && developmentCore) return path.resolve(developmentCore);
   return resolveCorePath(getCoreResourcesPath());
 }
 

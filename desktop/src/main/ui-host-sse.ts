@@ -1,4 +1,5 @@
-import { app, BrowserWindow, dialog, nativeTheme } from "electron";
+import { app, BrowserWindow, dialog, nativeTheme, shell } from "electron";
+import { inspect } from "node:util";
 import { IPC_CHANNELS } from "../shared/ipc";
 import type { BusinessCoreClient } from "./business-core-client";
 import { getMeshIdentity } from "./device-mesh/local-agent-client";
@@ -26,6 +27,8 @@ interface RegisteredNotificationDevice {
   deviceId?: string;
   platform?: string;
 }
+
+let notificationPermissionDialogOpen = false;
 
 export interface UIHostSSEOptions {
   businessCore: BusinessCoreClient;
@@ -256,63 +259,100 @@ return false;
     if (!envelope.payload) return;
     const title = (envelope.payload.title as string) || "通知";
     const body = (envelope.payload.body as string) || "";
-    const notification = createDesktopNotification({
-      requestId: envelope.requestId,
-      type: String(envelope.payload.type || ""),
-      title,
-      body,
-      conversationId: String(envelope.payload.conversationId || ""),
-      sound: envelope.payload.sound !== false,
-    });
-    if (!notification) {
-      console.warn("[UIHostSSE] 当前桌面环境不支持系统通知");
-      return;
+    try {
+      const notification = createDesktopNotification({
+        requestId: envelope.requestId,
+        type: String(envelope.payload.type || ""),
+        title,
+        body,
+        conversationId: String(envelope.payload.conversationId || ""),
+        sound: envelope.payload.sound !== false,
+      });
+      if (!notification) {
+        console.warn("[UIHostSSE] 当前桌面环境不支持系统通知");
+        return;
+      }
+      notification.show();
+    } catch (error) {
+      console.error("[original-error]", error);
     }
-    notification.show();
   }
 
   private handleScheduledNotification(envelope: SSEEventEnvelope): void {
     const payload = envelope.payload;
     if (!payload) return;
-    const acknowledge = (state: string) => {
-      void this.businessCore.fetch('/api/notifications/scheduled/' + encodeURIComponent(envelope.requestId) + '/ack', { method: 'POST', body: JSON.stringify({ state }) }).catch((error) => {
-  console.error("[original-error]", error);
-});
+    const acknowledge = (state: string, error?: string) => {
+      if (payload.ackable !== true) return;
+      const path = '/api/notifications/scheduled/' + encodeURIComponent(envelope.requestId) + '/ack';
+      void this.businessCore.fetch(path, { method: 'POST', body: JSON.stringify({ state, error }) })
+        .then(async (response) => {
+          if (!response.ok) throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+        })
+        .catch((cause) => console.error("[original-error]", cause));
     };
-    const notification = createDesktopNotification({
-      requestId: envelope.requestId,
-      type: String(payload.type || ""),
-      title: String(payload.title || 'Amitia'),
-      body: String(payload.body || ''),
-      conversationId: String(payload.conversationId || ''),
-      groupTitle: String(payload.characterName || payload.groupTitle || ''),
-      sound: payload.sound !== false,
-    });
-    if (!notification) {
-      acknowledge('display_failed');
-      return;
+    const reportFailure = (cause: unknown) => {
+      console.warn("[UIHostSSE] 系统通知展示失败:", cause);
+      const error = typeof cause === "string" && cause.trim()
+        ? cause
+        : inspect(cause, { depth: null, maxStringLength: null, maxArrayLength: null });
+      acknowledge('display_failed', error);
+      if (process.platform === 'darwin' && error.includes('UNErrorDomain') && !notificationPermissionDialogOpen) {
+        const win = this.mainWindow();
+        if (win && !win.isDestroyed()) {
+          notificationPermissionDialogOpen = true;
+          void dialog.showMessageBox(win, {
+            type: 'warning',
+            title: '系统通知未能显示',
+            message: '请检查 macOS 通知权限和应用签名。',
+            detail: error,
+            buttons: ['打开通知设置', '关闭'],
+            defaultId: 0,
+            cancelId: 1,
+          }).then(async ({ response }) => {
+            if (response === 0) await shell.openExternal('x-apple.systempreferences:com.apple.Notifications-Settings.extension');
+          }).catch((failure) => console.error('[original-error]', failure)).finally(() => {
+            notificationPermissionDialogOpen = false;
+          });
+        }
+      }
+    };
+    try {
+      const notification = createDesktopNotification({
+        requestId: envelope.requestId,
+        type: String(payload.type || ""),
+        title: String(payload.title || 'Amitia'),
+        body: String(payload.body || ''),
+        conversationId: String(payload.conversationId || ''),
+        groupTitle: String(payload.characterName || payload.groupTitle || ''),
+        sound: payload.sound !== false,
+      });
+      if (!notification) {
+        reportFailure('当前桌面环境不支持系统通知（Notification.isSupported() = false）');
+        return;
+      }
+      notification.on('show', () => acknowledge('displayed'));
+      notification.on('failed', (_event, error) => {
+        reportFailure(error);
+      });
+      notification.on('click', () => {
+        acknowledge('clicked');
+        const win = this.mainWindow();
+        if (!win || win.isDestroyed()) return;
+        win.show();
+        win.focus();
+        const conversation = String(payload.conversationId || '');
+        const attentionId = String(payload.attentionId || '');
+        const target = conversation
+          ? '/chat?conversationId=' + encodeURIComponent(conversation) + '&characterId=' + encodeURIComponent(String(payload.characterId || '')) + '&ownerId=' + encodeURIComponent(String(payload.ownerId || '')) + (attentionId ? '&attentionId=' + encodeURIComponent(attentionId) : '')
+          : attentionId
+            ? '/reminders?attentionId=' + encodeURIComponent(attentionId)
+            : '';
+        if (target) win.webContents.send(IPC_CHANNELS.uiNavigate, target);
+      });
+      notification.show();
+    } catch (error) {
+      reportFailure(error);
     }
-    notification.on('show', () => acknowledge('displayed'));
-    notification.on('failed', (_event, error) => {
-      console.warn("[UIHostSSE] 系统通知展示失败:", error);
-      acknowledge('display_failed');
-    });
-    notification.on('click', () => {
-      acknowledge('clicked');
-      const win = this.mainWindow();
-      if (!win || win.isDestroyed()) return;
-      win.show();
-      win.focus();
-      const conversation = String(payload.conversationId || '');
-      const attentionId = String(payload.attentionId || '');
-      const target = conversation
-        ? '/chat?conversationId=' + encodeURIComponent(conversation) + '&characterId=' + encodeURIComponent(String(payload.characterId || '')) + '&ownerId=' + encodeURIComponent(String(payload.ownerId || '')) + (attentionId ? '&attentionId=' + encodeURIComponent(attentionId) : '')
-        : attentionId
-          ? '/reminders?attentionId=' + encodeURIComponent(attentionId)
-          : '';
-      if (target) win.webContents.send(IPC_CHANNELS.uiNavigate, target);
-    });
-    notification.show();
   }
 
   private async handleDialog(envelope: SSEEventEnvelope): Promise<void> {
