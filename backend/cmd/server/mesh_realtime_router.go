@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -16,6 +17,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	"github.com/u-ai/backend/internal/artifact"
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	voicewake "github.com/u-ai/backend/internal/devicemesh/wake"
@@ -314,7 +316,7 @@ func registerMeshRealtimePublicRoutes(router *gin.Engine, services *AppServices)
 					continue
 				}
 				visual = input.Attachment
-				write(gin.H{"type": "vision_status", "requestId": turnID, "data": gin.H{"available": true, "kind": input.Attachment.Kind, "hash": input.Attachment.Hash}})
+				write(gin.H{"type": "vision_status", "requestId": turnID, "data": gin.H{"available": true, "kind": input.Attachment.Kind, "hash": input.Attachment.SHA256}})
 			case "turn_end":
 				if active || turnID == "" {
 					write(gin.H{"type": "error", "message": "没有可提交的语音轮次"})
@@ -338,7 +340,27 @@ func registerMeshRealtimePublicRoutes(router *gin.Engine, services *AppServices)
 						state.Unlock()
 						write(gin.H{"type": "turn_ready", "requestId": request.RequestID})
 					}()
-					result, err := services.OwnedBusiness.RealtimeTurn(workerContext, request, turnPCM, turnVisual, func(event business.Event) error {
+					wav, wavErr := business.RealtimeWAV(turnPCM)
+					if wavErr != nil {
+						write(gin.H{"type": "error", "message": wavErr.Error()})
+						return
+					}
+					audio, artifactErr := services.Artifact.Service.Create(workerContext, artifact.CreateRequest{
+						OwnerSpaceID:  request.SpaceID,
+						OwnerDeviceID: request.DeviceID,
+						Kind:          artifact.KindAudio,
+						Filename:      "realtime-" + request.RequestID + ".wav",
+						MIMEType:      "audio/wav",
+						Source:        artifact.SourceChatUpload,
+						Reader:        bytes.NewReader(wav),
+						Unbounded:     true,
+					})
+					if artifactErr != nil {
+						write(gin.H{"type": "error", "message": artifactErr.Error()})
+						return
+					}
+					audioReference := chatAttachmentReference(audio)
+					result, err := services.OwnedBusiness.RealtimeTurn(workerContext, request, &audioReference, turnVisual, func(event business.Event) error {
 						if err := workerContext.Err(); err != nil {
 							return err
 						}

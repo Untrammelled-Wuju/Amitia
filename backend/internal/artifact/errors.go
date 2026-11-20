@@ -3,12 +3,17 @@ package artifact
 import "fmt"
 
 type ArtifactError struct {
-	Code string
-	Msg  string
+	Code  string
+	Msg   string
+	Cause error
 }
 
 func (e *ArtifactError) Error() string {
 	return fmt.Sprintf("artifact.%s: %s", e.Code, e.Msg)
+}
+
+func (e *ArtifactError) Unwrap() error {
+	return e.Cause
 }
 
 func ErrInvalidUpload(msg string) *ArtifactError {
@@ -44,11 +49,11 @@ func ErrBlobMissing(digest BlobDigest) *ArtifactError {
 }
 
 func ErrBlobWriteFailed(err error) *ArtifactError {
-	return &ArtifactError{Code: "blob_write_failed", Msg: err.Error()}
+	return &ArtifactError{Code: "blob_write_failed", Msg: err.Error(), Cause: err}
 }
 
 func ErrMetadataWriteFailed(err error) *ArtifactError {
-	return &ArtifactError{Code: "metadata_write_failed", Msg: err.Error()}
+	return &ArtifactError{Code: "metadata_write_failed", Msg: err.Error(), Cause: err}
 }
 
 func ErrInvalidReference(msg string) *ArtifactError {

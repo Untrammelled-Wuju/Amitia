@@ -125,9 +125,11 @@ func TestThreeRealCoreSixMemoryLayersSummaryAndContinuityKeepTheirOwners(t *test
 	if !coreSummary.Saved || coreSummary.OwnerID != b.core {
 		t.Fatal("统筹摘要不属于 B")
 	}
+	bContinuityScope := decodeThreeCoreMemoryResponse[business.QueryResult](t, b.request(t, a, http.MethodGet, "/api/device-mesh/v1/business/data?kind=continuity&characterId=one", nil, http.StatusOK)).Scope
+	b.request(t, a, http.MethodPost, "/api/device-mesh/v1/business/continuity", map[string]any{"requestId": "chat-scope-continuity", "characterId": "one", "action": "create", "title": "聊天归属不能写入持续事项", "expectedCoreId": b.core, "expectedOwnerId": b.core, "expectedModeRevision": coreReply.Scope.ModeRevision, "expectedExecutionScope": coreReply.Scope}, http.StatusConflict)
 	coreContinuity := decodeThreeCoreMemoryResponse[struct {
 		Document business.OwnedContinuity `json:"document"`
-	}](t, b.request(t, a, http.MethodPost, "/api/device-mesh/v1/business/continuity", map[string]any{"requestId": "core-continuity", "characterId": "one", "action": "create", "title": "B 专属持续事项", "expectedCoreId": b.core, "expectedOwnerId": b.core, "expectedModeRevision": coreReply.Scope.ModeRevision, "expectedExecutionScope": coreReply.Scope}, http.StatusOK))
+	}](t, b.request(t, a, http.MethodPost, "/api/device-mesh/v1/business/continuity", map[string]any{"requestId": "core-continuity", "characterId": "one", "action": "create", "title": "B 专属持续事项", "expectedCoreId": b.core, "expectedOwnerId": b.core, "expectedModeRevision": bContinuityScope.ModeRevision, "expectedExecutionScope": bContinuityScope}, http.StatusOK))
 	if coreContinuity.Document.OwnerID != b.core {
 		t.Fatal("统筹持续事项不属于 B")
 	}
@@ -161,7 +163,7 @@ func TestThreeRealCoreSixMemoryLayersSummaryAndContinuityKeepTheirOwners(t *test
 			t.Fatalf("切换后 %s 混入 B 专属数据或丢失设备历史", kind)
 		}
 	}
-	c.request(t, a, http.MethodPost, "/api/device-mesh/v1/business/continuity", map[string]any{"requestId": "stale-core-continuity", "characterId": "one", "action": "create", "title": "过期页面", "expectedCoreId": b.core, "expectedOwnerId": b.core, "expectedModeRevision": coreReply.Scope.ModeRevision, "expectedExecutionScope": coreReply.Scope}, http.StatusConflict)
+	c.request(t, a, http.MethodPost, "/api/device-mesh/v1/business/continuity", map[string]any{"requestId": "stale-core-continuity", "characterId": "one", "action": "create", "title": "过期页面", "expectedCoreId": b.core, "expectedOwnerId": b.core, "expectedModeRevision": bContinuityScope.ModeRevision, "expectedExecutionScope": bContinuityScope}, http.StatusConflict)
 	currentContinuity := decodeThreeCoreMemoryResponse[[]business.OwnedContinuity](t, c.request(t, a, http.MethodGet, "/api/device-mesh/v1/business/continuity?characterId=one", nil, http.StatusOK))
 	if len(currentContinuity) != 0 {
 		t.Fatal("B 专属持续事项被自动迁移到 C")
@@ -174,7 +176,8 @@ func TestThreeRealCoreSixMemoryLayersSummaryAndContinuityKeepTheirOwners(t *test
 	if !cSummary.Saved || cSummary.OwnerID != c.core || cSummary.Text != "摘要由 "+c.core+" 生成" {
 		t.Fatal("携带上下文后摘要没有由 C 计算并保存在 C")
 	}
-	c.request(t, a, http.MethodPost, "/api/device-mesh/v1/business/continuity", map[string]any{"requestId": "c-continuity", "characterId": "one", "action": "create", "title": "C 新持续事项", "expectedCoreId": c.core, "expectedOwnerId": c.core, "expectedModeRevision": cReply.Scope.ModeRevision, "expectedExecutionScope": cReply.Scope}, http.StatusOK)
+	cContinuityScope := decodeThreeCoreMemoryResponse[business.QueryResult](t, c.request(t, a, http.MethodGet, "/api/device-mesh/v1/business/data?kind=continuity&characterId=one", nil, http.StatusOK)).Scope
+	c.request(t, a, http.MethodPost, "/api/device-mesh/v1/business/continuity", map[string]any{"requestId": "c-continuity", "characterId": "one", "action": "create", "title": "C 新持续事项", "expectedCoreId": c.core, "expectedOwnerId": c.core, "expectedModeRevision": cContinuityScope.ModeRevision, "expectedExecutionScope": cContinuityScope}, http.StatusOK)
 	for _, owner := range []string{b.core, a.device.DeviceID.String()} {
 		assertThreeCorePrivateCopies(t, c, owner)
 	}

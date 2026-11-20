@@ -97,12 +97,13 @@ func RegisterRoutes(router *gin.RouterGroup, runtime *Runtime) {
 		}
 		var request struct {
 			State string `json:"state"`
+			Error string `json:"error"`
 		}
-		if c.ShouldBindJSON(&request) != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "通知回执无效"})
+		if err := c.ShouldBindJSON(&request); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
 			return
 		}
-		if err := runtime.AcknowledgeScheduled(c.Request.Context(), spaceID, deviceID, c.Param("id"), request.State); err != nil {
+		if err := runtime.AcknowledgeScheduled(c.Request.Context(), spaceID, deviceID, c.Param("id"), request.State, request.Error); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
 			return
 		}

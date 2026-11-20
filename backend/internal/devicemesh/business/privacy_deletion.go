@@ -20,6 +20,12 @@ func (e *Engine) ManagePrivacyDeletion(ctx context.Context, request Request, ope
 	var roleErr error
 	request, roleErr = e.PrivacyRequestRole(ctx, request)
 	if roleErr != nil {
+		if operation == "stats" && errors.Is(roleErr, coordination.ErrRoleRequired) {
+			if err := e.verifyEmptyPrivacyDeletionStatistics(ctx, request, roleErr); err != nil {
+				return nil, err
+			}
+			return emptyPrivacyDeletionStatistics(), nil
+		}
 		return nil, roleErr
 	}
 	if input.Target != nil {
@@ -52,7 +58,7 @@ func (e *Engine) ManagePrivacyDeletion(ctx context.Context, request Request, ope
 		}
 		selectedOwner = address[0]
 	}
-	result := map[string]any{"targets": []any{}, "checks": []any{}, "tombstones": 0, "completed": 0, "pending": 0, "failed": 0, "cleaned": 0}
+	result := emptyPrivacyDeletionStatistics()
 	matchedOwner := false
 	for _, owner := range owners {
 		if selectedOwner != "" && selectedOwner != owner {
@@ -97,6 +103,35 @@ func (e *Engine) ManagePrivacyDeletion(ctx context.Context, request Request, ope
 		return nil, errors.New("没有可核验的真实删除回执")
 	}
 	return result, nil
+}
+
+func emptyPrivacyDeletionStatistics() map[string]any {
+	return map[string]any{"targets": []any{}, "checks": []any{}, "tombstones": 0, "completed": 0, "pending": 0, "failed": 0, "cleaned": 0}
+}
+
+func (e *Engine) verifyEmptyPrivacyDeletionStatistics(ctx context.Context, request Request, roleErr error) error {
+	port, ok := e.data.(interface {
+		LocalPrivacyDeletionReceiptsEmpty(context.Context, coordination.ExecutionScope) (bool, error)
+	})
+	if !ok {
+		return roleErr
+	}
+	inner, scope, finish, err := e.coordination.Begin(ctx, request.SpaceID, request.DeviceID, request.TargetDeviceID, request.CoreID, "", request.RequestID)
+	if err != nil {
+		return errors.Join(roleErr, err)
+	}
+	defer finish()
+	if err := e.coordination.RequireCapability(inner, scope.SpaceID, scope.InitiatorDeviceID, scope.TargetDeviceID, "ai.chat"); err != nil {
+		return errors.Join(roleErr, err)
+	}
+	empty, err := port.LocalPrivacyDeletionReceiptsEmpty(inner, scope)
+	if err != nil {
+		return errors.Join(roleErr, err)
+	}
+	if !empty {
+		return roleErr
+	}
+	return e.coordination.Validate(inner, scope)
 }
 
 func (e *Engine) PrivacyRequestRole(ctx context.Context, request Request) (Request, error) {

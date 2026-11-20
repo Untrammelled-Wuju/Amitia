@@ -43,18 +43,34 @@ func (s *service) applyAppSettings(ctx context.Context, settings map[string]stri
 func (s *service) UpdateAppConfigContext(ctx context.Context, body map[string]interface{}) (map[string]interface{}, error) {
 	settings := map[string]string{}
 	for _, key := range []string{"theme", "language", "timezone"} {
-		if value, ok := body[key].(string); ok {
-			settings[key] = value
+		raw, ok := body[key]
+		if !ok {
+			continue
 		}
+		value, ok := raw.(string)
+		if !ok {
+			return nil, fmt.Errorf("配置项 %s 的值类型无效，应为字符串，实际为 %T", key, raw)
+		}
+		settings[key] = value
 	}
-	if nested, ok := body["settings"].(map[string]interface{}); ok {
+	if raw, ok := body["settings"]; ok {
+		nested, ok := raw.(map[string]interface{})
+		if !ok {
+			return nil, fmt.Errorf("配置块 settings 的值类型无效，应为对象，实际为 %T", raw)
+		}
 		for key, value := range nested {
-			if text, ok := value.(string); ok {
-				settings[key] = text
+			text, ok := value.(string)
+			if !ok {
+				return nil, fmt.Errorf("配置项 %s 的值类型无效，应为字符串，实际为 %T", key, value)
 			}
+			settings[key] = text
 		}
 	}
-	current, err := s.applyAppSettings(ctx, settings)
+	normalized, err := validateAppSettings(settings)
+	if err != nil {
+		return nil, err
+	}
+	current, err := s.applyAppSettings(ctx, normalized)
 	if err != nil {
 		return nil, err
 	}
@@ -72,19 +88,25 @@ func (s *service) UpdateAppConfigContext(ctx context.Context, body map[string]in
 
 func (s *service) UpdateMoodDetectionConfigContext(ctx context.Context, body map[string]interface{}) (map[string]interface{}, error) {
 	settings := map[string]string{}
-	if enabled, ok := body["enabled"].(bool); ok {
+	if raw, ok := body["enabled"]; ok {
+		enabled, ok := raw.(bool)
+		if !ok {
+			return nil, fmt.Errorf("配置项 enabled 的值类型无效，应为布尔值，实际为 %T", raw)
+		}
 		settings["mood_detection_enabled"] = strconv.FormatBool(enabled)
 	}
-	if threshold, ok := body["threshold"].(float64); ok {
-		if threshold < 0 {
-			threshold = 0
-		}
-		if threshold > 1 {
-			threshold = 1
+	if raw, ok := body["threshold"]; ok {
+		threshold, ok := raw.(float64)
+		if !ok {
+			return nil, fmt.Errorf("配置项 threshold 的值类型无效，应为数字，实际为 %T", raw)
 		}
 		settings["mood_detection_threshold"] = strconv.FormatFloat(threshold, 'f', -1, 64)
 	}
-	current, err := s.applyAppSettings(ctx, settings)
+	normalized, err := validateAppSettings(settings)
+	if err != nil {
+		return nil, err
+	}
+	current, err := s.applyAppSettings(ctx, normalized)
 	if err != nil {
 		return nil, err
 	}
@@ -98,17 +120,35 @@ func (s *service) UpdateMoodDetectionConfigContext(ctx context.Context, body map
 func (s *service) UpdateThemeContext(ctx context.Context, body map[string]interface{}) (map[string]interface{}, error) {
 	settings := map[string]string{}
 	for _, key := range []string{"preset", "theme"} {
-		if value, ok := body[key].(string); ok {
-			settings["theme"] = value
+		raw, ok := body[key]
+		if !ok {
+			continue
 		}
+		value, ok := raw.(string)
+		if !ok {
+			return nil, fmt.Errorf("配置项 %s 的值类型无效，应为字符串，实际为 %T", key, raw)
+		}
+		settings["theme"] = value
 	}
-	if value, ok := body["accentColor"].(string); ok {
+	if raw, ok := body["accentColor"]; ok {
+		value, ok := raw.(string)
+		if !ok {
+			return nil, fmt.Errorf("配置项 accentColor 的值类型无效，应为字符串，实际为 %T", raw)
+		}
 		settings["theme_accent_color"] = value
 	}
-	if value, ok := body["mode"].(string); ok {
+	if raw, ok := body["mode"]; ok {
+		value, ok := raw.(string)
+		if !ok {
+			return nil, fmt.Errorf("配置项 mode 的值类型无效，应为字符串，实际为 %T", raw)
+		}
 		settings["theme_mode"] = value
 	}
-	current, err := s.applyAppSettings(ctx, settings)
+	normalized, err := validateAppSettings(settings)
+	if err != nil {
+		return nil, err
+	}
+	current, err := s.applyAppSettings(ctx, normalized)
 	if err != nil {
 		return nil, err
 	}

@@ -580,6 +580,14 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 	if services.Artifact != nil && services.Artifact.Handler != nil {
 		services.Artifact.Handler.RegisterPublicMedia(r)
 	}
+	if services.DeviceMesh != nil && services.OwnedBusiness != nil && services.ChatAttachmentTickets == nil {
+		signer, signerErr := newChatAttachmentMediaTicketSigner()
+		if signerErr != nil {
+			return nil, signerErr
+		}
+		services.ChatAttachmentTickets = signer
+	}
+	registerChatAttachmentPublicMedia(r, services, spaceID)
 	var channelProviders channelinbound.ProviderDefinitionSource
 	if services.KernelContainer != nil {
 		channelProviders = services.KernelContainer.CapabilityProviders

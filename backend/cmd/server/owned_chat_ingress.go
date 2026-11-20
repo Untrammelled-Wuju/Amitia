@@ -84,7 +84,7 @@ func (r *ownedChatIngress) ExecuteEntry(ctx context.Context, req *interaction.Un
 			return nil, err
 		}
 	}
-	attachments, err := ownedIngressAttachments(ctx, req)
+	attachments, err := ownedIngressAttachments(ctx, req, r.services.Artifact, owner.SpaceID, owner.DeviceID, nil)
 	if err != nil {
 		return nil, err
 	}

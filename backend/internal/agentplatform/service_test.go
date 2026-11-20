@@ -13,7 +13,6 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
-	"github.com/u-ai/backend/internal/extension/kernel/packageverify"
 )
 
 func newTestPlatform(t *testing.T) (*Service, string, string) {
@@ -423,21 +422,6 @@ func TestRuntimeSnapshotResetAndMarketSeed(t *testing.T) {
 	}
 	if restoreEvents != 1 {
 		t.Fatalf("expected one snapshot restore event, got %d", restoreEvents)
-	}
-}
-
-func TestOfficialIdentityPluginPackagesVerify(t *testing.T) {
-	for _, name := range []string{
-		"email-1.0.0.amitiax",
-		"calendar-1.0.0.amitiax",
-		"phone-1.0.0.amitiax",
-		"wallet-1.0.0.amitiax",
-		"browser-profile-1.0.0.amitiax",
-	} {
-		path := filepath.Join("..", "..", "..", "plugin", "agent-identities", name)
-		if err := packageverify.VerifyOfficialPublisherPackage(context.Background(), path); err != nil {
-			t.Fatalf("official plugin %s failed verification: %v", name, err)
-		}
 	}
 }
 

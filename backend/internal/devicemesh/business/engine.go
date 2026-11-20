@@ -157,6 +157,8 @@ type Inference struct {
 	ConsolidateMemory   bool
 	Quote               *ReviewedQuote
 	Attachments         []Attachment
+	AttachmentReader    coordination.ChatAttachmentReader
+	AttachmentErrors    []string
 	Context             *ForwardedContext
 	Scope               coordination.ExecutionScope
 	ConversationID      string
@@ -503,6 +505,11 @@ func (e *Engine) RunEvents(ctx context.Context, request Request, emit func(Event
 		return Response{}, err
 	}
 	defer unlock()
+	if request.queuedHash != "" {
+		if err := e.claimQueuedChat(ctx, request); err != nil {
+			return Response{}, err
+		}
+	}
 	return e.runEventsLocked(ctx, request, emit)
 }
 
@@ -603,6 +610,9 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 	scope.TurnID = uuid.NewString()
 	scope.ExecutionID = uuid.NewString()
 	ctx = coordination.WithScope(ctx, scope)
+	if err := e.validateChatAttachments(ctx, scope, request.Attachments); err != nil {
+		return Response{}, err
+	}
 	conversationRoute, err := e.resolveRunConversationRoute(ctx, scope, request)
 	if err != nil {
 		return Response{}, fmt.Errorf("解析对话来源失败: %w", err)
@@ -874,8 +884,19 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 		input[0].Body = body(conversation)
 		input = append(input[:1], input[2:]...)
 	}
+	referenceMessageID := request.RequestID + "/user"
+	if prepared == nil && len(request.Attachments) > 0 {
+		if err := e.prepareChatAttachmentReferences(ctx, scope, request.Attachments, referenceMessageID); err != nil {
+			return Response{}, err
+		}
+	}
 	if err := e.submit(ctx, scope, "input", input, quoteDependencies...); err != nil {
 		return Response{}, fmt.Errorf("输入尚未确认保存: %w", err)
+	}
+	if prepared == nil && len(request.Attachments) > 0 {
+		if err := e.commitChatAttachmentReferences(context.WithoutCancel(ctx), scope, request.Attachments, referenceMessageID); err != nil {
+			return Response{}, fmt.Errorf("输入已保存，但附件引用确认失败: %w", err)
+		}
 	}
 	ctx, cancel := context.WithCancelCause(ctx)
 	activeKey := scope.SpaceID + "\x00" + scope.InitiatorDeviceID + "\x00" + scope.RequestID
@@ -931,6 +952,7 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 	inferenceSnapshot := workerInferenceSnapshot(request.WorkerRole, snapshot)
 	inferenceHistoricalSnapshot := workerHistoricalSnapshot(request.WorkerRole, historicalSnapshot)
 	inference := Inference{Quote: quote, Attachments: request.Attachments, Context: request.Context, Scope: scope, ConversationID: request.ConversationID, ProjectID: projectID, Workspaces: workspaces, PrimaryWorkspaceID: primaryWorkspaceID, WorkingDirectory: request.WorkingDirectory, Snapshot: inferenceSnapshot, HistoricalSnapshot: inferenceHistoricalSnapshot, PermissionMode: request.PermissionMode, Message: request.Message, Emit: emitCurrent, WorkerRole: request.WorkerRole}
+	inference.AttachmentReader, _ = e.data.(coordination.ChatAttachmentReader)
 	inference.SandboxRoot, inference.SandboxAllowNetwork = sandboxConstraintFromContext(ctx)
 	inference.PreparedReply = request.PreparedReply
 	if prepared != nil && snapshot.Group != nil {

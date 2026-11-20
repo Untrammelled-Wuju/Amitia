@@ -8,9 +8,9 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
+	"github.com/u-ai/backend/internal/artifact"
 	"github.com/u-ai/backend/internal/auth"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/devicemesh"
@@ -19,6 +19,8 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/interaction"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
 type fixedExtensionResourceResolver struct {
@@ -29,7 +31,7 @@ func (r fixedExtensionResourceResolver) ResolveResourceLink(string) (string, str
 	return "com.example/media", "data", r.fullPath, nil
 }
 
-func TestOwnedIngressMediaCarriesActualBytesAndRejectsUnsafeSources(t *testing.T) {
+func TestOwnedIngressMediaStreamsActualBytesAndRejectsUnsafeSources(t *testing.T) {
 	data := make([]byte, 46)
 	copy(data[:4], "RIFF")
 	binary.LittleEndian.PutUint32(data[4:8], 38)
@@ -44,12 +46,26 @@ func TestOwnedIngressMediaCarriesActualBytesAndRejectsUnsafeSources(t *testing.T
 	copy(data[36:40], "data")
 	binary.LittleEndian.PutUint32(data[40:44], 2)
 	encoded := base64.StdEncoding.EncodeToString(data)
-	items, err := ownedIngressAttachments(t.Context(), &interaction.UnifiedEntryRequest{AudioUrl: "data:audio/wav;base64," + encoded})
-	if err != nil || len(items) != 1 || items[0].Data != encoded || items[0].Kind != "audio" || items[0].Hash == "" {
-		t.Fatalf("actual media not forwarded: %+v %v", items, err)
+	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "artifacts.db")), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
 	}
-	for _, source := range []string{"/voice/../secret", "/voice/%2e%2e%2fsecret", "file:///secret", "http://127.0.0.1/private", "data:image/png;base64," + strings.Repeat("A", base64.StdEncoding.EncodedLen(1<<20)+4)} {
-		if _, _, _, err := ownedIngressMedia(t.Context(), source); err == nil {
+	if err := db.AutoMigrate(&artifact.Artifact{}, &artifact.ArtifactReference{}); err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := BuildArtifactRuntime(db, t.TempDir(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := runtime.Service.SetStorageDeviceID("phone"); err != nil {
+		t.Fatal(err)
+	}
+	items, err := ownedIngressAttachments(t.Context(), &interaction.UnifiedEntryRequest{AudioUrl: "data:audio/wav;base64," + encoded}, runtime, "cloud-core", "phone", nil)
+	if err != nil || len(items) != 1 || items[0].Kind != "audio" || items[0].ArtifactID == "" || items[0].OwnerDeviceID != "phone" || items[0].StorageDeviceID != "phone" || items[0].SizeBytes != int64(len(data)) {
+		t.Fatalf("actual media not stored and referenced: %+v %v", items, err)
+	}
+	for _, source := range []string{"/voice/../secret", "/voice/%2e%2e%2fsecret", "file:///secret", "http://127.0.0.1/private"} {
+		if _, _, _, err := ownedIngressMediaReader(t.Context(), source); err == nil {
 			t.Fatalf("unsafe media accepted: %.80s", source)
 		}
 	}
@@ -61,14 +77,14 @@ func TestTrustedExtensionMediaSourceResolvesSignedResource(t *testing.T) {
 	if err := os.WriteFile(imagePath, data, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	source, err := trustedExtensionMediaSource("/api/extension/resources/signed-token", fixedExtensionResourceResolver{fullPath: imagePath})
+	source, err := trustedExtensionMediaPath("/api/extension/resources/signed-token", fixedExtensionResourceResolver{fullPath: imagePath})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(source, "data:image/png;base64,") || !strings.HasSuffix(source, base64.StdEncoding.EncodeToString(data)) {
-		t.Fatalf("unexpected data URL: %.80s", source)
+	if source != imagePath {
+		t.Fatalf("unexpected trusted path: %s", source)
 	}
-	if _, err := trustedExtensionMediaSource("/api/extension/resources/signed-token", nil); err == nil {
+	if _, err := trustedExtensionMediaPath("/api/extension/resources/signed-token", nil); err == nil {
 		t.Fatal("expected missing resolver to fail")
 	}
 }

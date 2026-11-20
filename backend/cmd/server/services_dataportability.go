@@ -7,6 +7,7 @@ import (
 	"runtime"
 
 	"github.com/u-ai/backend/config"
+	"github.com/u-ai/backend/internal/artifact"
 	"github.com/u-ai/backend/internal/auth"
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/chat"
@@ -58,6 +59,7 @@ func buildDataPortabilityCoordinator(deps dataPortabilityDeps) (*dataportability
 		tts.NewVoiceBackupContributor(deps.DB),
 		embedding_config.NewEmbeddingBackupContributor(deps.DB),
 		system.NewResourceBackupContributor(deps.DB, deps.DataDir),
+		artifact.NewBackupContributor(deps.DB, deps.DataDir),
 		extension.NewExtensionBackupContributor(deps.KernelDB, deps.ExtSvc.Kernel),
 		workspace.NewWorkspaceBackupContributor(deps.DB),
 	}

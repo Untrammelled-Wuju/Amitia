@@ -21,17 +21,19 @@ import (
 )
 
 type CreateRequest struct {
-	OwnerSpaceID string
-	WorkspaceID  string
-	Kind         Kind
-	MIMEType     string
-	Filename     string
-	Source       Source
-	Width        int
-	Height       int
-	DurationMS   int64
-	Reader       io.Reader
-	MaxBytes     int64
+	OwnerSpaceID  string
+	OwnerDeviceID string
+	WorkspaceID   string
+	Kind          Kind
+	MIMEType      string
+	Filename      string
+	Source        Source
+	Width         int
+	Height        int
+	DurationMS    int64
+	Reader        io.Reader
+	MaxBytes      int64
+	Unbounded     bool
 }
 
 type ImportURLRequest struct {
@@ -46,10 +48,11 @@ type ImportURLRequest struct {
 }
 
 type Service struct {
-	blobStore BlobStore
-	repo      Repository
-	limits    UploadLimits
-	eventSink *RealEventSink
+	blobStore       BlobStore
+	repo            Repository
+	limits          UploadLimits
+	storageDeviceID string
+	eventSink       *RealEventSink
 }
 
 func NewService(blobStore BlobStore, repo Repository, limits UploadLimits) *Service {
@@ -65,6 +68,15 @@ func (s *Service) SetEventSink(sink *RealEventSink) {
 	s.eventSink = sink
 }
 
+func (s *Service) SetStorageDeviceID(deviceID string) error {
+	deviceID = strings.TrimSpace(deviceID)
+	if deviceID == "" || len(deviceID) > 256 || strings.ContainsAny(deviceID, "\x00\r\n/\\") {
+		return ErrInvalidUpload("invalid artifact storage device identity")
+	}
+	s.storageDeviceID = deviceID
+	return nil
+}
+
 func (s *Service) Create(ctx context.Context, req CreateRequest) (Artifact, error) {
 	if req.OwnerSpaceID == "" {
 		return Artifact{}, ErrInvalidUpload("missing owner")
@@ -72,12 +84,20 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (Artifact, erro
 	if req.Reader == nil {
 		return Artifact{}, ErrInvalidUpload("missing reader")
 	}
+	if req.Source == SourceChatUpload && strings.TrimSpace(req.OwnerDeviceID) == "" {
+		return Artifact{}, ErrInvalidUpload("chat upload requires device ownership")
+	}
+	if req.Source == SourceChatUpload && s.storageDeviceID == "" {
+		return Artifact{}, ErrInvalidUpload("chat upload requires storage device identity")
+	}
 	kind := req.Kind
 	if kind == "" {
 		kind = DeriveKindFromMIME(req.MIMEType)
 	}
 	maxBytes := req.MaxBytes
-	if maxBytes <= 0 {
+	if req.Unbounded {
+		maxBytes = -1
+	} else if maxBytes <= 0 {
 		maxBytes = s.limits.MaxBytesForKind(kind)
 	}
 	filename := SanitizeFilename(req.Filename)
@@ -86,7 +106,10 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (Artifact, erro
 	sniffReader := req.Reader
 	if mimeType == "" {
 		var buf [512]byte
-		n, _ := io.ReadFull(sniffReader, buf[:])
+		n, err := io.ReadFull(sniffReader, buf[:])
+		if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
+			return Artifact{}, fmt.Errorf("artifact: read content for type detection: %w", err)
+		}
 		if n > 0 {
 			mimeType = http.DetectContentType(buf[:n])
 			sniffReader = io.MultiReader(bytes.NewReader(buf[:n]), sniffReader)
@@ -101,29 +124,31 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (Artifact, erro
 	blobInfo, err := s.blobStore.Put(ctx, sniffReader, maxBytes)
 	if err != nil {
 		if isBlobTooLarge(err) {
-			return Artifact{}, ErrTooLarge(maxBytes)
+			return Artifact{}, &ArtifactError{Code: "too_large", Msg: err.Error(), Cause: err}
 		}
 		return Artifact{}, ErrBlobWriteFailed(err)
 	}
 	now := time.Now()
 	art := &Artifact{
-		ID:           ID("art_" + uuid.New().String()),
-		OwnerSpaceID: req.OwnerSpaceID,
-		WorkspaceID:  req.WorkspaceID,
-		Kind:         kind,
-		BlobDigest:   blobInfo.Digest,
-		SizeBytes:    blobInfo.SizeBytes,
-		MIMEType:     mimeType,
-		Filename:     filename,
-		Extension:    ext,
-		Status:       StatusReady,
-		Source:       req.Source,
-		Width:        req.Width,
-		Height:       req.Height,
-		DurationMS:   req.DurationMS,
-		Revision:     1,
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		ID:              ID("art_" + uuid.New().String()),
+		OwnerSpaceID:    req.OwnerSpaceID,
+		OwnerDeviceID:   req.OwnerDeviceID,
+		StorageDeviceID: s.storageDeviceID,
+		WorkspaceID:     req.WorkspaceID,
+		Kind:            kind,
+		BlobDigest:      blobInfo.Digest,
+		SizeBytes:       blobInfo.SizeBytes,
+		MIMEType:        mimeType,
+		Filename:        filename,
+		Extension:       ext,
+		Status:          StatusReady,
+		Source:          req.Source,
+		Width:           req.Width,
+		Height:          req.Height,
+		DurationMS:      req.DurationMS,
+		Revision:        1,
+		CreatedAt:       now,
+		UpdatedAt:       now,
 	}
 
 	sqlDB, err := s.repo.SqlDB()
@@ -139,6 +164,16 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (Artifact, erro
 
 	if err := s.repo.CreateSqlTx(tx, art); err != nil {
 		return Artifact{}, ErrMetadataWriteFailed(err)
+	}
+	if req.Source == SourceChatUpload {
+		ref := &ArtifactReference{ArtifactID: art.ID, ReferenceType: chatUploadOwnerReference, ReferenceID: req.OwnerDeviceID, CreatedAt: now}
+		if err := s.repo.InsertReferenceSqlTx(tx, ref); err != nil {
+			return Artifact{}, ErrMetadataWriteFailed(err)
+		}
+		ref = &ArtifactReference{ArtifactID: art.ID, ReferenceType: chatUploadStorageReference, ReferenceID: s.storageDeviceID, CreatedAt: now}
+		if err := s.repo.InsertReferenceSqlTx(tx, ref); err != nil {
+			return Artifact{}, ErrMetadataWriteFailed(err)
+		}
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -260,7 +295,10 @@ func isPublicArtifactIP(ip net.IP) bool {
 func (s *Service) GetByID(ctx context.Context, id ID) (Artifact, error) {
 	art, err := s.repo.GetByID(id)
 	if err != nil {
-		return Artifact{}, ErrNotFound(id)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return Artifact{}, &ArtifactError{Code: "not_found", Msg: fmt.Sprintf("%s: %v", id, err), Cause: err}
+		}
+		return Artifact{}, fmt.Errorf("artifact: get metadata %s: %w", id, err)
 	}
 	if art.Status == StatusDeleted {
 		return Artifact{}, ErrDeleted(id)
@@ -271,25 +309,97 @@ func (s *Service) GetByID(ctx context.Context, id ID) (Artifact, error) {
 func (s *Service) GetOwned(ctx context.Context, ownerSpaceID string, id ID) (Artifact, error) {
 	art, err := s.repo.GetByOwnerAndID(ownerSpaceID, id)
 	if err != nil {
-		return Artifact{}, ErrNotFound(id)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return Artifact{}, &ArtifactError{Code: "not_found", Msg: fmt.Sprintf("%s: %v", id, err), Cause: err}
+		}
+		return Artifact{}, fmt.Errorf("artifact: get owned metadata: %w", err)
 	}
 	if art.Status == StatusDeleted {
 		return Artifact{}, ErrDeleted(id)
 	}
+	if art.Source == SourceChatUpload {
+		owner, storage, err := s.chatUploadLocations(ctx, id)
+		if err != nil {
+			return Artifact{}, err
+		}
+		art.OwnerDeviceID, art.StorageDeviceID = owner, storage
+	}
 	return *art, nil
+}
+
+const chatUploadOwnerReference = "chat_upload_owner_device"
+const chatUploadStorageReference = "chat_upload_storage_device"
+
+func (s *Service) GetOwnedForDevice(ctx context.Context, ownerSpaceID, ownerDeviceID string, id ID) (Artifact, error) {
+	art, err := s.GetOwned(ctx, ownerSpaceID, id)
+	if err != nil {
+		return Artifact{}, err
+	}
+	if art.Source != SourceChatUpload {
+		return art, nil
+	}
+	if strings.TrimSpace(ownerDeviceID) == "" {
+		return Artifact{}, ErrNotOwned(id)
+	}
+	var owners []ArtifactReference
+	err = s.repo.DB().WithContext(ctx).Where("artifact_id = ? AND reference_type = ?", id, chatUploadOwnerReference).Limit(2).Find(&owners).Error
+	if err != nil {
+		return Artifact{}, fmt.Errorf("artifact: verify chat upload device owner: %w", err)
+	}
+	if len(owners) != 1 || owners[0].ReferenceID != ownerDeviceID {
+		return Artifact{}, ErrNotOwned(id)
+	}
+	return art, nil
+}
+
+func (s *Service) chatUploadLocations(ctx context.Context, id ID) (string, string, error) {
+	var rows []ArtifactReference
+	if err := s.repo.DB().WithContext(ctx).Where("artifact_id = ? AND reference_type IN ?", id, []string{chatUploadOwnerReference, chatUploadStorageReference}).Find(&rows).Error; err != nil {
+		return "", "", fmt.Errorf("artifact: read chat upload ownership: %w", err)
+	}
+	owner, storage := "", ""
+	for _, row := range rows {
+		switch row.ReferenceType {
+		case chatUploadOwnerReference:
+			if owner != "" {
+				return "", "", ErrInvalidReference("duplicate chat upload owner")
+			}
+			owner = row.ReferenceID
+		case chatUploadStorageReference:
+			if storage != "" {
+				return "", "", ErrInvalidReference("duplicate chat upload storage")
+			}
+			storage = row.ReferenceID
+		}
+	}
+	if owner == "" || storage == "" {
+		return "", "", ErrInvalidReference("chat upload ownership is incomplete")
+	}
+	return owner, storage, nil
+}
+
+func (s *Service) GetChatUploadReference(ctx context.Context, ownerSpaceID, ownerDeviceID, storageDeviceID string, id ID) (Artifact, error) {
+	art, err := s.GetOwned(ctx, ownerSpaceID, id)
+	if err != nil {
+		return Artifact{}, err
+	}
+	if art.Source != SourceChatUpload || art.OwnerDeviceID != ownerDeviceID || art.StorageDeviceID != storageDeviceID {
+		return Artifact{}, ErrNotOwned(id)
+	}
+	return art, nil
 }
 
 func (s *Service) Delete(ctx context.Context, ownerSpaceID string, id ID) error {
 	art, err := s.repo.GetByOwnerAndID(ownerSpaceID, id)
 	if err != nil {
-		return ErrNotFound(id)
+		return &ArtifactError{Code: "not_found", Msg: fmt.Sprintf("%s: %v", id, err), Cause: err}
 	}
 	if art.Status == StatusDeleted {
 		return ErrDeleted(id)
 	}
 	count, err := s.repo.CountReferences(id)
 	if err != nil {
-		return err
+		return fmt.Errorf("artifact: count references before deletion: %w", err)
 	}
 	if count > 0 {
 		return ErrInUse(id)
@@ -297,21 +407,21 @@ func (s *Service) Delete(ctx context.Context, ownerSpaceID string, id ID) error 
 
 	sqlDB, err := s.repo.SqlDB()
 	if err != nil {
-		return err
+		return ErrMetadataWriteFailed(err)
 	}
 
 	tx, err := sqlDB.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return ErrMetadataWriteFailed(err)
 	}
 	defer tx.Rollback()
 
 	if err := s.repo.SoftDeleteSqlTx(tx, id); err != nil {
-		return err
+		return ErrMetadataWriteFailed(err)
 	}
 
 	if err := tx.Commit(); err != nil {
-		return err
+		return ErrMetadataWriteFailed(err)
 	}
 	if s.eventSink != nil {
 		if err := s.eventSink.PublishDeleted(ctx, art); err != nil {
@@ -326,12 +436,18 @@ func (s *Service) Delete(ctx context.Context, ownerSpaceID string, id ID) error 
 func (s *Service) OpenBlob(ctx context.Context, digest BlobDigest) (io.ReadSeekCloser, BlobInfo, error) {
 	rc, info, err := s.blobStore.Open(ctx, digest)
 	if err != nil {
-		return nil, BlobInfo{}, ErrBlobMissing(digest)
+		return nil, BlobInfo{}, &ArtifactError{Code: "blob_missing", Msg: fmt.Sprintf("%s: %v", digest, err), Cause: err}
 	}
 	return rc, info, nil
 }
 
 func (s *Service) RegisterReference(artifactID ID, refType string, refID string) error {
+	if refType == chatUploadOwnerReference {
+		return ErrInvalidReference("chat upload ownership references are reserved")
+	}
+	if refType == chatUploadStorageReference {
+		return ErrInvalidReference("chat upload storage references are reserved")
+	}
 	sqlDB, err := s.repo.SqlDB()
 	if err != nil {
 		return ErrMetadataWriteFailed(err)
@@ -353,6 +469,12 @@ func (s *Service) RegisterReference(artifactID ID, refType string, refID string)
 }
 
 func (s *Service) RegisterReferenceSqlTx(tx *sql.Tx, artifactID ID, refType string, refID string) error {
+	if refType == chatUploadOwnerReference {
+		return ErrInvalidReference("chat upload ownership references are reserved")
+	}
+	if refType == chatUploadStorageReference {
+		return ErrInvalidReference("chat upload storage references are reserved")
+	}
 	return s.repo.InsertReferenceSqlTx(tx, &ArtifactReference{
 		ArtifactID:    artifactID,
 		ReferenceType: refType,
@@ -362,6 +484,12 @@ func (s *Service) RegisterReferenceSqlTx(tx *sql.Tx, artifactID ID, refType stri
 }
 
 func (s *Service) RegisterReferenceGormTx(tx *gorm.DB, artifactID ID, refType string, refID string) error {
+	if refType == chatUploadOwnerReference {
+		return ErrInvalidReference("chat upload ownership references are reserved")
+	}
+	if refType == chatUploadStorageReference {
+		return ErrInvalidReference("chat upload storage references are reserved")
+	}
 	return tx.Create(&ArtifactReference{
 		ArtifactID:    artifactID,
 		ReferenceType: refType,
@@ -371,10 +499,22 @@ func (s *Service) RegisterReferenceGormTx(tx *gorm.DB, artifactID ID, refType st
 }
 
 func (s *Service) UnregisterReferenceGormTx(tx *gorm.DB, artifactID ID, refType string, refID string) error {
+	if refType == chatUploadOwnerReference {
+		return ErrInvalidReference("chat upload ownership references are reserved")
+	}
+	if refType == chatUploadStorageReference {
+		return ErrInvalidReference("chat upload storage references are reserved")
+	}
 	return tx.Where("artifact_id = ? AND reference_type = ? AND reference_id = ?", artifactID, refType, refID).Delete(&ArtifactReference{}).Error
 }
 
 func (s *Service) UnregisterReference(artifactID ID, refType string, refID string) error {
+	if refType == chatUploadOwnerReference {
+		return ErrInvalidReference("chat upload ownership references are reserved")
+	}
+	if refType == chatUploadStorageReference {
+		return ErrInvalidReference("chat upload storage references are reserved")
+	}
 	sqlDB, err := s.repo.SqlDB()
 	if err != nil {
 		return ErrMetadataWriteFailed(err)
@@ -391,6 +531,9 @@ func (s *Service) UnregisterReference(artifactID ID, refType string, refID strin
 }
 
 func (s *Service) UnregisterReferenceSqlTx(tx *sql.Tx, artifactID ID, refType string, refID string) error {
+	if refType == chatUploadOwnerReference {
+		return ErrInvalidReference("chat upload ownership references are reserved")
+	}
 	return s.repo.RemoveReferenceSqlTx(tx, artifactID, refType, refID)
 }
 

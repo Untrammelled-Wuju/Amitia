@@ -161,13 +161,8 @@ func (e *Engine) Continuity(ctx context.Context, request Request, mutation Conti
 		return OwnedContinuity{}, coordination.Acknowledgement{}, err
 	}
 	defer finish()
-	if mutation.ExpectedScope != nil {
-		expectedPage := summaryAuthority(*mutation.ExpectedScope)
-		actualPage := summaryAuthority(scope)
-		actualPage.ResourceOwnerID = actualPage.TargetDeviceID
-		if expectedPage != actualPage {
-			return OwnedContinuity{}, coordination.Acknowledgement{}, coordination.ErrScopeExpired
-		}
+	if mutation.ExpectedScope != nil && summaryAuthority(*mutation.ExpectedScope) != summaryAuthority(scope) {
+		return OwnedContinuity{}, coordination.Acknowledgement{}, coordination.ErrScopeExpired
 	}
 	if mutation.ExpectedCoreID != "" && mutation.ExpectedCoreID != scope.CoreID || mutation.ExpectedOwnerID != "" && mutation.ExpectedOwnerID != scope.ResourceOwnerID || mutation.ExpectedModeRevision > 0 && mutation.ExpectedModeRevision != scope.ModeRevision {
 		return OwnedContinuity{}, coordination.Acknowledgement{}, coordination.ErrScopeExpired

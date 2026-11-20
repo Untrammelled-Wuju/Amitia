@@ -130,6 +130,22 @@ func (s *service) validateModelConfiguration(ctx context.Context, cfg *ModelConf
 	}
 	provider := strings.TrimSpace(cfg.APIType)
 	if !localmodel.IsEmbedded(provider) {
+		if cfg.Protocol != "" {
+			allowed := []string{string(resolveProtocol(&ModelConfig{APIType: provider}))}
+			for _, descriptor := range s.repo.ListProviders() {
+				if descriptor.ID == provider {
+					allowed = descriptor.SupportedProtocols
+					break
+				}
+			}
+			valid := false
+			for _, protocol := range allowed {
+				valid = valid || protocol == cfg.Protocol
+			}
+			if !valid {
+				return fmt.Errorf("%w: apiType %q 不支持 protocol %q（可用: %v）", errInvalidModelConfiguration, provider, cfg.Protocol, allowed)
+			}
+		}
 		if strings.TrimSpace(cfg.BaseURL) == "" {
 			return fmt.Errorf("%w: baseUrl 不能为空", errInvalidModelConfiguration)
 		}

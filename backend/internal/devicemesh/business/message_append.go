@@ -115,6 +115,11 @@ func (e *Engine) AppendOwnedMessages(ctx context.Context, request Request, appen
 				current = coordination.WithScope(current, scope)
 			}
 		}
+		for _, part := range appendRequest.Parts {
+			if err := e.validateChatAttachments(current, scope, part.Attachments); err != nil {
+				return err
+			}
+		}
 		unlock := e.lock("append-conversation\x00" + scope.ResourceOwnerID + "\x00" + appendRequest.ConversationID)
 		defer unlock()
 		port, ok := e.data.(coordination.ResourcePort)
@@ -192,6 +197,11 @@ func (e *Engine) AppendOwnedMessages(ctx context.Context, request Request, appen
 		mutations := []coordination.Mutation{}
 		outputs := []map[string]any{}
 		text := ""
+		type boundAttachment struct {
+			reference Attachment
+			messageID string
+		}
+		bound := []boundAttachment{}
 		now := time.Now().UTC().Format(time.RFC3339Nano)
 		result.DeliveryGroupID = prefix
 		result.Channel, result.Role, result.Status = channel, appendRequest.Role, "sent"
@@ -211,6 +221,9 @@ func (e *Engine) AppendOwnedMessages(ctx context.Context, request Request, appen
 			message := map[string]any{"id": id, "conversationId": appendRequest.ConversationID, "characterId": scope.RoleID, "ownerId": scope.ResourceOwnerID, "role": appendRequest.Role, "content": content, "msgType": part.Type, "source": appendRequest.Source, "status": status, "requestId": request.RequestID, "sequence": sequence + int64(i), "createdAt": now, "extensionType": part.ExtensionType, "mimeType": part.MIMEType, "altText": part.AltText, "originalAsset": part.URL, "fallbackAsset": part.FallbackURL, "isAnimated": part.IsAnimated, "mediaWidth": part.Width, "mediaHeight": part.Height, "metadata": part.Metadata, "deliveryGroupId": prefix, "deliverySequence": i + 1, "replyToMessageId": appendRequest.ReplyToMessageID, "executionScope": scope}
 			if len(part.Attachments) > 0 {
 				message["attachments"] = part.Attachments
+				for _, attachment := range part.Attachments {
+					bound = append(bound, boundAttachment{reference: attachment, messageID: id})
+				}
 			}
 			switch part.Type {
 			case "image":
@@ -242,7 +255,20 @@ func (e *Engine) AppendOwnedMessages(ctx context.Context, request Request, appen
 			pending := coordination.PendingChannelDelivery{Pending: true, Scope: deliveryScope, Request: coordination.ChannelDeliveryRequest{ConversationID: appendRequest.ConversationID, RequestID: request.RequestID, Channel: channel, PeerID: peer, Text: text, Outputs: body(outputs)}}
 			mutations = append(mutations, coordination.Mutation{Kind: "checkpoint", ID: "channel-delivery/" + prefix, RoleID: scope.RoleID, Body: body(pending)})
 		}
-		return e.submit(current, scope, "append", mutations)
+		for _, item := range bound {
+			if err := e.prepareChatAttachmentReferences(current, scope, []Attachment{item.reference}, item.messageID); err != nil {
+				return err
+			}
+		}
+		if err := e.submit(current, scope, "append", mutations); err != nil {
+			return err
+		}
+		for _, item := range bound {
+			if err := e.commitChatAttachmentReferences(context.WithoutCancel(current), scope, []Attachment{item.reference}, item.messageID); err != nil {
+				return fmt.Errorf("消息已保存，但附件引用 %s 确认失败: %w", item.reference.ArtifactID, err)
+			}
+		}
+		return nil
 	}
 	if request.ExpectedScope != nil {
 		err = e.WithExecutionScope(ctx, *request.ExpectedScope, run)

@@ -35,6 +35,17 @@ func TestContinuityOriginalIntentRejectsOwnershipChangeAndForeignRealm(t *testin
 	if _, _, err := engine.Continuity(t.Context(), request, ContinuityMutation{ID: created.Thread.ID, Action: "pause", ExpectedRevision: 1, ExpectedScope: &foreign}); !errors.Is(err, coordination.ErrScopeExpired) {
 		t.Fatalf("foreign realm intent admitted: %v", err)
 	}
+	current, err := engine.Query(t.Context(), request, coordination.DataQuery{ResourceKind: "continuity", Management: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.RequestID = "current-core-create"
+	coordinated, _, err := engine.Continuity(t.Context(), request, ContinuityMutation{
+		Action: "create", Title: "当前 Core 事项", ExpectedScope: &current.Scope, ExpectedOwnerID: "core",
+	})
+	if err != nil || coordinated.OwnerID != "core" || coordinated.Thread.Revision != 1 {
+		t.Fatalf("current Core intent failed: %+v %v", coordinated, err)
+	}
 	rows, err := coordination.NewOwnershipStore(db, "a").List(t.Context(), "continuity", "role", false)
 	if err != nil || len(rows) != 1 || rows[0].Revision != 1 {
 		t.Fatalf("rejected intent changed owner data: %+v %v", rows, err)

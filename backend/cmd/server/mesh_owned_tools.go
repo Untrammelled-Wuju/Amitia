@@ -174,9 +174,12 @@ func (r *meshOwnedToolRuntime) Tools(ctx context.Context, inference business.Inf
 		}
 	}
 	for _, definition := range available {
-		if isChatMultiAgentTool(definition.Function.Name) {
+		if isChatMultiAgentTool(definition.Function.Name) || definition.Function.Name == chatAttachmentReadTool || definition.Function.Name == chatAttachmentExtractTool {
 			return nil, errors.New("原生任务工具名称与已注册能力冲突")
 		}
+	}
+	if r.services.DeviceMesh != nil && inference.ConversationID != "" {
+		allowed = append(allowed, chatAttachmentToolDefinition(), chatAttachmentExtractToolDefinition())
 	}
 	if r.native != nil {
 		allowed = append(allowed, r.native.ModelTools(ctx, r.nativeScope(ctx, inference))...)
@@ -206,6 +209,12 @@ func (r *meshOwnedToolRuntime) Execute(ctx context.Context, inference business.I
 	}()
 	if name == business.GroupInviteReplyTool {
 		return r.executeGroupInvite(inference, call, input)
+	}
+	if name == chatAttachmentReadTool {
+		return r.readChatAttachment(ctx, inference, input)
+	}
+	if name == chatAttachmentExtractTool {
+		return r.extractChatAttachment(ctx, inference, input)
 	}
 	if isChatMultiAgentTool(name) || isAgentRunMessageTool(name) {
 		if r.native == nil || (inference.InternalWorker && isChatMultiAgentTool(name)) {

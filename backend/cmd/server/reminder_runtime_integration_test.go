@@ -77,7 +77,7 @@ func newReminderRuntimeFixture(t *testing.T, coordinated bool) *reminderRuntimeF
 	if err := json.Unmarshal(encoded, &response); err != nil {
 		t.Fatal(err)
 	}
-	if !response.Data.Saved || response.Data.OwnerID != core || response.Data.ExecutionMode != "cloud-core" || response.Data.ConversationID == "" {
+	if !response.Data.Saved || response.Data.OwnerID != core || response.Data.ExecutionMode != "cloud-core" || response.Data.ConversationID != "" {
 		t.Fatalf("真实创建回执无效：%s", encoded)
 	}
 	calculator := schedule.NewScheduleCalculator(clock)
@@ -141,8 +141,12 @@ func TestReminderRuntimeCloudCoreExecutesAfterActualClientDisconnect(t *testing.
 	if len(rows) != 1 || len(f.ownedMessages(t, f.client.device.DeviceID.String())) != 0 {
 		t.Fatalf("消息没有只写入云核心真实 OwnershipStore：%+v", rows)
 	}
+	conversations, err := coordination.NewOwnershipStore(f.provider.services.KernelContainer.DeviceRegistry.Database(), f.provider.core).List(t.Context(), "conversation", "one", false)
+	if err != nil || len(conversations) != 1 {
+		t.Fatalf("未创建提醒对话：%+v %v", conversations, err)
+	}
 	var message map[string]any
-	if json.Unmarshal(rows[0].Body, &message) != nil || message["role"] != "assistant" || message["conversationId"] != f.item.ConversationID {
+	if json.Unmarshal(rows[0].Body, &message) != nil || message["role"] != "assistant" || message["conversationId"] != conversations[0].ID {
 		t.Fatalf("角色对话消息未实际保存：%s", rows[0].Body)
 	}
 	caller := reminder.Caller{SpaceID: f.provider.core, DeviceID: f.client.device.DeviceID.String()}
@@ -151,7 +155,7 @@ func TestReminderRuntimeCloudCoreExecutesAfterActualClientDisconnect(t *testing.
 		t.Fatalf("真实执行历史缺失保存确认：%+v %d %v", history, total, err)
 	}
 	var delivery reminder.DeliveryResult
-	if json.Unmarshal(history[0].Result, &delivery) != nil || !delivery.MessageSaved || delivery.MessageID != rows[0].ID {
+	if json.Unmarshal(history[0].Result, &delivery) != nil || !delivery.MessageSaved || delivery.MessageID != rows[0].ID || delivery.ConversationID != message["conversationId"] {
 		t.Fatalf("执行历史伪造保存回执：%s", history[0].Result)
 	}
 }

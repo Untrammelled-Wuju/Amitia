@@ -68,6 +68,17 @@ func TestModelConfigurationRejectsInvalidWrites(t *testing.T) {
 	request("PUT", "/models/1", `{"modelName":false}`, response.InvalidParams, "modelName")
 	request("PUT", "/models/1", `{"modelName":" "}`, response.InvalidParams, "modelName")
 	request("PUT", "/models/1", `{"modelName":"updated"}`, response.OK, "")
+	request("PUT", "/models/1", `{"apiType":"openai-compatible","protocol":"ollama_chat"}`, response.InvalidParams, "不支持 protocol")
+	request("PUT", "/models/1", `{"apiType":"openai"}`, response.InvalidParams, "必须指定 protocol")
+	unchanged, err := repo.GetModelByID(1)
+	if err != nil || unchanged.APIType != "ollama" {
+		t.Fatalf("invalid protocol update persisted: %+v, %v", unchanged, err)
+	}
+	request("PUT", "/models/1", `{"apiType":"openai-compatible"}`, response.OK, "")
+	changed, err := repo.GetModelByID(1)
+	if err != nil || changed.APIType != "openai-compatible" || changed.Protocol != string(ProtocolOpenAIChat) {
+		t.Fatalf("model type and protocol were not updated together: %+v, %v", changed, err)
+	}
 
 	invalid := ModelConfig{APIType: "openai", BaseURL: "http://127.0.0.1:11434"}
 	if err := repo.CreateModel(&invalid); err != nil {

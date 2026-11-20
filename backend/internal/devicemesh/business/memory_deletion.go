@@ -279,6 +279,12 @@ func (e *Engine) MemoryDeletionStatistics(ctx context.Context, request Request) 
 	var roleErr error
 	request, roleErr = e.PrivacyRequestRole(ctx, request)
 	if roleErr != nil {
+		if errors.Is(roleErr, coordination.ErrRoleRequired) {
+			if err := e.verifyEmptyPrivacyDeletionStatistics(ctx, request, roleErr); err != nil {
+				return nil, err
+			}
+			return map[string]interface{}{"memoryDeletions": int64(0), "memoryCompleted": int64(0), "memoryPending": int64(0)}, nil
+		}
 		return nil, roleErr
 	}
 	ctx, scope, finish, err := e.memoryManagementScope(ctx, request, false)

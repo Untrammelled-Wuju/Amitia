@@ -3,6 +3,8 @@ package chat
 import (
 	"context"
 	"fmt"
+
+	"github.com/u-ai/backend/internal/chat/localmodel"
 )
 
 type modelConfigurationService interface {
@@ -56,7 +58,7 @@ func (s *contextualModelConfiguration) UpdateModel(id int, updates map[string]in
 	}
 	normalized := normalizeConfigUpdates(updates)
 	for _, field := range []struct{ column, name string }{
-		{"base_url", "baseUrl"}, {"model_name", "modelName"}, {"api_type", "apiType"},
+		{"base_url", "baseUrl"}, {"model_name", "modelName"}, {"api_type", "apiType"}, {"protocol", "protocol"},
 	} {
 		if value, exists := normalized[field.column]; exists {
 			if _, ok := value.(string); !ok {
@@ -65,6 +67,19 @@ func (s *contextualModelConfiguration) UpdateModel(id int, updates map[string]in
 		}
 	}
 	projected := projectModelConfigUpdate(*current, normalized)
+	protocol, _ := normalized["protocol"].(string)
+	if projected.APIType != current.APIType && protocol == "" {
+		for _, provider := range s.repo.ListProviders() {
+			if provider.ID == projected.APIType && len(provider.SupportedProtocols) > 1 {
+				return nil, fmt.Errorf("%w: 切换到 %s 时必须指定 protocol", errInvalidModelConfiguration, projected.APIType)
+			}
+		}
+		projected.Protocol = ""
+		if !localmodel.IsEmbedded(projected.APIType) {
+			projected.Protocol = string(resolveProtocol(projected))
+		}
+		normalized["protocol"] = projected.Protocol
+	}
 	if err := s.parent.validateModelConfiguration(context.Background(), projected, projected.IsActive == 1 || current.IsActive == 1); err != nil {
 		return nil, err
 	}
@@ -74,7 +89,7 @@ func (s *contextualModelConfiguration) UpdateModel(id int, updates map[string]in
 	if _, ok := normalized["max_output_tokens"]; !ok && projected.MaxOutputTokens > 0 {
 		normalized["max_output_tokens"] = projected.MaxOutputTokens
 	}
-	if err := s.repo.UpdateModel(id, normalized); err != nil {
+	if err := s.repo.UpdateModel(id, current.APIType, current.Protocol, normalized); err != nil {
 		return nil, fmt.Errorf("更新失败: %w", err)
 	}
 	s.parent.invalidateLocalModels(context.Background())

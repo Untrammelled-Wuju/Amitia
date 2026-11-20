@@ -1363,6 +1363,7 @@ func (a *conversationMessageSenderAdapter) SendConversationMessage(ctx context.C
 type conversationMessageAppenderAdapter struct {
 	engine          *business.Engine
 	coreID          string
+	artifacts       *ArtifactRuntime
 	resourceLinks   extensionResourceResolver
 	channelDelivery channelDeliveryRecovery
 }
@@ -1422,18 +1423,15 @@ func (a *conversationMessageAppenderAdapter) AppendConversationMessages(ctx cont
 			media := &interaction.UnifiedEntryRequest{}
 			switch strings.ToLower(strings.TrimSpace(part.Type)) {
 			case "image":
-				media.ImageUrl, err = trustedExtensionMediaSource(part.URL, a.resourceLinks)
+				media.ImageUrl = part.URL
 			case "audio":
-				media.AudioUrl, err = trustedExtensionMediaSource(part.URL, a.resourceLinks)
+				media.AudioUrl = part.URL
 			case "video":
-				media.VideoUrl, err = trustedExtensionMediaSource(part.URL, a.resourceLinks)
+				media.VideoUrl = part.URL
 			default:
 				continue
 			}
-			if err != nil {
-				return kernel.ConversationMessageAppendResult{}, err
-			}
-			parts[i].Attachments, err = ownedIngressAttachments(ctx, media)
+			parts[i].Attachments, err = ownedIngressAttachments(ctx, media, a.artifacts, ownedRequest.SpaceID, ownedRequest.DeviceID, a.resourceLinks)
 			if err != nil {
 				return kernel.ConversationMessageAppendResult{}, err
 			}

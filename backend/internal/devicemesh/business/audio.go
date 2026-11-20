@@ -29,7 +29,8 @@ func (e *Engine) transcribeAudio(ctx context.Context, inference *Inference, inpu
 	}
 	text, err := model.TranscribeOwnedAudio(ctx, *inference, *audio)
 	if err != nil {
-		return "", 1, err
+		inference.AttachmentErrors = append(inference.AttachmentErrors, fmt.Sprintf("语音转写失败：%+v", err))
+		return "", 1, nil
 	}
 	text = strings.TrimSpace(text)
 	if text == "" || len(text) > 64<<10 {

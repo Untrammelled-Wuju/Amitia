@@ -2,7 +2,9 @@ package business
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"path/filepath"
@@ -15,8 +17,9 @@ import (
 )
 
 type testDataPort struct {
-	db   *sql.DB
-	role coordination.Role
+	db              *sql.DB
+	role            coordination.Role
+	attachmentBytes map[string][]byte
 }
 
 func (p testDataPort) Roles(context.Context, coordination.ExecutionScope) ([]coordination.Role, error) {
@@ -48,6 +51,31 @@ func (p testDataPort) Resource(ctx context.Context, scope coordination.Execution
 		return nil, coordination.ErrWrongOwner
 	}
 	return resource, err
+}
+
+func (p testDataPort) ValidateChatAttachment(_ context.Context, scope coordination.ExecutionScope, reference coordination.ChatAttachmentReference) error {
+	if err := reference.Validate(); err != nil {
+		return err
+	}
+	if reference.OwnerDeviceID != scope.InitiatorDeviceID {
+		return coordination.ErrWrongOwner
+	}
+	return nil
+}
+
+func (p testDataPort) ReadChatAttachmentChunk(_ context.Context, _ coordination.ExecutionScope, request coordination.ChatAttachmentRead) (coordination.ChatAttachmentChunk, error) {
+	data, ok := p.attachmentBytes[request.ArtifactID]
+	if !ok || request.Offset < 0 || request.Length < 1 || request.Offset > int64(len(data)) {
+		return coordination.ChatAttachmentChunk{}, coordination.ErrWrongOwner
+	}
+	end := min(int64(len(data)), request.Offset+request.Length)
+	chunk := append([]byte(nil), data[request.Offset:end]...)
+	digest := sha256.Sum256(data)
+	return coordination.ChatAttachmentChunk{ArtifactID: request.ArtifactID, Digest: "sha256:" + hex.EncodeToString(digest[:]), Offset: request.Offset, Size: int64(len(data)), Data: chunk, EOF: end == int64(len(data))}, nil
+}
+
+func (p testDataPort) SetChatAttachmentReference(_ context.Context, scope coordination.ExecutionScope, reference coordination.ChatAttachmentReference, _ string, _ coordination.ChatAttachmentReferenceAction) error {
+	return p.ValidateChatAttachment(context.Background(), scope, reference)
 }
 
 type testModel struct {
@@ -88,7 +116,7 @@ func engineHarness(t testing.TB) (*Engine, *sql.DB, *coordination.Service, *test
 	}
 	service := coordination.NewService(db)
 	model := &testModel{}
-	data := testDataPort{db: db, role: coordination.Role{ID: "role", Revision: 1, Profile: json.RawMessage(`{"characterId":"role","name":"device-role"}`)}}
+	data := testDataPort{db: db, role: coordination.Role{ID: "role", Revision: 1, Profile: json.RawMessage(`{"characterId":"role","name":"device-role"}`)}, attachmentBytes: map[string][]byte{}}
 	return NewEngine(service, data, model), db, service, model
 }
 
@@ -336,6 +364,38 @@ func TestStreamCutoverSavesOnlyAcceptedPartialOnOriginalOwner(t *testing.T) {
 	}
 	if partial.Content != "accepted partial" || partial.Status != "interrupted" {
 		t.Fatalf("late or completed partial: %+v", partial)
+	}
+	var sequence int64
+	for _, message := range deviceMessages {
+		if message.ID != "stream-cutover/assistant" {
+			continue
+		}
+		var document struct {
+			Sequence int64 `json:"sequence"`
+		}
+		if err := json.Unmarshal(message.Body, &document); err != nil {
+			t.Fatal(err)
+		}
+		sequence = document.Sequence
+	}
+	if sequence != 2 {
+		t.Fatalf("interrupted assistant sequence=%d", sequence)
+	}
+	conversations, err := coordination.NewOwnershipStore(db, "a").List(t.Context(), "conversation", "role", false)
+	if err != nil || len(conversations) != 1 {
+		t.Fatalf("conversation projection missing: %+v %v", conversations, err)
+	}
+	var projection struct {
+		LastMessage         string `json:"lastMessage"`
+		LastMessagePreview  string `json:"lastMessagePreview"`
+		LastMessageRole     string `json:"lastMessageRole"`
+		LastMessageSequence int64  `json:"lastMessageSequence"`
+	}
+	if err := json.Unmarshal(conversations[0].Body, &projection); err != nil {
+		t.Fatal(err)
+	}
+	if projection.LastMessageRole != "assistant" || projection.LastMessage != "accepted partial" || projection.LastMessagePreview != "accepted partial" || projection.LastMessageSequence != 2 {
+		t.Fatalf("conversation projection stale: %+v", projection)
 	}
 	coreMessages, err := coordination.NewOwnershipStore(db, "core").List(t.Context(), "message", "role", false)
 	if err != nil || len(coreMessages) != 0 {

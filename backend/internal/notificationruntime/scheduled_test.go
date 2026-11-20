@@ -2,6 +2,7 @@ package notificationruntime
 
 import (
 	"encoding/json"
+	"net/url"
 	"testing"
 	"time"
 
@@ -34,6 +35,44 @@ func TestScheduledDesktopNotificationUsesDeviceChannel(t *testing.T) {
 	}
 }
 
+func TestScheduledNotificationLinksToSavedConversationAndDeduplicates(t *testing.T) {
+	db, err := openNotificationTestDB(t)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := NewRepository(db)
+	if err := repo.InitSchema(); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.UpsertDevice(t.Context(), &DeviceEndpoint{
+		SpaceID: "space", DeviceID: "device", Platform: "desktop", PreferredProvider: "desktop-sse",
+		PushEnabled: true, SystemNotificationsEnabled: true, ReminderPushEnabled: true, PreviewMode: "full",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	runtime := &Runtime{db: db, repo: repo, deliveryQueue: make(chan deliveryJob, 2)}
+	first, err := runtime.QueueScheduled(t.Context(), "space", "device", "trigger", "new-chat", "role", "device", "first/message", "喝水", "该喝水了", "proactive.message")
+	if err != nil || len(first) != 1 || first[0].State != "queued" {
+		t.Fatalf("notification was not queued: %+v %v", first, err)
+	}
+	retry, err := runtime.QueueScheduled(t.Context(), "space", "device", "trigger", "new-chat", "role", "device", "first/message", "喝水", "该喝水了", "proactive.message")
+	if err != nil || len(retry) != 1 || retry[0].ID != first[0].ID {
+		t.Fatalf("retry changed notification identity: %+v %v", retry, err)
+	}
+	var rows []NotificationOutbox
+	if err := db.Find(&rows).Error; err != nil || len(rows) != 1 {
+		t.Fatalf("expected one notification: %+v %v", rows, err)
+	}
+	var envelope PushEnvelope
+	if err := json.Unmarshal([]byte(rows[0].EnvelopeJSON), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	link, err := url.Parse(envelope.DeepLink)
+	if err != nil || link.Host != "chat" || link.Path != "/new-chat" || link.Query().Get("message") != "first/message" || link.Query().Get("ownerId") != "device" || envelope.Body != "该喝水了" {
+		t.Fatalf("notification points to the wrong reminder: %+v %v", envelope, err)
+	}
+}
+
 func TestScheduledNotificationAcknowledgementIsScopedAndMonotonic(t *testing.T) {
 	db, err := openNotificationTestDB(t)
 	if err != nil {
@@ -51,24 +90,38 @@ func TestScheduledNotificationAcknowledgementIsScopedAndMonotonic(t *testing.T) 
 		t.Fatal(err)
 	}
 	for _, identity := range [][2]string{{"other", "device"}, {"space", "other"}, {"", "device"}} {
-		if runtime.AcknowledgeScheduled(t.Context(), identity[0], identity[1], "notification", "displayed") == nil {
+		if runtime.AcknowledgeScheduled(t.Context(), identity[0], identity[1], "notification", "displayed", "") == nil {
 			t.Fatal("another principal acknowledged notification", identity)
 		}
 	}
-	if err := runtime.AcknowledgeScheduled(t.Context(), "space", "device", "notification", "displayed"); err != nil {
+	originalError := " 未能完成操作。（UNErrorDomain错误1。）\n原始错误链 "
+	if err := runtime.AcknowledgeScheduled(t.Context(), "space", "device", "notification", "display_failed", ""); err == nil {
+		t.Fatal("accepted a failure receipt without an error")
+	}
+	if err := runtime.AcknowledgeScheduled(t.Context(), "space", "device", "notification", "display_failed", originalError); err != nil {
+		t.Fatal(err)
+	}
+	if err := runtime.AcknowledgeScheduled(t.Context(), "space", "device", "notification", "display_failed", "duplicate receipt"); err != nil {
+		t.Fatal(err)
+	}
+	failed, err := runtime.ScheduledState(t.Context(), row.ID)
+	if err != nil || failed.State != "display_failed" || failed.Error != originalError {
+		t.Fatalf("failure receipt lost the original diagnostic: %+v %v", failed, err)
+	}
+	if err := runtime.AcknowledgeScheduled(t.Context(), "space", "device", "notification", "displayed", ""); err != nil {
 		t.Fatal(err)
 	}
 	if err := repo.UpdateOutbox(t.Context(), row.ID, map[string]any{"status": "accepted"}); err != nil {
 		t.Fatal(err)
 	}
 	actual, err := runtime.ScheduledState(t.Context(), row.ID)
-	if err != nil || actual.State != "displayed" {
+	if err != nil || actual.State != "displayed" || actual.Error != "" {
 		t.Fatalf("late provider result overwrote device receipt: %+v %v", actual, err)
 	}
-	if err := runtime.AcknowledgeScheduled(t.Context(), "space", "device", "notification", "clicked"); err != nil {
+	if err := runtime.AcknowledgeScheduled(t.Context(), "space", "device", "notification", "clicked", ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := runtime.AcknowledgeScheduled(t.Context(), "space", "device", "notification", "displayed"); err != nil {
+	if err := runtime.AcknowledgeScheduled(t.Context(), "space", "device", "notification", "displayed", ""); err != nil {
 		t.Fatal(err)
 	}
 	actual, err = runtime.ScheduledState(t.Context(), row.ID)
@@ -124,7 +177,7 @@ func TestTestDevicePushPersistsDisplayReceipt(t *testing.T) {
 	default:
 		t.Fatal("desktop did not receive the test notification")
 	}
-	if err := runtime.AcknowledgeScheduled(t.Context(), endpoint.SpaceID, endpoint.DeviceID, notificationID, "displayed"); err != nil {
+	if err := runtime.AcknowledgeScheduled(t.Context(), endpoint.SpaceID, endpoint.DeviceID, notificationID, "displayed", ""); err != nil {
 		t.Fatal(err)
 	}
 	state, err := runtime.ScheduledState(t.Context(), notificationID)

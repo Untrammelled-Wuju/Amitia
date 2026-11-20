@@ -2,10 +2,7 @@ package business
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/binary"
-	"encoding/hex"
 	"errors"
 
 	"github.com/google/uuid"
@@ -33,9 +30,9 @@ func (e *Engine) RealtimeAuthority(ctx context.Context, request Request) (contex
 	return current, scope, finish, nil
 }
 
-func RealtimePCM(pcm []byte) (Attachment, error) {
+func RealtimeWAV(pcm []byte) ([]byte, error) {
 	if len(pcm) < 2 || len(pcm)%2 != 0 || len(pcm) > (1<<20)-44 {
-		return Attachment{}, errors.New("实时语音必须为 16 kHz 单声道 PCM16，单轮最多 32 秒")
+		return nil, errors.New("实时语音必须为 16 kHz 单声道 PCM16，单轮最多 32 秒")
 	}
 	wav := make([]byte, 44+len(pcm))
 	copy(wav, "RIFF")
@@ -51,11 +48,10 @@ func RealtimePCM(pcm []byte) (Attachment, error) {
 	copy(wav[36:], "data")
 	binary.LittleEndian.PutUint32(wav[40:], uint32(len(pcm)))
 	copy(wav[44:], pcm)
-	digest := sha256.Sum256(wav)
-	return Attachment{Kind: "audio", Name: "realtime.wav", MIME: "audio/wav", Data: base64.StdEncoding.EncodeToString(wav), Hash: hex.EncodeToString(digest[:])}, nil
+	return wav, nil
 }
 
-func (e *Engine) RealtimeTurn(ctx context.Context, request Request, pcm []byte, visual *Attachment, emit func(Event) error) (Response, error) {
+func (e *Engine) RealtimeTurn(ctx context.Context, request Request, audio *Attachment, visual *Attachment, emit func(Event) error) (Response, error) {
 	if _, err := uuid.Parse(request.RequestID); err != nil {
 		return Response{}, errors.New("实时对话每轮必须使用独立 UUID")
 	}
@@ -64,11 +60,10 @@ func (e *Engine) RealtimeTurn(ctx context.Context, request Request, pcm []byte, 
 		return Response{}, err
 	}
 	defer finish()
-	audio, err := RealtimePCM(pcm)
-	if err != nil {
-		return Response{}, err
+	if audio == nil || audio.Kind != "audio" {
+		return Response{}, errors.New("实时语音附件无效")
 	}
-	request.Attachments = []Attachment{audio}
+	request.Attachments = []Attachment{*audio}
 	if visual != nil {
 		if visual.Kind != "image" {
 			return Response{}, errors.New("实时视觉只能携带经校验的图片帧")

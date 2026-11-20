@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -11,19 +12,29 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/extension/kernel/host_registry"
+	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/internal/system"
 )
 
 func TestOwnedHostChatAppendAndReadShareActualOwner(t *testing.T) {
 	p := setupMeshLocalDataPort(t)
+	space := p.spaceID
+	artifacts, err := BuildArtifactRuntime(p.services.DB, filepath.Join(t.TempDir(), "artifacts", "blobs", "sha256"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := artifacts.Service.SetStorageDeviceID(p.ownerID); err != nil {
+		t.Fatal(err)
+	}
+	p.services.Artifact = artifacts
 	db := p.services.KernelContainer.DeviceRegistry.Database()
-	if _, err := p.services.KernelContainer.DeviceRegistry.EnsureDevice(t.Context(), host_registry.DeviceRecord{SpaceID: "core", DeviceID: "device-a", TrustState: host_registry.DeviceTrustTrusted}); err != nil {
+	if _, err := p.services.KernelContainer.DeviceRegistry.EnsureDevice(t.Context(), host_registry.DeviceRecord{SpaceID: runtimeidentity.SpaceID(space), DeviceID: "device-a", TrustState: host_registry.DeviceTrustTrusted}); err != nil {
 		t.Fatal(err)
 	}
 	engine := business.NewEngine(coordination.NewService(db), p, nil)
-	ctx := auth.WithActor(t.Context(), &auth.ActorContext{PrincipalType: auth.PrincipalTest, SpaceID: "core", DeviceID: "device-a", Permissions: auth.OwnerDevicePermissions()})
-	ctx = kernel.WithHostAPIScope(ctx, kernel.HostAPIScopeContext{SpaceID: "core", CharacterID: "one", ConversationID: "owned-host"})
-	view, err := engine.Query(ctx, business.Request{SpaceID: "core", DeviceID: "device-a", CoreID: "core", RoleID: "one", ConversationID: "owned-host"}, coordination.DataQuery{Management: true, ResourceKind: "conversation", ConversationID: "owned-host"})
+	ctx := auth.WithActor(t.Context(), &auth.ActorContext{PrincipalType: auth.PrincipalTest, SpaceID: runtimeidentity.SpaceID(space), DeviceID: "device-a", Permissions: auth.OwnerDevicePermissions()})
+	ctx = kernel.WithHostAPIScope(ctx, kernel.HostAPIScopeContext{SpaceID: space, CharacterID: "one", ConversationID: "owned-host"})
+	view, err := engine.Query(ctx, business.Request{SpaceID: space, DeviceID: "device-a", CoreID: "core", RoleID: "one", ConversationID: "owned-host"}, coordination.DataQuery{Management: true, ResourceKind: "conversation", ConversationID: "owned-host"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,8 +43,8 @@ func TestOwnedHostChatAppendAndReadShareActualOwner(t *testing.T) {
 	if _, err := p.store.Apply(ctx, coordination.Commit{Scope: scope, Mutations: []coordination.Mutation{{Kind: "conversation", ID: "owned-host", RoleID: "one", Body: json.RawMessage(`{"id":"owned-host","characterId":"one","channel":"web"}`)}}}); err != nil {
 		t.Fatal(err)
 	}
-	appender := &conversationMessageAppenderAdapter{engine: engine, coreID: "core"}
-	request := kernel.ConversationMessageAppendRequest{SpaceID: "core", CharacterID: "one", ConversationID: "owned-host", Channel: "web", Role: "assistant", Source: "extension:test", RequestID: "host-append", Parts: []kernel.ConversationMessagePart{{Type: "text", Content: "Owner message"}}}
+	appender := &conversationMessageAppenderAdapter{engine: engine, coreID: "core", artifacts: p.services.Artifact}
+	request := kernel.ConversationMessageAppendRequest{SpaceID: space, CharacterID: "one", ConversationID: "owned-host", Channel: "web", Role: "assistant", Source: "extension:test", RequestID: "host-append", Parts: []kernel.ConversationMessagePart{{Type: "text", Content: "Owner message"}}}
 	for i := 0; i < 2; i++ {
 		result, err := appender.AppendConversationMessages(ctx, request)
 		if err != nil || len(result.MessageIDs) != 1 {
@@ -84,11 +95,11 @@ func TestOwnedHostChatAppendAndReadShareActualOwner(t *testing.T) {
 	if _, found, err := characters.ReadCharacter(ctx, "two"); err != nil || found {
 		t.Fatalf("cross-role character exposed: %v %v", found, err)
 	}
-	roles, err := characters.ListCharacters(ctx, "core", true)
+	roles, err := characters.ListCharacters(ctx, space, true)
 	if err != nil || len(roles) != 3 {
 		t.Fatalf("Owner role catalog lost disabled roles or included foreign role: %q %v", roles, err)
 	}
-	roles, err = characters.ListCharacters(ctx, "core", false)
+	roles, err = characters.ListCharacters(ctx, space, false)
 	if err != nil || len(roles) != 2 {
 		t.Fatalf("enabled role catalog changed: %q %v", roles, err)
 	}
@@ -114,7 +125,7 @@ func TestOwnedHostChatAppendAndReadShareActualOwner(t *testing.T) {
 	if _, err := p.store.Apply(ctx, coordination.Commit{Scope: scope, Mutations: []coordination.Mutation{{Kind: "conversation", ID: "channel-host", RoleID: "one", Body: json.RawMessage(`{"id":"channel-host","characterId":"one","channel":"telegram","peerId":"peer"}`)}}}); err != nil {
 		t.Fatal(err)
 	}
-	channelContext := kernel.WithHostAPIScope(ctx, kernel.HostAPIScopeContext{SpaceID: "core", CharacterID: "one", ConversationID: "channel-host"})
+	channelContext := kernel.WithHostAPIScope(ctx, kernel.HostAPIScopeContext{SpaceID: space, CharacterID: "one", ConversationID: "channel-host"})
 	subscriber := system.GetMessageEventBus().Subscribe(t.Name(), []string{"telegram"})
 	defer system.GetMessageEventBus().Unsubscribe(t.Name())
 	request.ConversationID, request.Role, request.Channel, request.RequestID = "channel-host", "", "", "channel-append"

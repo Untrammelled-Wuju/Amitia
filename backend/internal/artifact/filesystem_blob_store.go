@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -41,54 +42,73 @@ func (s *FilesystemBlobStore) Put(ctx context.Context, reader io.Reader, limit i
 	}
 	tmpName := tmp.Name()
 	h := sha256.New()
-	lr := io.LimitReader(reader, limit+1)
-	written, err := io.Copy(io.MultiWriter(tmp, h), lr)
-	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		os.Remove(tmpName)
-		return BlobInfo{}, fmt.Errorf("artifact: sync temp failed: %w", err)
+	var source io.Reader = &contextReader{ctx: ctx, reader: reader}
+	if limit >= 0 && limit < math.MaxInt64 {
+		source = io.LimitReader(source, limit+1)
 	}
-	tmp.Close()
+	written, err := io.Copy(io.MultiWriter(tmp, h), source)
 	if err != nil {
-		os.Remove(tmpName)
-		return BlobInfo{}, fmt.Errorf("artifact: write temp failed: %w", err)
+		closeErr := tmp.Close()
+		removeErr := os.Remove(tmpName)
+		return BlobInfo{}, fmt.Errorf("artifact: write temp failed: %w", errors.Join(err, closeErr, removeErr))
 	}
-	if written > limit {
-		os.Remove(tmpName)
-		return BlobInfo{}, fmt.Errorf("%w: %d", ErrBlobTooLarge, limit)
+	if err := tmp.Sync(); err != nil {
+		closeErr := tmp.Close()
+		removeErr := os.Remove(tmpName)
+		return BlobInfo{}, fmt.Errorf("artifact: sync temp failed: %w", errors.Join(err, closeErr, removeErr))
+	}
+	if err := tmp.Close(); err != nil {
+		return BlobInfo{}, fmt.Errorf("artifact: close temp failed: %w", errors.Join(err, os.Remove(tmpName)))
+	}
+	if limit >= 0 && written > limit {
+		return BlobInfo{}, errors.Join(fmt.Errorf("%w: %d", ErrBlobTooLarge, limit), os.Remove(tmpName))
 	}
 	digest := BlobDigest("sha256:" + hex.EncodeToString(h.Sum(nil)))
-	canonicalPath := s.blobPath(digest)
-	if _, err := os.Stat(canonicalPath); err == nil {
-		os.Remove(tmpName)
-		return BlobInfo{Digest: digest, SizeBytes: written}, nil
-	}
-	if err := os.MkdirAll(filepath.Dir(canonicalPath), 0700); err != nil {
-		os.Remove(tmpName)
-		return BlobInfo{}, fmt.Errorf("artifact: mkdir failed: %w", err)
-	}
-	if err := os.Rename(tmpName, canonicalPath); err != nil {
-		os.Remove(tmpName)
-		return BlobInfo{}, fmt.Errorf("artifact: rename failed: %w", err)
-	}
-	verifyFile, err := os.Open(canonicalPath)
+	verifyFile, err := os.Open(tmpName)
 	if err != nil {
-		os.Remove(canonicalPath)
-		return BlobInfo{}, fmt.Errorf("artifact: verify open failed: %w", err)
+		return BlobInfo{}, fmt.Errorf("artifact: verify open failed: %w", errors.Join(err, os.Remove(tmpName)))
 	}
 	verifyHash := sha256.New()
-	_, err = io.Copy(verifyHash, verifyFile)
-	verifyFile.Close()
-	if err != nil {
-		os.Remove(canonicalPath)
-		return BlobInfo{}, fmt.Errorf("artifact: verify read failed: %w", err)
+	_, readErr := io.Copy(verifyHash, &contextReader{ctx: ctx, reader: verifyFile})
+	closeErr := verifyFile.Close()
+	if err := errors.Join(readErr, closeErr); err != nil {
+		return BlobInfo{}, fmt.Errorf("artifact: verify read failed: %w", errors.Join(err, os.Remove(tmpName)))
 	}
 	verifyDigest := BlobDigest("sha256:" + hex.EncodeToString(verifyHash.Sum(nil)))
 	if verifyDigest != digest {
-		os.Remove(canonicalPath)
-		return BlobInfo{}, fmt.Errorf("artifact: integrity mismatch: expected %s, got %s", digest, verifyDigest)
+		return BlobInfo{}, errors.Join(fmt.Errorf("artifact: integrity mismatch: expected %s, got %s", digest, verifyDigest), os.Remove(tmpName))
+	}
+	if err := ctx.Err(); err != nil {
+		return BlobInfo{}, fmt.Errorf("artifact: upload canceled before commit: %w", errors.Join(err, os.Remove(tmpName)))
+	}
+	canonicalPath := s.blobPath(digest)
+	if _, err := os.Stat(canonicalPath); err == nil {
+		if err := os.Remove(tmpName); err != nil {
+			return BlobInfo{}, fmt.Errorf("artifact: remove duplicate temp failed: %w", err)
+		}
+		return BlobInfo{Digest: digest, SizeBytes: written}, nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return BlobInfo{}, fmt.Errorf("artifact: stat blob failed: %w", errors.Join(err, os.Remove(tmpName)))
+	}
+	if err := os.MkdirAll(filepath.Dir(canonicalPath), 0700); err != nil {
+		return BlobInfo{}, fmt.Errorf("artifact: mkdir failed: %w", errors.Join(err, os.Remove(tmpName)))
+	}
+	if err := os.Rename(tmpName, canonicalPath); err != nil {
+		return BlobInfo{}, fmt.Errorf("artifact: rename failed: %w", errors.Join(err, os.Remove(tmpName)))
 	}
 	return BlobInfo{Digest: digest, SizeBytes: written}, nil
+}
+
+type contextReader struct {
+	ctx    context.Context
+	reader io.Reader
+}
+
+func (r *contextReader) Read(p []byte) (int, error) {
+	if err := r.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return r.reader.Read(p)
 }
 
 func (s *FilesystemBlobStore) Open(ctx context.Context, digest BlobDigest) (io.ReadSeekCloser, BlobInfo, error) {

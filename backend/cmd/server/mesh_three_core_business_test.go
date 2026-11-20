@@ -6,8 +6,10 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/tls"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -149,6 +151,34 @@ type threeCoreFixture struct {
 	}
 }
 
+// provisionThreeCoreSpaceIdentity writes the fixture Space identity before any
+// service opens the data directory. Production derives the core id from the
+// Space identity (services.LocalSpaceID = localSpace.SpaceID()), so the mesh
+// core, the portable Space and the artifact owner space are one value; the
+// fixture must keep the same invariant or attachment ownership cannot resolve.
+func provisionThreeCoreSpaceIdentity(t *testing.T, dir, label string) string {
+	t.Helper()
+	sum := sha256.Sum256([]byte("three-core-space:" + label + "\x00" + dir))
+	spaceID := label
+	if !strings.HasPrefix(spaceID, "space_") || len(spaceID) < len("space_")+16 {
+		spaceID = "space_" + strings.ReplaceAll(label, "-", "_") + "-" + hex.EncodeToString(sum[:8])
+	}
+	instanceID := "inst_" + hex.EncodeToString(sum[8:16])
+	identity := map[string]any{"schemaVersion": 1, "spaceId": spaceID, "instanceId": instanceID, "createdAt": time.Now().UTC()}
+	data, err := json.MarshalIndent(identity, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "identity", "space.json")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, append(data, '\n'), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return spaceID
+}
+
 func newThreeCoreFixture(t *testing.T, core string, schemas *threeCoreSchemas, platforms ...runtimeidentity.Platform) *threeCoreFixture {
 	t.Helper()
 	platform := runtimeidentity.PlatformWindows
@@ -157,6 +187,7 @@ func newThreeCoreFixture(t *testing.T, core string, schemas *threeCoreSchemas, p
 	}
 	sourceServices := schemas.open(t)
 	dir := t.TempDir()
+	core = provisionThreeCoreSpaceIdentity(t, dir, core)
 	identity := agent.NewIdentityStore(dir)
 	device, err := identity.Load()
 	if err != nil {
@@ -192,6 +223,14 @@ func newThreeCoreFixture(t *testing.T, core string, schemas *threeCoreSchemas, p
 	local := agent.NewLocalHandler(dir, platform)
 	local.SetLocalCoreID(core)
 	rt.LocalHandler, rt.LocalDeviceID = local, device.DeviceID.String()
+	artifactRuntime, err := BuildArtifactRuntime(sourceServices.DB, filepath.Join(dir, "artifacts", "blobs", "sha256"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := artifactRuntime.Service.SetStorageDeviceID(rt.LocalDeviceID); err != nil {
+		t.Fatal(err)
+	}
+	sourceServices.Artifact = artifactRuntime
 	local.SetCredentialObserver(func(credential *agent.StoredCredential) error {
 		_, _, err := rt.Coordination.BindProvider(t.Context(), credential.SpaceID.String())
 		return err
@@ -273,7 +312,7 @@ func newThreeCoreFixture(t *testing.T, core string, schemas *threeCoreSchemas, p
 	local.RegisterRoutes(f.router, func(c *gin.Context) { c.Next() })
 	addresses, err := lan.PrivateAddresses()
 	if err != nil || len(addresses) == 0 {
-		t.Fatal("三 Core 联测需要局域网接口")
+		t.Skip("三 Core 联测需要局域网接口")
 	}
 	listener, err := net.Listen("tcp", net.JoinHostPort(addresses[0].String(), "0"))
 	if err != nil {

@@ -173,6 +173,10 @@ func registerDeviceAgentDesktopPetRoutes(
 	))
 	system.RegisterDeviceDataPortabilityRoutes(deviceStorage, ctx, services.DataPortability)
 	system.RegisterDeviceChatImportRoutes(deviceStorage, ctx, services.Chat)
+	if services.Artifact != nil && services.Artifact.Handler != nil {
+		services.Artifact.Handler.Register(deviceStorage)
+		services.Artifact.Handler.RegisterPublicMedia(r)
+	}
 
 	bootstrapTicketRepo := desktoppetruntime.NewBootstrapTicketRepository(ctx.DB)
 

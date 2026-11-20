@@ -1,9 +1,6 @@
 package chat
 
 import (
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -12,46 +9,53 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 )
 
-func TestOwnedPromptUsesValidatedImageAndKeepsHistoricalBinaryOutOfSystemPrompt(t *testing.T) {
-	encoded := "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLttAAAAABJRU5ErkJggg=="
-	data, err := base64.StdEncoding.DecodeString(encoded)
-	if err != nil {
-		t.Fatal(err)
-	}
-	digest := sha256.Sum256(data)
-	image := business.Attachment{Kind: "image", Name: "image.png", MIME: "image/png", Data: encoded, Hash: hex.EncodeToString(digest[:])}
+func TestOwnedPromptProvidesAttachmentMetadataWithoutBinaryPayloads(t *testing.T) {
+	image := business.Attachment{ArtifactID: "art-image", OwnerDeviceID: "core", StorageDeviceID: "core", Kind: "image", Name: "image.png", MIMEType: "image/png", SHA256: strings.Repeat("a", 64), SizeBytes: 2048}
 	role := coordination.Role{ID: "role", Revision: 1, Profile: json.RawMessage(`{"characterId":"role","name":"Core role"}`)}
-	inference := business.Inference{Scope: coordination.ExecutionScope{RoleID: "role", RoleRevision: 1, ResourceOwnerID: "core", RoleOwnerID: "core"}, Message: "current image", Attachments: []business.Attachment{image}, Snapshot: coordination.DataSnapshot{OwnerID: "core", Role: role}, HistoricalSnapshot: &coordination.DataSnapshot{OwnerID: "device", Resources: []coordination.Resource{ownedMessageResource("device", "role", "previous", map[string]any{"role": "user", "content": "previous image", "attachments": []business.Attachment{image}})}}}
+	inference := business.Inference{
+		Scope:              coordination.ExecutionScope{RoleID: "role", RoleRevision: 1, ResourceOwnerID: "core", RoleOwnerID: "core", RequestID: "request"},
+		Message:            "current image",
+		Attachments:        []business.Attachment{image},
+		Snapshot:           coordination.DataSnapshot{OwnerID: "core", Role: role},
+		AttachmentErrors:   []string{"语音转写失败：provider unavailable"},
+		HistoricalSnapshot: &coordination.DataSnapshot{OwnerID: "device", Role: role, Resources: []coordination.Resource{ownedMessageResource("device", "role", "previous", map[string]any{"id": "previous", "role": "user", "content": "previous image", "attachments": []business.Attachment{image}})}},
+	}
 	messages, err := ownedPrompt(inference)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(messages[0]["content"].(string), encoded) {
-		t.Fatal("historical image copied into system prompt")
-	}
-	imageMessages := 0
 	for _, message := range messages {
-		if _, ok := message["content"].([]map[string]any); ok {
-			imageMessages++
+		encoded, err := json.Marshal(message)
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := string(encoded)
+		if strings.Contains(text, "base64") || strings.Contains(text, `"data"`) || strings.Contains(text, "image_url") {
+			t.Fatalf("attachment binary leaked into model prompt: %s", text)
 		}
 	}
-	if imageMessages != 2 {
-		t.Fatalf("messages=%d", len(messages))
+	all := ""
+	for _, message := range messages {
+		all += strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(strings.TrimSpace(strings.Join([]string{stringFromMessage(message)}, " ")), "\n", " "), "\t", " ")) + "\n"
 	}
-	for _, message := range messages[1:] {
-		parts, ok := message["content"].([]map[string]any)
-		if !ok {
-			if text, _ := message["content"].(string); strings.Contains(text, encoded) {
-				t.Fatal("historical binary leaked into prompt context")
-			}
-			continue
-		}
-		if len(parts) != 2 || parts[1]["type"] != "image_url" || parts[1]["image_url"].(map[string]string)["url"] != "data:image/png;base64,"+encoded {
-			t.Fatalf("invalid multimodal message: %+v", message)
+	for _, value := range []string{"art-image", "ownerDeviceId=core", "storageDeviceId=core", strings.Repeat("a", 64), "chat_attachment_extract", "provider unavailable"} {
+		if !strings.Contains(all, value) {
+			t.Fatalf("prompt missing %q: %s", value, all)
 		}
 	}
-	inference.Attachments[0].Hash = "tampered"
-	if _, err := ownedPrompt(inference); err == nil {
-		t.Fatal("tampered image passed model adapter")
+	for _, item := range inference.Attachments {
+		if _, ok := any(item).(map[string]any); ok {
+			t.Fatal("attachment was converted into an unbounded map")
+		}
+	}
+}
+
+func stringFromMessage(message map[string]interface{}) string {
+	switch value := message["content"].(type) {
+	case string:
+		return value
+	default:
+		encoded, _ := json.Marshal(value)
+		return string(encoded)
 	}
 }

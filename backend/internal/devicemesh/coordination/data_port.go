@@ -23,29 +23,31 @@ type Role struct {
 }
 
 type DataQuery struct {
-	IncludeDisabled      bool                   `json:"includeDisabled,omitempty"`
-	ChatRuntime          *OwnedChatRuntimeQuery `json:"chatRuntime,omitempty"`
-	GroupVisibilityStart int64                  `json:"groupVisibilityStart,omitempty"`
-	Management           bool                   `json:"management,omitempty"`
-	RuntimeTurns         bool                   `json:"runtimeTurns,omitempty"`
-	QueuedChats          bool                   `json:"queuedChats,omitempty"`
-	Vector               []float32              `json:"vector,omitempty"`
-	VectorModel          string                 `json:"vectorModel,omitempty"`
-	Cursor               string                 `json:"cursor,omitempty"`
-	HistoricalCursor     string                 `json:"historicalCursor,omitempty"`
-	HistoricalListCursor string                 `json:"historicalListCursor,omitempty"`
-	ResourceKind         string                 `json:"resourceKind,omitempty"`
-	ResourceID           string                 `json:"resourceId,omitempty"`
-	RequestID            string                 `json:"requestId,omitempty"`
-	ConversationID       string                 `json:"conversationId,omitempty"`
-	Query                string                 `json:"query,omitempty"`
-	SearchQuery          string                 `json:"searchQuery,omitempty"`
-	Limit                int                    `json:"limit,omitempty"`
-	HistoricalRoleID     string                 `json:"historicalRoleId,omitempty"`
-	ListConversations    bool                   `json:"listConversations,omitempty"`
-	GroupState           *GroupState            `json:"-"`
-	Role                 *Role                  `json:"role,omitempty"`
-	SkipRelationshipTime bool                   `json:"-"`
+	Attachment           *ChatAttachmentRead      `json:"attachment,omitempty"`
+	AttachmentReference  *ChatAttachmentReference `json:"attachmentReference,omitempty"`
+	IncludeDisabled      bool                     `json:"includeDisabled,omitempty"`
+	ChatRuntime          *OwnedChatRuntimeQuery   `json:"chatRuntime,omitempty"`
+	GroupVisibilityStart int64                    `json:"groupVisibilityStart,omitempty"`
+	Management           bool                     `json:"management,omitempty"`
+	RuntimeTurns         bool                     `json:"runtimeTurns,omitempty"`
+	QueuedChats          bool                     `json:"queuedChats,omitempty"`
+	Vector               []float32                `json:"vector,omitempty"`
+	VectorModel          string                   `json:"vectorModel,omitempty"`
+	Cursor               string                   `json:"cursor,omitempty"`
+	HistoricalCursor     string                   `json:"historicalCursor,omitempty"`
+	HistoricalListCursor string                   `json:"historicalListCursor,omitempty"`
+	ResourceKind         string                   `json:"resourceKind,omitempty"`
+	ResourceID           string                   `json:"resourceId,omitempty"`
+	RequestID            string                   `json:"requestId,omitempty"`
+	ConversationID       string                   `json:"conversationId,omitempty"`
+	Query                string                   `json:"query,omitempty"`
+	SearchQuery          string                   `json:"searchQuery,omitempty"`
+	Limit                int                      `json:"limit,omitempty"`
+	HistoricalRoleID     string                   `json:"historicalRoleId,omitempty"`
+	ListConversations    bool                     `json:"listConversations,omitempty"`
+	GroupState           *GroupState              `json:"-"`
+	Role                 *Role                    `json:"role,omitempty"`
+	SkipRelationshipTime bool                     `json:"-"`
 }
 
 type RoleCatalogPort interface {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"crypto/tls"
@@ -13,14 +14,17 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/agentplatform"
+	"github.com/u-ai/backend/internal/artifact"
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/devicemesh"
 	"github.com/u-ai/backend/internal/devicemesh/agent"
+	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/devicemesh/credential"
 	"github.com/u-ai/backend/internal/devicemesh/executionjournal"
@@ -215,7 +219,7 @@ func TestOwnedAuthorityAcrossRealTLSMeshReconnectAndPermissionChange(t *testing.
 		return client
 	}
 	client := newClient()
-	ctx, scope, finish, err := rt.Coordination.Begin(t.Context(), "core", "caller", identity.DeviceID.String(), "core", "one", "transport-input")
+	ctx, scope, finish, err := rt.Coordination.Begin(t.Context(), "core", identity.DeviceID.String(), identity.DeviceID.String(), "core", "one", "transport-input")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -223,6 +227,75 @@ func TestOwnedAuthorityAcrossRealTLSMeshReconnectAndPermissionChange(t *testing.
 	scope.RoleRevision = 3
 	scope.TurnID, scope.ExecutionID = "transport-turn", "transport-execution"
 	ctx = coordination.WithScope(ctx, scope)
+	attachmentRuntime, err := BuildArtifactRuntime(p.services.DB, t.TempDir(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := attachmentRuntime.Service.SetStorageDeviceID(identity.DeviceID.String()); err != nil {
+		t.Fatal(err)
+	}
+	p.services.Artifact = attachmentRuntime
+	attachmentBytes := bytes.Repeat([]byte("source-attachment-"), 40000)
+	attachment, err := attachmentRuntime.Service.Create(ctx, artifact.CreateRequest{OwnerSpaceID: space.SpaceID(), OwnerDeviceID: identity.DeviceID.String(), Kind: artifact.KindFile, MIMEType: "application/octet-stream", Source: artifact.SourceChatUpload, Filename: "attachment.bin", Reader: bytes.NewReader(attachmentBytes), Unbounded: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reference := chatAttachmentReference(attachment)
+	if err := rt.ValidateChatAttachment(ctx, scope, reference); err != nil {
+		t.Fatalf("TLS attachment validation failed: %v", err)
+	}
+	forged := reference
+	forged.OwnerDeviceID = "caller"
+	if err := rt.ValidateChatAttachment(ctx, scope, forged); !errors.Is(err, coordination.ErrWrongOwner) {
+		t.Fatalf("TLS attachment accepted forged uploader: %v", err)
+	}
+	forged = reference
+	forged.SizeBytes++
+	if err := rt.ValidateChatAttachment(ctx, scope, forged); !errors.Is(err, coordination.ErrWrongOwner) {
+		t.Fatalf("TLS attachment accepted forged size: %v", err)
+	}
+	attachmentMessage, err := json.Marshal(map[string]any{"conversationId": "attachment-chat", "attachments": []any{reference}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	seedOwnedChatManagement(t, sourcePort, "message", "attachment-message", "one", string(attachmentMessage))
+	attachmentRead := coordination.ChatAttachmentRead{ConversationID: "attachment-chat", MessageID: "attachment-message", ArtifactID: string(attachment.ID), Offset: 123, Length: 1000}
+	attachmentChunk, err := rt.ReadChatAttachmentChunk(ctx, scope, attachmentRead)
+	if err != nil || !bytes.Equal(attachmentChunk.Data, attachmentBytes[123:1123]) {
+		t.Fatalf("TLS attachment chunk=%+v error=%v", attachmentChunk, err)
+	}
+	var transferred []byte
+	attachmentRead.Offset, attachmentRead.Length = 0, coordination.ChatAttachmentChunkMaxBytes
+	for {
+		chunk, err := rt.ReadChatAttachmentChunk(ctx, scope, attachmentRead)
+		if err != nil {
+			t.Fatal(err)
+		}
+		transferred = append(transferred, chunk.Data...)
+		attachmentRead.Offset += int64(len(chunk.Data))
+		if chunk.EOF {
+			break
+		}
+	}
+	if !bytes.Equal(transferred, attachmentBytes) {
+		t.Fatal("TLS attachment transfer changed content")
+	}
+	modelRuntime := &meshOwnedToolRuntime{services: &AppServices{DeviceMesh: rt}}
+	toolInput, err := json.Marshal(map[string]any{"messageId": "attachment-message", "artifactId": attachment.ID, "offset": 0, "length": 32})
+	if err != nil {
+		t.Fatal(err)
+	}
+	toolResult, err := modelRuntime.Execute(ctx, business.Inference{Scope: scope, ConversationID: "attachment-chat"}, "attachment-call", chatAttachmentReadTool, toolInput)
+	if err != nil || toolResult.Status != "SUCCESS" || !strings.Contains(string(toolResult.Output), "source-attachment-") {
+		t.Fatalf("TLS attachment model tool result=%s error=%v", toolResult.Output, err)
+	}
+	if _, err := modelRuntime.Execute(ctx, business.Inference{Scope: scope, ConversationID: "other-chat"}, "attachment-call-wrong", chatAttachmentReadTool, toolInput); !errors.Is(err, coordination.ErrWrongOwner) {
+		t.Fatalf("model tool accepted other conversation: %v", err)
+	}
+	attachmentRead.ConversationID = "other-chat"
+	if _, err := rt.ReadChatAttachmentChunk(ctx, scope, attachmentRead); !errors.Is(err, coordination.ErrWrongOwner) {
+		t.Fatalf("TLS attachment accepted other conversation: %v", err)
+	}
 	binding := &task_runtime.OwnedRuntimeBinding{}
 	if err := bindCoreOwnedTaskRuntime(binding, rt, "core"); err != nil {
 		t.Fatal(err)

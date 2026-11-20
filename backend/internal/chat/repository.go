@@ -31,7 +31,7 @@ type Repository interface {
 	ListModels() ([]ModelConfig, error)
 	CountModels() (int64, error)
 	CreateModel(cfg *ModelConfig) error
-	UpdateModel(id int, updates map[string]interface{}) error
+	UpdateModel(id int, expectedAPIType, expectedProtocol string, updates map[string]interface{}) error
 	DeleteModel(id int) error
 	ActivateModel(id int) error
 	GetModelRoutes() ([]map[string]interface{}, error)
@@ -266,11 +266,14 @@ func (r *repository) CreateModel(cfg *ModelConfig) error {
 	})
 }
 
-func (r *repository) UpdateModel(id int, updates map[string]interface{}) error {
+func (r *repository) UpdateModel(id int, expectedAPIType, expectedProtocol string, updates map[string]interface{}) error {
 	return configwrite.Transaction(r.db, func(tx *gorm.DB) error {
 		var target ModelConfig
 		if err := tx.First(&target, id).Error; err != nil {
 			return err
+		}
+		if target.APIType != expectedAPIType || target.Protocol != expectedProtocol {
+			return fmt.Errorf("模型协议已被并发修改: 预期 %q/%q，实际 %q/%q", expectedAPIType, expectedProtocol, target.APIType, target.Protocol)
 		}
 		active := updates["is_active"]
 		if active == true || active == 1 || active == float64(1) {

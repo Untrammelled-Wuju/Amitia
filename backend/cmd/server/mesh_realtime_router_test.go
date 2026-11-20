@@ -3,9 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"image"
 	"image/png"
@@ -18,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	"github.com/u-ai/backend/internal/artifact"
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/devicemesh/lan"
@@ -186,8 +184,11 @@ func TestOwnedRealtimeRealTLSRejectsReplayForeignCoreOriginAndSavesEachMode(t *t
 		if err := png.Encode(&frame, image.NewRGBA(image.Rect(0, 0, 1, 1))); err != nil {
 			t.Fatal(err)
 		}
-		digest := sha256.Sum256(frame.Bytes())
-		if err := conn.WriteJSON(map[string]any{"type": "visual", "attachment": business.Attachment{Kind: "image", Name: "frame.png", MIME: "image/png", Data: base64.StdEncoding.EncodeToString(frame.Bytes()), Hash: hex.EncodeToString(digest[:])}}); err != nil {
+		storedFrame, err := b.services.Artifact.Service.Create(t.Context(), artifact.CreateRequest{OwnerSpaceID: b.core, OwnerDeviceID: a.device.DeviceID.String(), Kind: artifact.KindImage, MIMEType: "image/png", Source: artifact.SourceChatUpload, Filename: "frame.png", Reader: bytes.NewReader(frame.Bytes()), Unbounded: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := conn.WriteJSON(map[string]any{"type": "visual", "attachment": chatAttachmentReference(storedFrame)}); err != nil {
 			t.Fatal(err)
 		}
 		if err := conn.WriteJSON(map[string]any{"type": "turn_end"}); err != nil {

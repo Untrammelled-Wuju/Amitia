@@ -2,7 +2,6 @@ package business
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/binary"
 	"errors"
 	"testing"
@@ -13,16 +12,15 @@ import (
 
 func TestRealtimePCMRejectsInvalidAndKeepsExactSamples(t *testing.T) {
 	for _, pcm := range [][]byte{nil, {1}, make([]byte, 1<<20)} {
-		if _, err := RealtimePCM(pcm); err == nil {
+		if _, err := RealtimeWAV(pcm); err == nil {
 			t.Fatal("invalid PCM accepted")
 		}
 	}
-	item, err := RealtimePCM([]byte{0, 1, 2, 3})
+	data, err := RealtimeWAV([]byte{0, 1, 2, 3})
 	if err != nil {
 		t.Fatal(err)
 	}
-	data, _ := base64.StdEncoding.DecodeString(item.Data)
-	if string(data[44:]) != string([]byte{0, 1, 2, 3}) || binary.LittleEndian.Uint32(data[24:]) != 16000 || ValidateAttachments([]Attachment{item}) != nil {
+	if string(data[44:]) != string([]byte{0, 1, 2, 3}) || binary.LittleEndian.Uint32(data[24:]) != 16000 {
 		t.Fatal("PCM samples or WAV metadata changed")
 	}
 }
@@ -37,6 +35,7 @@ func TestRealtimeTurnPreservesVisualAndOwnerConfirmedTranscription(t *testing.T)
 	finish()
 	request.ExpectedScope = &scope
 	frame := imageAttachment(t, 1)
+	audio := audioAttachment()
 	engine.model = audioTestModel{testModel: model, transcribe: func(context.Context, Inference, Attachment) (string, error) {
 		return "识别后的当前画面问题", nil
 	}}
@@ -46,7 +45,7 @@ func TestRealtimeTurnPreservesVisualAndOwnerConfirmedTranscription(t *testing.T)
 		}
 		return Generation{Text: "当前画面回答"}, nil
 	}
-	result, err := engine.RealtimeTurn(t.Context(), request, []byte{0, 1}, &frame, nil)
+	result, err := engine.RealtimeTurn(t.Context(), request, &audio, &frame, nil)
 	if err != nil || !result.Saved || result.UserRevision != 2 || result.Transcription != "识别后的当前画面问题" {
 		t.Fatalf("owner confirmed realtime failed: %+v %v", result, err)
 	}
@@ -54,7 +53,7 @@ func TestRealtimeTurnPreservesVisualAndOwnerConfirmedTranscription(t *testing.T)
 	stale.RoleRevision++
 	request.ExpectedScope = &stale
 	request.RequestID = uuid.NewString()
-	if _, err = engine.RealtimeTurn(t.Context(), request, []byte{0, 1}, nil, nil); !errors.Is(err, coordination.ErrScopeExpired) {
+	if _, err = engine.RealtimeTurn(t.Context(), request, &audio, nil, nil); !errors.Is(err, coordination.ErrScopeExpired) {
 		t.Fatalf("old role allowed: %v", err)
 	}
 }

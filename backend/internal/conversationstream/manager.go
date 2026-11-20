@@ -456,21 +456,30 @@ func (m *Manager) Interrupt(conversationID, turnID string) bool {
 }
 
 func (m *Manager) Steer(conversationID, turnID, input string) bool {
+	return m.SteerWithCommit(conversationID, turnID, input, nil) == nil
+}
+
+func (m *Manager) SteerWithCommit(conversationID, turnID, input string, commit func() error) error {
 	input = strings.TrimSpace(input)
 	if input == "" {
-		return false
+		return errors.New("引导内容为空")
 	}
 	state := m.state(strings.TrimSpace(conversationID))
 	state.mu.Lock()
 	defer state.mu.Unlock()
 	if state.execution == nil || state.execution.turnID != strings.TrimSpace(turnID) {
-		return false
+		return errors.New("目标执行当前不可干预")
+	}
+	if commit != nil {
+		if err := commit(); err != nil {
+			return err
+		}
 	}
 	state.execution.steers = append(state.execution.steers, input)
 	if state.execution.providerCancel != nil {
 		state.execution.providerCancel()
 	}
-	return true
+	return nil
 }
 
 func (m *Manager) ConsumeSteer(conversationID, turnID string) []string {

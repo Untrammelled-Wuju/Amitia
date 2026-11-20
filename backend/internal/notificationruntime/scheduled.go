@@ -4,7 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,7 +17,7 @@ type ScheduledDelivery struct {
 	Error string `json:"error,omitempty"`
 }
 
-func (r *Runtime) QueueScheduled(ctx context.Context, spaceID, deviceID, triggerID, conversationID, characterID, messageID, title, content, kind string) ([]ScheduledDelivery, error) {
+func (r *Runtime) QueueScheduled(ctx context.Context, spaceID, deviceID, triggerID, conversationID, characterID, ownerID, messageID, title, content, kind string) ([]ScheduledDelivery, error) {
 	devices, err := r.repo.ListPushDevices(ctx, spaceID)
 	if err != nil {
 		return nil, err
@@ -36,7 +37,8 @@ func (r *Runtime) QueueScheduled(ctx context.Context, spaceID, deviceID, trigger
 			continue
 		}
 		previewTitle, previewBody := PreviewForMode(endpoint.PreviewMode, title, content)
-		envelope := PushEnvelope{NotificationID: id, Type: kind, SpaceID: spaceID, ConversationID: conversationID, CharacterID: characterID, MessageID: messageID, RunID: triggerID, Revision: 1, Title: previewTitle, Body: previewBody, DeepLink: fmt.Sprintf("amitia://chat/%s?message=%s", conversationID, messageID), Priority: "high", TTL: 24 * time.Hour, Sound: endpoint.SoundEnabled, Data: map[string]string{"source": "proactive", "reminderId": triggerID}}
+		link := url.URL{Scheme: "amitia", Host: "chat", Path: "/" + conversationID, RawQuery: url.Values{"message": {messageID}, "characterId": {characterID}, "ownerId": {ownerID}}.Encode()}
+		envelope := PushEnvelope{NotificationID: id, Type: kind, SpaceID: spaceID, ConversationID: conversationID, CharacterID: characterID, MessageID: messageID, RunID: triggerID, Revision: 1, Title: previewTitle, Body: previewBody, DeepLink: link.String(), Priority: "high", TTL: 24 * time.Hour, Sound: endpoint.SoundEnabled, Data: map[string]string{"ownerId": ownerID}}
 		encoded, err := json.Marshal(envelope)
 		if err != nil {
 			return nil, err
@@ -65,9 +67,15 @@ func (r *Runtime) ScheduledState(ctx context.Context, id string) (ScheduledDeliv
 	return ScheduledDelivery{ID: row.ID, State: row.Status, Error: row.LastError}, nil
 }
 
-func (r *Runtime) AcknowledgeScheduled(ctx context.Context, spaceID, deviceID, id, state string) error {
+func (r *Runtime) AcknowledgeScheduled(ctx context.Context, spaceID, deviceID, id, state, originalError string) error {
 	if state != "displayed" && state != "clicked" && state != "display_failed" {
 		return errors.New("通知回执状态无效")
+	}
+	if state == "display_failed" && strings.TrimSpace(originalError) == "" {
+		return errors.New("展示失败回执缺少原始错误")
+	}
+	if state != "display_failed" && originalError != "" {
+		return errors.New("展示或点击成功的回执不能包含展示失败错误")
 	}
 	var row NotificationOutbox
 	if err := r.db.WithContext(ctx).Where("notification_id = ? AND space_id = ? AND device_id = ?", id, spaceID, deviceID).First(&row).Error; err != nil {
@@ -83,12 +91,12 @@ func (r *Runtime) AcknowledgeScheduled(ctx context.Context, spaceID, deviceID, i
 	if row.Status == "expired" {
 		return errors.New("通知回执已过期")
 	}
-	query := r.db.WithContext(ctx).Model(&NotificationOutbox{}).Where("id = ?", row.ID)
+	query := r.db.WithContext(ctx).Model(&NotificationOutbox{}).Where("id = ? AND status <> ?", row.ID, "expired")
 	if state != "clicked" {
 		query = query.Where("status != ?", "clicked")
 	}
 	if state == "display_failed" {
-		query = query.Where("status != ?", "displayed")
+		query = query.Where("status NOT IN ?", []string{"displayed", "display_failed"})
 	}
-	return query.Updates(map[string]any{"status": state, "updated_at": time.Now().UTC()}).Error
+	return query.Updates(map[string]any{"status": state, "last_error": originalError, "updated_at": time.Now().UTC()}).Error
 }

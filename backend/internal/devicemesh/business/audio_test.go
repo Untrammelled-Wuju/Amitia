@@ -3,7 +3,6 @@ package business
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
@@ -20,6 +19,18 @@ type audioTestModel struct {
 
 type rejectedTranscriptionPort struct {
 	coordination.DataPort
+}
+
+func (p rejectedTranscriptionPort) ValidateChatAttachment(ctx context.Context, scope coordination.ExecutionScope, reference coordination.ChatAttachmentReference) error {
+	return p.DataPort.(coordination.ChatAttachmentValidator).ValidateChatAttachment(ctx, scope, reference)
+}
+
+func (p rejectedTranscriptionPort) ReadChatAttachmentChunk(ctx context.Context, scope coordination.ExecutionScope, request coordination.ChatAttachmentRead) (coordination.ChatAttachmentChunk, error) {
+	return p.DataPort.(coordination.ChatAttachmentReader).ReadChatAttachmentChunk(ctx, scope, request)
+}
+
+func (p rejectedTranscriptionPort) SetChatAttachmentReference(ctx context.Context, scope coordination.ExecutionScope, reference coordination.ChatAttachmentReference, messageID string, action coordination.ChatAttachmentReferenceAction) error {
+	return p.DataPort.(coordination.ChatAttachmentReferenceWriter).SetChatAttachmentReference(ctx, scope, reference, messageID, action)
 }
 
 func (p rejectedTranscriptionPort) Commit(ctx context.Context, commit coordination.Commit) (coordination.Acknowledgement, error) {
@@ -58,7 +69,7 @@ func audioAttachment() Attachment {
 	copy(data[36:40], "data")
 	binary.LittleEndian.PutUint32(data[40:44], 2)
 	digest := sha256.Sum256(data)
-	return Attachment{Kind: "audio", Name: "voice.wav", MIME: "audio/wav", Data: base64.StdEncoding.EncodeToString(data), Hash: hex.EncodeToString(digest[:])}
+	return Attachment{ArtifactID: "art-audio", OwnerDeviceID: "a", StorageDeviceID: "a", Kind: "audio", Name: "voice.wav", MIMEType: "audio/wav", SHA256: hex.EncodeToString(digest[:]), SizeBytes: int64(len(data))}
 }
 
 func TestOwnedAudioConfirmsOriginalAndTranscriptionBeforeReplyAndMemory(t *testing.T) {
@@ -132,11 +143,14 @@ func TestOwnedAudioRejectsReplyAfterASRFailureOrCoreCutover(t *testing.T) {
 				return "late transcription", nil
 			}}
 			_, err := engine.Run(t.Context(), Request{SpaceID: "core", DeviceID: "a", CoreID: "core", RequestID: "audio-failure", Message: "语音消息", Attachments: []Attachment{audioAttachment()}})
-			if err == nil || model.calls.Load() != 0 || model.extractions.Load() != 0 {
-				t.Fatalf("failed or interrupted audio reached reply: %v", err)
-			}
 			if change && !errors.Is(err, coordination.ErrScopeExpired) {
 				t.Fatalf("cutover cause was lost: %v", err)
+			}
+			if !change && (err != nil || model.calls.Load() != 1) {
+				t.Fatalf("transcription failure did not leave the agent able to process the attachment: %v", err)
+			}
+			if change && model.calls.Load() != 0 {
+				t.Fatalf("cutover still reached reply")
 			}
 		})
 	}

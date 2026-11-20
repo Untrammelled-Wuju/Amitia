@@ -4,21 +4,20 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/u-ai/backend/internal/devicemesh/business"
 )
 
-func ownedFileFixture(data []byte, mime string) business.Attachment {
-	hash := sha256.Sum256(data)
-	return business.Attachment{Kind: "file", Name: "用户文件", MIME: mime, Data: base64.StdEncoding.EncodeToString(data), Hash: hex.EncodeToString(hash[:])}
+func writeOwnedTestFile(t *testing.T, name string, data []byte) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), name)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
 }
 
 func ownedWordFixture(t *testing.T, document string, duplicate bool) []byte {
@@ -44,31 +43,33 @@ func ownedWordFixture(t *testing.T, document string, duplicate bool) []byte {
 	return data.Bytes()
 }
 
-func TestOwnedFileContentUsesActualBytesAndRejectsInvalidDocuments(t *testing.T) {
-	item := ownedFileFixture([]byte("独立设备里的正文"), "text/plain")
-	parts, err := ownedMessageContentContext(t.Context(), "请分析", []business.Attachment{item})
-	if err != nil || !strings.Contains(parts.([]map[string]any)[1]["text"].(string), "独立设备里的正文") {
-		t.Fatalf("file content missing: %v", err)
-	}
-	item.Hash = "changed"
-	if _, err := ownedMessageContentContext(t.Context(), "请分析", []business.Attachment{item}); err == nil {
-		t.Fatal("unverified file reached model prompt")
-	}
-	document := `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>设备正文</w:t><w:tab/><w:t>下一段</w:t></w:r></w:p></w:body></w:document>`
-	word := ownedWordFixture(t, document, false)
-	text, err := ownedWordText(t.Context(), word)
-	if err != nil || text != "设备正文\t下一段\n" {
+func TestOwnedDocumentExtractionUsesMaterializedFilesAndPreservesErrors(t *testing.T) {
+	textPath := writeOwnedTestFile(t, "content.txt", []byte("独立设备里的正文"))
+	text, err := ExtractAttachmentText(t.Context(), textPath, "text/plain")
+	if err != nil || text != "独立设备里的正文" {
 		t.Fatalf("text=%q error=%v", text, err)
 	}
-	for _, invalid := range [][]byte{ownedWordFixture(t, document, true), ownedWordFixture(t, "<invalid>", false), ownedWordFixture(t, strings.Repeat("x", (2<<20)+1), false), []byte("not a zip")} {
-		if _, err := ownedWordText(t.Context(), invalid); err == nil {
-			t.Fatal("invalid or oversized Word document was parsed")
+	document := `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>设备正文</w:t><w:tab/><w:t>下一段</w:t></w:r></w:p></w:body></w:document>`
+	wordPath := writeOwnedTestFile(t, "document.docx", ownedWordFixture(t, document, false))
+	word, err := ExtractAttachmentText(t.Context(), wordPath, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+	if err != nil || word != "设备正文\t下一段\n" {
+		t.Fatalf("text=%q error=%v", word, err)
+	}
+	for name, data := range map[string][]byte{
+		"duplicate.docx": ownedWordFixture(t, document, true),
+		"invalid.docx":   ownedWordFixture(t, "<invalid>", false),
+		"large.docx":     ownedWordFixture(t, strings.Repeat("x", (2<<20)+1), false),
+		"not-a-zip.docx": []byte("not a zip"),
+	} {
+		path := writeOwnedTestFile(t, name, data)
+		if _, err := ExtractAttachmentText(t.Context(), path, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"); err == nil {
+			t.Fatalf("invalid Word document %s was parsed", name)
 		}
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if _, err := ownedWordText(ctx, word); err == nil {
-		t.Fatal("cancelled Core work continued parsing")
+	if _, err := ExtractAttachmentText(ctx, wordPath, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"); err == nil {
+		t.Fatal("cancelled work continued parsing")
 	}
 }
 
@@ -109,9 +110,9 @@ func TestOwnedPDFParsesRealDocumentUsingPathCommand(t *testing.T) {
 		fmt.Fprintf(&data, "%010d 00000 n \n", offset)
 	}
 	fmt.Fprintf(&data, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(offsets), xref)
-	item := ownedFileFixture(data.Bytes(), "application/pdf")
-	parts, err := ownedMessageContentContext(t.Context(), "阅读PDF", []business.Attachment{item})
-	if err != nil || !strings.Contains(parts.([]map[string]any)[1]["text"].(string), "Hello Core") {
-		t.Fatalf("actual PDF text not delivered: %v", err)
+	path := writeOwnedTestFile(t, "document.pdf", data.Bytes())
+	text, err := ExtractAttachmentText(t.Context(), path, "application/pdf")
+	if err != nil || !strings.Contains(text, "Hello Core") {
+		t.Fatalf("actual PDF text not extracted: %q %v", text, err)
 	}
 }

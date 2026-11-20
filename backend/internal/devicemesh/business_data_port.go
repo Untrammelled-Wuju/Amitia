@@ -160,6 +160,34 @@ func (rt *Runtime) LocalMemoryArchiveEmpty(ctx context.Context, scope coordinati
 	return !hasRecords, err
 }
 
+func (rt *Runtime) LocalPrivacyDeletionReceiptsEmpty(ctx context.Context, scope coordination.ExecutionScope) (bool, error) {
+	if err := rt.validateDataRoute(ctx, scope); err != nil {
+		return false, err
+	}
+	if scope.TargetDeviceID != rt.LocalDeviceID {
+		return false, nil
+	}
+	if scope.Coordinated {
+		if scope.InitiatorDeviceID != rt.LocalDeviceID || rt.CoreDeviceID != rt.LocalDeviceID ||
+			scope.ResourceOwnerID != scope.CoreID || rt.CoreDataPort == nil {
+			return false, nil
+		}
+	} else if scope.ResourceOwnerID != rt.LocalDeviceID {
+		return false, nil
+	}
+	roles, err := rt.Roles(ctx, scope)
+	if err != nil || len(roles) != 0 {
+		return false, err
+	}
+	var hasReceipts bool
+	err = rt.DB.QueryRowContext(ctx, `SELECT EXISTS(
+		SELECT 1 FROM kernel_device_owned_resources
+		WHERE owner_id IN (?, ?) AND kind='checkpoint' AND deleted=0
+		AND (resource_id LIKE 'privacy-deletion/%' OR resource_id LIKE 'memory-deletion/%')
+	)`, scope.ResourceOwnerID, scope.TargetDeviceID).Scan(&hasReceipts)
+	return !hasReceipts, err
+}
+
 func (rt *Runtime) Roles(ctx context.Context, scope coordination.ExecutionScope) ([]coordination.Role, error) {
 	if err := rt.validateDataRoute(ctx, scope); err != nil {
 		return nil, fmt.Errorf("校验角色读取范围失败: %w", err)

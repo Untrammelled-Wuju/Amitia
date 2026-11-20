@@ -105,7 +105,11 @@ func (g *PushGateway) Send(ctx context.Context, endpoint DeviceEndpoint, envelop
 	var result ProviderResult
 	switch strings.ToLower(endpoint.Platform) {
 	case "desktop", "web":
-		payload := map[string]interface{}{"type": envelope.Type, "title": envelope.Title, "body": envelope.Body, "conversationId": envelope.ConversationID, "characterId": envelope.CharacterID, "characterName": envelope.Data["senderName"], "messageId": envelope.MessageID, "sound": envelope.Sound, "ownerId": envelope.SpaceID, "deepLink": envelope.DeepLink, "data": envelope.Data}
+		ownerID := envelope.Data["ownerId"]
+		if ownerID == "" {
+			ownerID = envelope.SpaceID
+		}
+		payload := map[string]interface{}{"type": envelope.Type, "title": envelope.Title, "body": envelope.Body, "conversationId": envelope.ConversationID, "characterId": envelope.CharacterID, "characterName": envelope.Data["senderName"], "messageId": envelope.MessageID, "sound": envelope.Sound, "ownerId": ownerID, "deepLink": envelope.DeepLink, "data": envelope.Data}
 		for key, value := range envelope.Data {
 			payload[key] = value
 		}

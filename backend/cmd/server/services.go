@@ -188,6 +188,7 @@ type AppServices struct {
 	WorkspaceGitHandler          *workspacegit.GitHandler
 	DataPortability              *dataportability.Coordinator
 	Artifact                     *ArtifactRuntime
+	ChatAttachmentTickets        *chatAttachmentMediaTicketSigner
 	Sync                         *syncpkg.Service
 	NativeBridgeRelay            *nativeBridgeRelay
 	NotificationRuntime          *notificationruntime.Runtime
@@ -431,6 +432,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		}
 	}
 	kernelChatAppender := newConversationMessageAppenderAdapter()
+	kernelChatAppender.artifacts = artifactRuntime
 	kernelBuilder := kernel.NewContainerBuilder().
 		WithKernelRuntime(extensionRuntime.Kernel).
 		WithTaskOwnershipBinding(taskOwnershipBinding).
@@ -1243,6 +1245,9 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		}
 		deviceMeshRuntime.LocalDeviceID = physicalIdentity.DeviceID.String()
 		deviceMeshRuntime.CoreDeviceID = physicalIdentity.DeviceID.String()
+		if err := artifactRuntime.Service.SetStorageDeviceID(deviceMeshRuntime.LocalDeviceID); err != nil {
+			return nil, err
+		}
 		deviceMeshRuntime.LocalDeviceDataPort = deviceData
 		if err := bindCoreOwnedTaskRuntime(taskOwnershipBinding, deviceMeshRuntime, localSpace.SpaceID()); err != nil {
 			return nil, fmt.Errorf("initialize owned task runtime: %w", err)

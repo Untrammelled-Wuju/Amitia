@@ -13,6 +13,7 @@ import (
 	"github.com/u-ai/backend/internal/auth"
 	"github.com/u-ai/backend/internal/conversationstream"
 	"github.com/u-ai/backend/internal/delivery"
+	"github.com/u-ai/backend/internal/devicemesh"
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/extension/kernel"
@@ -22,7 +23,9 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
 	"github.com/u-ai/backend/internal/extension/kernel/scope"
 	"github.com/u-ai/backend/internal/reminder"
+	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/internal/runtimeprofile"
+	"github.com/u-ai/backend/pkg/sse"
 	"gorm.io/gorm"
 )
 
@@ -127,11 +130,25 @@ func wireReminderService(services *AppServices) error {
 			}
 		}
 		request := business.Request{SpaceID: caller.SpaceID, DeviceID: caller.DeviceID, CoreID: coreID, TargetDeviceID: item.TargetDeviceID, RoleID: item.CharacterID, ConversationID: item.ConversationID, RequestID: item.ID + "/prepare"}
-		id, binding, err := services.OwnedBusiness.PrepareScheduledConversation(ctx, request, item.Title, item.Binding)
+		if services.RuntimeProfile == runtimeprofile.ProfileLocal {
+			request.ResourceOwnerID = caller.DeviceID
+			if len(item.Binding) > 0 {
+				var saved coordination.ExecutionScope
+				if err := json.Unmarshal(item.Binding, &saved); err != nil {
+					return nil, err
+				}
+				request.ResourceOwnerID = saved.ResourceOwnerID
+			}
+		}
+		binding, err := services.OwnedBusiness.AuthorizeScheduledMessage(ctx, request, item.Binding)
 		if err != nil {
 			return nil, err
 		}
-		item.ConversationID = id
+		if binding.ResourceOwnerID != coreID && binding.ResourceOwnerID != services.DeviceMesh.LocalDeviceID {
+			if _, online := services.DeviceMesh.Hub.GetByDevice(runtimeidentity.SpaceID(binding.SpaceID), runtimeidentity.DeviceID(binding.ResourceOwnerID)); !online {
+				return nil, devicemesh.ErrDeviceOffline
+			}
+		}
 		for _, target := range item.ChannelTargets {
 			if target.ChannelID == "" || target.PeerID == "" || container.ChannelResolver == nil || !container.ChannelResolver.Has(target.ChannelID) {
 				return nil, errors.New("指定渠道未接入或缺少接收对象")
@@ -155,24 +172,45 @@ func wireReminderService(services *AppServices) error {
 	}
 	deliver := func(ctx context.Context, item *reminder.Reminder, triggerID string) (reminder.DeliveryResult, error) {
 		requestID := "reminder:" + triggerID
-		fallback := item.Title
+		body := item.Title
 		if item.Content != "" {
-			fallback += "\n" + item.Content
+			body += "\n" + item.Content
 		}
-		instruction := "请用所属角色的自然语气提醒用户：" + fallback
+		instruction := "请用所属角色的自然语气提醒用户：" + body
 		source := "reminder"
 		if item.Kind == reminder.ProactiveTask {
-			instruction = item.Content
-			fallback = ""
+			instruction = body
 			source = "proactive"
 		}
-		message, err := services.OwnedBusiness.SendScheduledMessage(ctx, business.Request{SpaceID: item.Caller.SpaceID, DeviceID: item.Caller.DeviceID, CoreID: coreID, TargetDeviceID: item.TargetDeviceID, RoleID: item.CharacterID, ConversationID: item.ConversationID, RequestID: requestID, Message: instruction}, item.Binding, source, fallback, func(ctx context.Context, commit func(context.Context) error) error {
+		var binding coordination.ExecutionScope
+		if err := json.Unmarshal(item.Binding, &binding); err != nil {
+			return reminder.DeliveryResult{}, err
+		}
+		message, err := services.OwnedBusiness.SendScheduledMessage(ctx, business.Request{SpaceID: item.Caller.SpaceID, DeviceID: item.Caller.DeviceID, CoreID: coreID, TargetDeviceID: item.TargetDeviceID, ResourceOwnerID: binding.ResourceOwnerID, RoleID: item.CharacterID, RequestID: requestID, Message: instruction}, item.Binding, item.Title, source, func(ctx context.Context, commit func(context.Context) error) error {
 			return container.ScheduleService.GuardHostExecution(ctx, item.ID, item.Generation, commit)
 		})
 		if err != nil {
 			return reminder.DeliveryResult{}, err
 		}
-		result := reminder.DeliveryResult{MessageID: message.MessageID, ConversationID: message.ConversationID, MessageSaved: message.Saved, GenerationDegraded: message.Degraded, Targets: []reminder.TargetResult{{Kind: "conversation", ID: message.ConversationID, State: "saved"}}}
+		result := reminder.DeliveryResult{MessageID: message.MessageID, ConversationID: message.ConversationID, OwnerID: message.Scope.ResourceOwnerID, MessageSaved: message.Saved, Targets: []reminder.TargetResult{{Kind: "conversation", ID: message.ConversationID, State: "saved"}}}
+		sse.Global.BroadcastToSpace(item.Caller.SpaceID, "scheduled_conversation_saved", map[string]any{})
+		if item.SystemNotification {
+			if services.NotificationRuntime == nil {
+				result.Targets = append(result.Targets, reminder.TargetResult{Kind: "notification", ID: item.Caller.DeviceID, State: "blocked", Error: "系统通知服务未接通"})
+			} else {
+				kind := "reminder.triggered"
+				if item.Kind == reminder.ProactiveTask {
+					kind = "proactive.message"
+				}
+				targets, err := services.NotificationRuntime.QueueScheduled(ctx, item.Caller.SpaceID, item.Caller.DeviceID, triggerID, message.ConversationID, item.CharacterID, message.Scope.ResourceOwnerID, message.MessageID, item.Title, message.Content, kind)
+				if err != nil {
+					return result, err
+				}
+				for _, target := range targets {
+					result.Targets = append(result.Targets, reminder.TargetResult{Kind: "notification", ID: target.ID, State: target.State, Error: target.Error})
+				}
+			}
+		}
 		for _, target := range item.ChannelTargets {
 			if services.DeliveryStore == nil {
 				return result, errors.New("渠道投递服务未接通")
@@ -192,24 +230,7 @@ func wireReminderService(services *AppServices) error {
 			}
 			result.Targets = append(result.Targets, reminder.TargetResult{Kind: "channel", ID: id, State: string(intent.Status), Error: intent.LastError})
 		}
-		if item.SystemNotification {
-			if services.NotificationRuntime == nil {
-				result.Targets = append(result.Targets, reminder.TargetResult{Kind: "notification", ID: item.Caller.DeviceID, State: "blocked", Error: "系统通知服务未接通"})
-			} else {
-				kind := "reminder.triggered"
-				if item.Kind == reminder.ProactiveTask {
-					kind = "proactive.message"
-				}
-				targets, err := services.NotificationRuntime.QueueScheduled(ctx, item.Caller.SpaceID, item.Caller.DeviceID, triggerID, item.ConversationID, item.CharacterID, message.MessageID, item.Title, message.Content, kind)
-				if err != nil {
-					return result, err
-				}
-				for _, target := range targets {
-					result.Targets = append(result.Targets, reminder.TargetResult{Kind: "notification", ID: target.ID, State: target.State, Error: target.Error})
-				}
-			}
-		}
-		_, err = conversationstream.DefaultManager().Publish(ctx, conversationstream.AgentUIEvent{ConversationID: item.ConversationID, MessageID: message.MessageID, RequestID: requestID, Type: "message_created", Status: "completed", Payload: map[string]any{"source": source, "content": message.Content, "characterId": item.CharacterID, "spaceId": item.Caller.SpaceID, "ownerId": message.Scope.ResourceOwnerID, "reminderId": item.ID, "executionScope": message.Scope}}, true)
+		_, err = conversationstream.DefaultManager().Publish(ctx, conversationstream.AgentUIEvent{ConversationID: message.ConversationID, MessageID: message.MessageID, RequestID: requestID, Type: "message_created", Status: "completed", Payload: map[string]any{"source": source, "content": message.Content, "characterId": item.CharacterID, "spaceId": item.Caller.SpaceID, "ownerId": message.Scope.ResourceOwnerID, "reminderId": item.ID, "executionScope": message.Scope}}, true)
 		return result, err
 	}
 	services.Reminders = reminder.NewService(reminder.Dependencies{Scheduler: container.ScheduleService, OwnerID: coreID, Mode: services.RuntimeProfile.String(), Authorize: authorize, Deliver: deliver, PluginActive: pluginActive, Settings: reminderSettings{services.DB}, Channels: func(_ context.Context, _ reminder.Caller) ([]string, error) {
@@ -412,13 +433,33 @@ func checkProactivePolicy(ctx context.Context, services *AppServices, item *remi
 	gap := proactiveMinimumInterval(policy)
 	followup := false
 	if services.OwnedBusiness != nil && (services.Attention != nil || policy.UnrepliedSlowdownEnabled && policy.UnrepliedSlowdownAfter > 0) {
-		activity, err := services.OwnedBusiness.ScheduledConversationActivity(ctx, business.Request{SpaceID: item.Caller.SpaceID, DeviceID: item.Caller.DeviceID, CoreID: item.OwnerID, TargetDeviceID: item.TargetDeviceID, RoleID: item.CharacterID, ConversationID: item.ConversationID, RequestID: item.ID + "/activity"}, item.Binding)
-		if err != nil {
-			return "", err
-		}
-		unreplied := activity.Unreplied
-		if !policy.UnrepliedRecoveryOnReply {
-			unreplied = globalSent
+		unreplied := globalSent
+		if policy.UnrepliedRecoveryOnReply {
+			unreplied = 0
+			for _, entry := range history {
+				if entry.State != "completed" && entry.State != "partial" || len(entry.Result) == 0 {
+					continue
+				}
+				var previous reminder.DeliveryResult
+				if err := json.Unmarshal(entry.Result, &previous); err != nil {
+					return "", err
+				}
+				if !previous.MessageSaved || previous.ConversationID == "" {
+					continue
+				}
+				var binding coordination.ExecutionScope
+				if err := json.Unmarshal(item.Binding, &binding); err != nil {
+					return "", err
+				}
+				activity, err := services.OwnedBusiness.ScheduledConversationActivity(ctx, business.Request{SpaceID: item.Caller.SpaceID, DeviceID: item.Caller.DeviceID, CoreID: item.OwnerID, TargetDeviceID: item.TargetDeviceID, ResourceOwnerID: binding.ResourceOwnerID, RoleID: item.CharacterID, ConversationID: previous.ConversationID, RequestID: item.ID + "/activity"}, item.Binding)
+				if err != nil {
+					return "", err
+				}
+				unreplied += activity.Unreplied
+				if !activity.LastUserAt.IsZero() || unreplied >= max(1, policy.UnrepliedSlowdownAfter) {
+					break
+				}
+			}
 		}
 		followup = unreplied > 0
 		if policy.UnrepliedSlowdownEnabled && unreplied >= policy.UnrepliedSlowdownAfter && policy.UnrepliedCooldownMultiplier > 1 {

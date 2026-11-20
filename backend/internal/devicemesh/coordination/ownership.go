@@ -619,7 +619,7 @@ func (s *OwnershipStore) ListPage(ctx context.Context, kind, role string, query 
 		}
 	case "checkpoint":
 		if query.Management && query.QueuedChats && query.ConversationID != "" {
-			statement += ` AND substr(resource_id,1,12)='queued-chat/' AND json_extract(CAST(body AS TEXT),'$.request.conversationId')=? AND json_extract(CAST(body AS TEXT),'$.status')='queued'`
+			statement += ` AND substr(resource_id,1,12)='queued-chat/' AND json_extract(CAST(body AS TEXT),'$.request.conversationId')=? AND json_extract(CAST(body AS TEXT),'$.status') IN ('queued','steering','failed','uncertain')`
 			arguments = append(arguments, query.ConversationID)
 		} else if query.Management && query.RuntimeTurns && query.ConversationID != "" {
 			statement += ` AND substr(resource_id,1,5)='turn/' AND json_extract(CAST(body AS TEXT),'$.conversationId')=?`

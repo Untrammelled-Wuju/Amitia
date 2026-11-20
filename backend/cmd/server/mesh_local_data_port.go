@@ -537,6 +537,10 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 		if err != nil {
 			return snapshot, err
 		}
+		enriched, err = p.enrichOwnedConversationActivity(ctx, enriched)
+		if err != nil {
+			return snapshot, err
+		}
 		for index, resourceIndex := range conversationIndexes {
 			resource := &snapshot.Resources[resourceIndex]
 			resource.Body = enriched[index]
@@ -700,7 +704,11 @@ func (p *meshLocalDataPort) HistoricalConversations(ctx context.Context, scope c
 	if err != nil {
 		return nil, err
 	}
-	return chat.EnrichConversationActivityBodies(p.services.DB, result)
+	enriched, err := chat.EnrichConversationActivityBodies(p.services.DB, result)
+	if err != nil {
+		return nil, err
+	}
+	return p.enrichOwnedConversationActivity(ctx, enriched)
 }
 
 func (p *meshLocalDataPort) HistoricalSnapshot(ctx context.Context, scope coordination.ExecutionScope, query coordination.DataQuery) (*coordination.DataSnapshot, error) {

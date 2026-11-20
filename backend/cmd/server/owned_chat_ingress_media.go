@@ -2,9 +2,7 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,23 +17,59 @@ import (
 	"strings"
 	"time"
 
+	"github.com/u-ai/backend/internal/artifact"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/interaction"
 )
 
-func ownedIngressAttachments(ctx context.Context, req *interaction.UnifiedEntryRequest) ([]business.Attachment, error) {
+func ownedIngressAttachments(ctx context.Context, req *interaction.UnifiedEntryRequest, artifacts *ArtifactRuntime, ownerSpaceID, ownerDeviceID string, resolver extensionResourceResolver) ([]business.Attachment, error) {
+	if artifacts == nil || artifacts.Service == nil {
+		return nil, errors.New("附件服务未就绪")
+	}
 	items := []business.Attachment{}
 	for _, input := range []struct{ kind, source string }{{"image", req.ImageUrl}, {"audio", req.AudioUrl}, {"video", req.VideoUrl}} {
 		if strings.TrimSpace(input.source) == "" {
 			continue
 		}
-		data, contentType, name, err := ownedIngressMedia(ctx, input.source)
+		if artifactID, err := artifact.ParseURI(input.source); err == nil {
+			stored, err := artifacts.Service.GetOwnedForDevice(ctx, ownerSpaceID, ownerDeviceID, artifactID)
+			if err != nil {
+				return nil, fmt.Errorf("读取渠道附件 %s: %w", artifactID, err)
+			}
+			items = append(items, chatAttachmentReference(stored))
+			continue
+		}
+		source := input.source
+		if strings.HasPrefix(source, "/api/extension/resources/") {
+			trustedPath, err := trustedExtensionMediaPath(source, resolver)
+			if err != nil {
+				return nil, err
+			}
+			source = trustedPath
+		}
+		reader, contentType, name, err := ownedIngressMediaReader(ctx, source)
 		if err != nil {
 			return nil, err
 		}
-		digest := sha256.Sum256(data)
-		items = append(items, business.Attachment{Kind: input.kind, Name: name, MIME: contentType, Data: base64.StdEncoding.EncodeToString(data), Hash: hex.EncodeToString(digest[:])})
+		stored, createErr := artifacts.Service.Create(ctx, artifact.CreateRequest{
+			OwnerSpaceID:  ownerSpaceID,
+			OwnerDeviceID: ownerDeviceID,
+			Kind:          artifact.Kind(input.kind),
+			Filename:      name,
+			MIMEType:      contentType,
+			Source:        artifact.SourceChatUpload,
+			Reader:        reader,
+			Unbounded:     true,
+		})
+		closeErr := reader.Close()
+		if createErr != nil {
+			return nil, errors.Join(createErr, closeErr)
+		}
+		if closeErr != nil {
+			return nil, fmt.Errorf("关闭渠道附件读取流: %w", closeErr)
+		}
+		items = append(items, chatAttachmentReference(stored))
 	}
 	if err := business.ValidateAttachments(items); err != nil {
 		return nil, err
@@ -43,7 +77,7 @@ func ownedIngressAttachments(ctx context.Context, req *interaction.UnifiedEntryR
 	return items, nil
 }
 
-func trustedExtensionMediaSource(source string, resolver extensionResourceResolver) (string, error) {
+func trustedExtensionMediaPath(source string, resolver extensionResourceResolver) (string, error) {
 	const prefix = "/api/extension/resources/"
 	if !strings.HasPrefix(source, prefix) {
 		return source, nil
@@ -55,21 +89,17 @@ func trustedExtensionMediaSource(source string, resolver extensionResourceResolv
 	if err != nil {
 		return "", errors.New("扩展资源链接无效")
 	}
-	data, err := os.ReadFile(fullPath)
+	info, err := os.Stat(fullPath)
 	if err != nil {
-		return "", errors.New("扩展资源不可读取")
+		return "", fmt.Errorf("扩展资源不可读取: %w", err)
 	}
-	if len(data) == 0 || len(data) > 1<<20 {
-		return "", errors.New("媒体内容为空或超过附件大小上限")
+	if info.IsDir() {
+		return "", fmt.Errorf("扩展资源不是文件: %s", fullPath)
 	}
-	contentType := mime.TypeByExtension(filepath.Ext(fullPath))
-	if contentType == "" || contentType == "application/octet-stream" {
-		contentType = http.DetectContentType(data)
-	}
-	return "data:" + contentType + ";base64," + base64.StdEncoding.EncodeToString(data), nil
+	return fullPath, nil
 }
 
-func ownedIngressMedia(ctx context.Context, source string) ([]byte, string, string, error) {
+func ownedIngressMediaReader(ctx context.Context, source string) (io.ReadCloser, string, string, error) {
 	var reader io.ReadCloser
 	contentType, name := "", "附件"
 	if strings.HasPrefix(source, "data:") {
@@ -78,11 +108,7 @@ func ownedIngressMedia(ctx context.Context, source string) ([]byte, string, stri
 			return nil, "", "", errors.New("媒体编码无效")
 		}
 		contentType = strings.TrimSuffix(strings.TrimPrefix(header, "data:"), ";base64")
-		if len(encoded) > base64.StdEncoding.EncodedLen(1<<20) {
-			return nil, "", "", errors.New("媒体超过附件大小上限")
-		}
-		data, err := base64.StdEncoding.Strict().DecodeString(encoded)
-		return data, contentType, name, err
+		return io.NopCloser(base64.NewDecoder(base64.StdEncoding.Strict(), strings.NewReader(encoded))), contentType, name, nil
 	}
 	u, err := url.Parse(source)
 	if err != nil || u.User != nil || u.Fragment != "" {
@@ -150,30 +176,20 @@ func ownedIngressMedia(ctx context.Context, source string) ([]byte, string, stri
 		}
 		reader = response.Body
 		if response.StatusCode != http.StatusOK {
+			body, readErr := io.ReadAll(io.LimitReader(reader, 4096))
 			reader.Close()
-			return nil, "", "", errors.New("下载媒体失败")
+			return nil, "", "", fmt.Errorf("下载媒体失败 status=%s body=%s readError=%v", response.Status, string(body), readErr)
 		}
 		contentType, name = response.Header.Get("Content-Type"), path.Base(u.Path)
 	}
 	if err != nil {
 		return nil, "", "", err
 	}
-	defer reader.Close()
-	data, err := io.ReadAll(io.LimitReader(reader, (1<<20)+1))
-	if err != nil {
-		return nil, "", "", err
-	}
-	if len(data) == 0 || len(data) > 1<<20 {
-		return nil, "", "", errors.New("媒体内容为空或超过附件大小上限")
-	}
 	contentType, _, _ = mime.ParseMediaType(contentType)
-	if contentType == "" || contentType == "application/octet-stream" {
-		contentType = http.DetectContentType(data)
-	}
 	if name == "" || name == "." || name == "/" {
 		name = "附件"
 	}
-	return data, contentType, name, nil
+	return reader, contentType, name, nil
 }
 
 func ownedIngressResponseOutputs(response *interaction.ProcessResponse, raw json.RawMessage) error {

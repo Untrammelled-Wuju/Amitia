@@ -104,7 +104,7 @@ func TestConfigurationRepositoriesRejectRevokedAdministratorWrites(t *testing.T)
 		write func() error
 	}{
 		{"model-create", func() error { return model.CreateModel(&chat.ModelConfig{Name: "late", IsActive: 1}) }},
-		{"model-update", func() error { return model.UpdateModel(1, map[string]interface{}{"name": "late"}) }},
+		{"model-update", func() error { return model.UpdateModel(1, "", "", map[string]interface{}{"name": "late"}) }},
 		{"model-delete", func() error { return model.DeleteModel(1) }},
 		{"model-active", func() error { return model.ActivateModel(2) }},
 		{"model-routes", func() error {

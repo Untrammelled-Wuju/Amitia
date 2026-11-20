@@ -973,6 +973,11 @@ func (e *Engine) RunGroupEvents(ctx context.Context, request Request, emit func(
 		return GroupResponse{}, lockErr
 	}
 	defer unlock()
+	if request.queuedHash != "" {
+		if err := e.claimQueuedChat(ctx, request); err != nil {
+			return GroupResponse{}, err
+		}
+	}
 	ctx, scope, finish, currentRole, state, err := e.beginGroupScope(ctx, request)
 	if err != nil {
 		return GroupResponse{}, err
@@ -1007,6 +1012,9 @@ func (e *Engine) RunGroupEvents(ctx context.Context, request Request, emit func(
 			return GroupResponse{}, coordination.ErrRequestConflict
 		}
 		return e.executeGroupRound(ctx, scope, state, existing, emit)
+	}
+	if err := e.validateChatAttachments(ctx, scope, request.Attachments); err != nil {
+		return GroupResponse{}, err
 	}
 	if request.Group.ExpectedMembershipRevision != nil && state.MembershipRevision != *request.Group.ExpectedMembershipRevision {
 		return GroupResponse{}, ErrGroupMemberChanged
@@ -1094,7 +1102,7 @@ func (e *Engine) RunGroupEvents(ctx context.Context, request Request, emit func(
 		}
 		mutations = append(mutations, coordination.Mutation{Kind: "group-delivery", ID: delivery.DeliveryID, RoleID: coordination.StorageRole(scope, "group-delivery"), Body: encoded})
 	}
-	location, firstRequest, err := e.coordination.RegisterRequest(ctx, scope, fingerprint, request.ConversationID)
+	location, firstRequest, err := e.coordination.RegisterRequest(ctx, scope, fingerprint, request.ConversationID, request.queuedHash)
 	if err != nil {
 		if errors.Is(err, coordination.ErrScopeExpired) && location.State == "started" {
 			return GroupResponse{}, ErrUncertainExecution
@@ -1104,8 +1112,18 @@ func (e *Engine) RunGroupEvents(ctx context.Context, request Request, emit func(
 	if !firstRequest {
 		return GroupResponse{}, ErrUncertainExecution
 	}
+	if len(request.Attachments) > 0 {
+		if err := e.prepareChatAttachmentReferences(ctx, scope, request.Attachments, userMessageID); err != nil {
+			return GroupResponse{}, err
+		}
+	}
 	if _, err := e.commit(ctx, coordination.Commit{Scope: scope, Mutations: mutations}); err != nil {
 		return GroupResponse{}, fmt.Errorf("群消息尚未确认保存: %w", err)
+	}
+	if len(request.Attachments) > 0 {
+		if err := e.commitChatAttachmentReferences(context.WithoutCancel(ctx), scope, request.Attachments, userMessageID); err != nil {
+			return GroupResponse{}, fmt.Errorf("群消息已保存，但附件引用确认失败: %w", err)
+		}
 	}
 	return e.executeGroupRound(ctx, scope, state, round, emit)
 }

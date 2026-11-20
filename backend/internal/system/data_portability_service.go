@@ -2,6 +2,7 @@ package system
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -226,6 +227,21 @@ func (s *service) CreateDataPortabilityBackup(ctx context.Context, passphrase st
 	if err != nil {
 		return nil, err
 	}
+	name := filepath.Base(result.Path)
+	if result.Manifest.Encrypted {
+		if err := s.writeBackupMetadata(name, map[string]interface{}{
+			"name":       name,
+			"backupId":   result.BackupID,
+			"appVersion": result.Manifest.AppVersion,
+			"createdAt":  result.Manifest.CreatedAt,
+			"encrypted":  true,
+		}); err != nil {
+			if removeErr := os.Remove(result.Path); removeErr != nil {
+				amitialog.Printf("[original-error] 回滚未完成的加密备份失败 %s: %v", name, removeErr)
+			}
+			return nil, err
+		}
+	}
 	return map[string]interface{}{
 		"backupId":       result.BackupID,
 		"name":           filepath.Base(result.Path),
@@ -345,7 +361,71 @@ func (s *service) DeleteDataPortabilityBackup(name string) error {
 	if err != nil {
 		return err
 	}
-	return os.Remove(path)
+	if err := os.Remove(path); err != nil {
+		return err
+	}
+	if err := s.removeBackupMetadata(filepath.Base(path)); err != nil {
+		amitialog.Printf("[original-error] 删除备份元数据失败 %s: %v", filepath.Base(path), err)
+	}
+	return nil
+}
+
+const backupMetadataSuffix = ".meta.json"
+
+func (s *service) backupMetadataPath(name string) string {
+	return filepath.Join(s.dataDir, "backups", name+backupMetadataSuffix)
+}
+
+func (s *service) writeBackupMetadata(name string, metadata map[string]interface{}) error {
+	payload, err := json.Marshal(metadata)
+	if err != nil {
+		return err
+	}
+	path := s.backupMetadataPath(name)
+	temp, err := os.CreateTemp(filepath.Dir(path), "."+name+".meta-*")
+	if err != nil {
+		return err
+	}
+	tempPath := temp.Name()
+	if _, err := temp.Write(payload); err != nil {
+		_ = temp.Close()
+		_ = os.Remove(tempPath)
+		return err
+	}
+	if err := temp.Sync(); err != nil {
+		_ = temp.Close()
+		_ = os.Remove(tempPath)
+		return err
+	}
+	if err := temp.Close(); err != nil {
+		_ = os.Remove(tempPath)
+		return err
+	}
+	if err := os.Rename(tempPath, path); err != nil {
+		_ = os.Remove(tempPath)
+		return err
+	}
+	return nil
+}
+
+func (s *service) readBackupMetadata(name string) (map[string]interface{}, error) {
+	payload, err := os.ReadFile(s.backupMetadataPath(name))
+	if err != nil {
+		return nil, err
+	}
+	var metadata map[string]interface{}
+	if err := json.Unmarshal(payload, &metadata); err != nil {
+		return nil, err
+	}
+	return metadata, nil
+}
+
+func (s *service) removeBackupMetadata(name string) error {
+	err := os.Remove(s.backupMetadataPath(name))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	return err
 }
 
 func (s *service) ListDataPortabilityBackups() (map[string]interface{}, error) {
@@ -379,6 +459,22 @@ func (s *service) ListDataPortabilityBackups() (map[string]interface{}, error) {
 		if encrypted {
 			if !strings.HasSuffix(entry.Name(), ".enc") || info.Size() <= int64(len("AMITIAE1")) {
 				continue
+			}
+			metadata, err := s.readBackupMetadata(entry.Name())
+			if err != nil {
+				if !errors.Is(err, os.ErrNotExist) {
+					amitialog.Printf("[original-error] 读取备份元数据失败 %s: %v", entry.Name(), err)
+				}
+			} else {
+				if value, ok := metadata["backupId"].(string); ok {
+					backup["backupId"] = value
+				}
+				if value, ok := metadata["appVersion"].(string); ok {
+					backup["appVersion"] = value
+				}
+				if value, ok := metadata["createdAt"].(string); ok && value != "" {
+					backup["createdAt"] = value
+				}
 			}
 		} else {
 			if strings.HasSuffix(entry.Name(), ".enc") {

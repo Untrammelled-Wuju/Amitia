@@ -20,6 +20,7 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/middleware/security"
+	"github.com/u-ai/backend/internal/runtimeprofile"
 	"github.com/u-ai/backend/pkg/util"
 )
 
@@ -39,6 +40,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 	registerMeshChatManagementRouter(mesh, services, coreID)
 	registerMeshGroupChatRouter(mesh, services, coreID)
 	registerMeshChatRuntimeRouter(mesh, services, coreID)
+	registerMeshChatAttachmentRouter(mesh, services, coreID)
 	registerMeshTaskOwnerRouter(mesh, services)
 	registerMeshTaskSubmissionRouter(mesh, services, coreID)
 	mesh.POST("/continuity/signals", func(c *gin.Context) {
@@ -162,6 +164,9 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 				return
 			}
 			request.ConversationOrigin = &business.ConversationOrigin{OwnerID: owner, ID: query.ConversationID}
+			if services.RuntimeProfile == runtimeprofile.ProfileLocal && actor.IsLocalTrusted && owner == coreID {
+				request.ResourceOwnerID = coreID
+			}
 		}
 		query.ResourceKind, query.Cursor, query.HistoricalCursor = c.Query("resourceKind"), c.Query("cursor"), c.Query("historicalCursor")
 		if query.ResourceKind == "worldbook" {
@@ -203,6 +208,51 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 			}
 			c.JSON(status, gin.H{"code": "mesh.context_unavailable", "message": err.Error()})
 			return
+		}
+		if query.ListConversations && query.Cursor == "" && services.RuntimeProfile == runtimeprofile.ProfileLocal && actor.IsLocalTrusted && actor.DeviceID.String() != coreID {
+			coreRequest := request
+			coreRequest.ResourceOwnerID = coreID
+			coreQuery := query
+			coreQuery.ResourceKind = "conversation"
+			coreQuery.HistoricalListCursor = ""
+			seenCursors := map[string]bool{}
+			for {
+				page, err := services.OwnedBusiness.Query(c.Request.Context(), coreRequest, coreQuery)
+				if err != nil {
+					c.JSON(409, gin.H{"code": "mesh.context_unavailable", "message": err.Error()})
+					return
+				}
+				for _, resource := range page.Snapshot.Resources {
+					if resource.Kind != "conversation" {
+						continue
+					}
+					var document map[string]any
+					if err := json.Unmarshal(resource.Body, &document); err != nil {
+						c.JSON(500, gin.H{"message": err.Error()})
+						return
+					}
+					if document["source"] != "reminder" && document["source"] != "proactive" {
+						continue
+					}
+					document["ownerId"] = resource.OwnerID
+					encoded, err := json.Marshal(document)
+					if err != nil {
+						c.JSON(500, gin.H{"message": err.Error()})
+						return
+					}
+					result.HistoricalConversations = append(result.HistoricalConversations, encoded)
+				}
+				cursor := page.Snapshot.NextCursors["conversation"]
+				if cursor == "" {
+					break
+				}
+				if seenCursors[cursor] || len(seenCursors) >= 256 {
+					c.JSON(500, gin.H{"message": "提醒会话分页结果无效"})
+					return
+				}
+				seenCursors[cursor] = true
+				coreQuery.Cursor = cursor
+			}
 		}
 		c.JSON(200, gin.H{"code": 200, "data": result})
 	}

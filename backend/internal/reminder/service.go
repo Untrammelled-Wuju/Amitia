@@ -332,8 +332,17 @@ func (s *Service) waitForCreateResult(ctx context.Context, caller Caller, id, ha
 }
 
 func (s *Service) build(ctx context.Context, caller Caller, request CreateReminderRequest, id, source string, updating bool) (*Reminder, *schedule.ScheduleContributionDefinition, error) {
-	if strings.TrimSpace(request.Title) == "" || len(request.Title) > 512 || len(request.Content) > 128<<10 || strings.TrimSpace(request.CharacterID) == "" {
-		return nil, nil, errors.New("标题、所属角色或内容无效")
+	if strings.TrimSpace(request.Title) == "" {
+		return nil, nil, errors.New("任务标题不能为空")
+	}
+	if len(request.Title) > 512 {
+		return nil, nil, fmt.Errorf("任务标题过长（最多 512 字符，实际 %d 字符）", len(request.Title))
+	}
+	if len(request.Content) > 128<<10 {
+		return nil, nil, fmt.Errorf("任务内容过长（最多 %d 字符，实际 %d 字符）", 128<<10, len(request.Content))
+	}
+	if strings.TrimSpace(request.CharacterID) == "" {
+		return nil, nil, errors.New("所属角色不能为空")
 	}
 	if request.Kind == "" {
 		request.Kind = UserReminder

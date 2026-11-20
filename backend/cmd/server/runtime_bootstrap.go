@@ -166,6 +166,9 @@ func (b *runtimeBootstrap) RegisterApplication(services *AppServices) error {
 	if err := b.orchestrator.Register(newExtensionKernelComponent(services)); err != nil {
 		return fmt.Errorf("register extension kernel: %w", err)
 	}
+	if err := b.orchestrator.Register(newChatAttachmentRecoveryComponent(services)); err != nil {
+		return fmt.Errorf("register chat attachment recovery: %w", err)
+	}
 	if err := b.orchestrator.Register(newTaskRuntimeComponent(services)); err != nil {
 		return fmt.Errorf("register task runtime: %w", err)
 	}

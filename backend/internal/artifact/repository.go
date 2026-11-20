@@ -94,6 +94,12 @@ func (r *sqliteRepository) InsertReference(tx *gorm.DB, ref *ArtifactReference) 
 }
 
 func (r *sqliteRepository) InsertReferenceSqlTx(tx *sql.Tx, ref *ArtifactReference) error {
+	if _, err := tx.Exec(
+		`DELETE FROM artifact_references WHERE artifact_id = ? AND reference_type = ? AND reference_id = ?`,
+		ref.ArtifactID, ref.ReferenceType, ref.ReferenceID,
+	); err != nil {
+		return err
+	}
 	_, err := tx.Exec(
 		`INSERT INTO artifact_references (artifact_id, reference_type, reference_id, created_at) VALUES (?, ?, ?, ?)`,
 		ref.ArtifactID, ref.ReferenceType, ref.ReferenceID, ref.CreatedAt,
@@ -111,15 +117,15 @@ func (r *sqliteRepository) RemoveReferenceSqlTx(tx *sql.Tx, artifactID ID, refTy
 
 func (r *sqliteRepository) CountReferences(artifactID ID) (int64, error) {
 	var count int64
-	err := r.db.Model(&ArtifactReference{}).Where("artifact_id = ?", artifactID).Count(&count).Error
+	err := r.db.Model(&ArtifactReference{}).Where("artifact_id = ? AND reference_type NOT IN ?", artifactID, []string{chatUploadOwnerReference, chatUploadStorageReference}).Count(&count).Error
 	return count, err
 }
 
 func (r *sqliteRepository) CountReferencesSqlTx(tx *sql.Tx, artifactID ID) (int64, error) {
 	var count int64
 	err := tx.QueryRow(
-		`SELECT COUNT(*) FROM artifact_references WHERE artifact_id = ?`,
-		artifactID,
+		`SELECT COUNT(*) FROM artifact_references WHERE artifact_id = ? AND reference_type NOT IN (?, ?)`,
+		artifactID, chatUploadOwnerReference, chatUploadStorageReference,
 	).Scan(&count)
 	return count, err
 }

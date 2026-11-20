@@ -129,11 +129,11 @@ type TriggerHistory struct {
 }
 
 type DeliveryResult struct {
-	MessageID          string         `json:"messageId"`
-	ConversationID     string         `json:"conversationId"`
-	MessageSaved       bool           `json:"messageSaved"`
-	GenerationDegraded bool           `json:"generationDegraded,omitempty"`
-	Targets            []TargetResult `json:"targets"`
+	MessageID      string         `json:"messageId"`
+	ConversationID string         `json:"conversationId"`
+	OwnerID        string         `json:"ownerId"`
+	MessageSaved   bool           `json:"messageSaved"`
+	Targets        []TargetResult `json:"targets"`
 }
 
 type TargetResult struct {

@@ -2,9 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -27,68 +24,6 @@ func (m *memoryCandidateHTTPModel) ExtractOwnedMemory(_ context.Context, input b
 		result = append(result, business.DerivedMemory{Kind: kind, Key: kind + "-preference", Body: value})
 	}
 	return result, nil
-}
-
-func TestActualTLSAttachmentsStayAtTheirSelectedOwner(t *testing.T) {
-	schemas := newThreeCoreSchemas(t)
-	a, b := newThreeCoreFixture(t, "attachment-a", schemas), newThreeCoreFixture(t, "attachment-b", schemas)
-	pairThreeCoreFixtures(t, a, b)
-	const endpoint = "/api/device-mesh/v1/business"
-	for _, coordinated := range []bool{true} {
-		if coordinated {
-			policy, err := b.services.DeviceMesh.Coordination.Get(t.Context(), b.core, a.device.DeviceID.String())
-			if err != nil {
-				t.Fatal(err)
-			}
-			ensureCoordinatedForTest(t, b, a, policy.ModeRevision)
-		}
-		var chat struct {
-			ExecutionScope coordination.ExecutionScope `json:"executionScope"`
-			Roles          []coordination.Role         `json:"roles"`
-		}
-		if err := json.Unmarshal(b.request(t, a, http.MethodGet, endpoint+"/roles", nil, 200), &chat); err != nil || chat.ExecutionScope.ResourceOwnerID != a.device.DeviceID.String() {
-			t.Fatalf("device chat scope unavailable: %+v %v", chat, err)
-		}
-		for _, role := range chat.Roles {
-			if role.ID == "one" {
-				chat.ExecutionScope.RoleID = role.ID
-				chat.ExecutionScope.RoleRevision = role.Revision
-				chat.ExecutionScope.MemoryRoleID = role.ID
-				break
-			}
-		}
-		if chat.ExecutionScope.RoleID == "" {
-			t.Fatal("device chat role unavailable")
-		}
-		for _, kind := range []string{"file", "video"} {
-			data, mime := []byte("设备的文件内容"), "text/plain"
-			if kind == "video" {
-				data, mime = []byte{0, 0, 0, 16, 'f', 't', 'y', 'p', 'i', 's', 'o', 'm', 0, 0, 0, 0}, "video/mp4"
-			}
-			digest := sha256.Sum256(data)
-			item := business.Attachment{Kind: kind, Name: "附件", MIME: mime, Data: base64.StdEncoding.EncodeToString(data), Hash: hex.EncodeToString(digest[:])}
-			requestID := uuid.NewString()
-			payload := map[string]any{"requestId": requestID, "characterId": "one", "message": "请查看附件", "expectedExecutionScope": chat.ExecutionScope, "attachments": []business.Attachment{item}}
-			response := decodeThreeCoreMemoryResponse[business.Response](t, b.request(t, a, http.MethodPost, endpoint+"/messages", payload, 200))
-			owner, holder, other := a.device.DeviceID.String(), a, b
-			if !response.Saved || response.Scope.ResourceOwnerID != owner {
-				t.Fatal("attachment response has wrong owner or unconfirmed save")
-			}
-			row, err := coordination.NewOwnershipStore(holder.services.KernelContainer.DeviceRegistry.Database(), owner).Get(t.Context(), "message", requestID+"/user")
-			var document struct {
-				Attachments []business.Attachment `json:"attachments"`
-			}
-			if err != nil || row == nil || json.Unmarshal(row.Body, &document) != nil || len(document.Attachments) != 1 || document.Attachments[0] != item {
-				t.Fatal("original attachment binary was not saved at the acknowledged owner")
-			}
-			if row, err := coordination.NewOwnershipStore(other.services.KernelContainer.DeviceRegistry.Database(), owner).Get(t.Context(), "message", requestID+"/user"); err != nil || row != nil {
-				t.Fatal("attachment binary mirrored at another device")
-			}
-			item.Hash = "tampered"
-			payload["requestId"], payload["attachments"] = uuid.NewString(), []business.Attachment{item}
-			b.request(t, a, http.MethodPost, endpoint+"/messages", payload, 400)
-		}
-	}
 }
 
 func TestActualTLSMemoryManagementPreservesOwnerAndRejectsOldIntent(t *testing.T) {

@@ -83,7 +83,7 @@ func TestNonAckableDesktopDeliveryTerminatesWithoutReceipt(t *testing.T) {
 	if state.State != "delivered" {
 		t.Fatalf("non-ackable outbox did not reach a terminal state: %+v", state)
 	}
-	if err := runtime.AcknowledgeScheduled(t.Context(), endpoint.SpaceID, endpoint.DeviceID, envelope.NotificationID, "displayed"); err == nil || !strings.Contains(err.Error(), "通知类型不支持展示回执") {
+	if err := runtime.AcknowledgeScheduled(t.Context(), endpoint.SpaceID, endpoint.DeviceID, envelope.NotificationID, "displayed", ""); err == nil || !strings.Contains(err.Error(), "通知类型不支持展示回执") {
 		t.Fatalf("receipt for a non-ackable type must keep the original rejection: %v", err)
 	}
 }
@@ -117,7 +117,7 @@ func TestExpireOutboxTerminatesAcceptedReceipt(t *testing.T) {
 	if state.State != "expired" || !strings.Contains(state.Error, "notification receipt expired") {
 		t.Fatalf("accepted outbox was not reaped: %+v", state)
 	}
-	if err := runtime.AcknowledgeScheduled(t.Context(), "space", "device", "reminder", "displayed"); err == nil || !strings.Contains(err.Error(), "通知回执已过期") {
+	if err := runtime.AcknowledgeScheduled(t.Context(), "space", "device", "reminder", "displayed", ""); err == nil || !strings.Contains(err.Error(), "通知回执已过期") {
 		t.Fatalf("expired receipt must keep the original rejection: %v", err)
 	}
 }

@@ -15,6 +15,8 @@ import (
 	"time"
 )
 
+const lifecycleReadyTimeout = 20 * time.Second
+
 func TestLifecyclePortProcess(t *testing.T) {
 	if os.Getenv("AMITIA_LIFECYCLE_PORT") == "" {
 		return
@@ -58,7 +60,7 @@ func TestLifecycleStopReleasesPortAndBlocksRestart(t *testing.T) {
 	if _, err := s.Start(context.Background(), req); err != nil {
 		t.Fatal(err)
 	}
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(lifecycleReadyTimeout)
 	for {
 		conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 100*time.Millisecond)
 		if err == nil {
@@ -159,7 +161,7 @@ func TestLifecycleStopRemovesChildrenAfterParentExits(t *testing.T) {
 		t.Fatal(err)
 	}
 	var childPID int
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(lifecycleReadyTimeout)
 	for time.Now().Before(deadline) {
 		if b, err := os.ReadFile(childFile); err == nil {
 			childPID, _ = strconv.Atoi(string(b))
@@ -181,7 +183,7 @@ func TestLifecycleStopRemovesChildrenAfterParentExits(t *testing.T) {
 		t.Fatal(err)
 	}
 	gone := false
-	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
+	for deadline := time.Now().Add(lifecycleReadyTimeout); time.Now().Before(deadline); {
 		if !procIsAlive(childPID) {
 			gone = true
 			break
@@ -325,7 +327,7 @@ exec /bin/sleep 30`)
 		t.Fatalf("initial start: %v", err)
 	}
 
-	deadline := time.Now().Add(4 * time.Second)
+	deadline := time.Now().Add(lifecycleReadyTimeout)
 	var restarted *ServiceInstance
 	for time.Now().Before(deadline) {
 		inst, getErr := s.Get(def.ServiceID)

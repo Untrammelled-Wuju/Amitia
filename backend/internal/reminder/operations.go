@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sort"
 	"time"
 
@@ -46,7 +47,7 @@ func (s *Service) Update(ctx context.Context, caller Caller, id string, generati
 		return nil, err
 	}
 	if err := s.deps.Scheduler.UpdateHostDefinitionState(ctx, id, generation, def, request.Enabled); err != nil {
-		return nil, err
+		return nil, scheduleError(err)
 	}
 	return s.Find(ctx, caller, id)
 }
@@ -76,9 +77,19 @@ func (s *Service) Change(ctx context.Context, caller Caller, id string, generati
 		return nil, errors.New("任务操作无效")
 	}
 	if err != nil {
-		return nil, err
+		return nil, scheduleError(err)
 	}
 	return s.Find(ctx, caller, id)
+}
+
+func scheduleError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, schedule.ErrGenerationMismatch) {
+		return fmt.Errorf("任务版本已变化，请刷新后重试（原始错误: %w）", err)
+	}
+	return err
 }
 
 func (s *Service) TriggerNow(ctx context.Context, caller Caller, id string, generation int64) (*schedule.ScheduleTriggerRecord, error) {
@@ -87,12 +98,13 @@ func (s *Service) TriggerNow(ctx context.Context, caller Caller, id string, gene
 		return nil, err
 	}
 	if item.Generation != generation {
-		return nil, schedule.ErrGenerationMismatch
+		return nil, scheduleError(schedule.ErrGenerationMismatch)
 	}
 	if err := s.authorize(ctx, caller, item); err != nil {
 		return nil, err
 	}
-	return s.deps.Scheduler.RunNowVersion(ctx, id, generation)
+	record, err := s.deps.Scheduler.RunNowVersion(ctx, id, generation)
+	return record, scheduleError(err)
 }
 
 func (s *Service) Preview(ctx context.Context, caller Caller, id string) (map[string]any, error) {
@@ -103,7 +115,7 @@ func (s *Service) Preview(ctx context.Context, caller Caller, id string) (map[st
 	if err := s.authorize(ctx, caller, item); err != nil {
 		return nil, err
 	}
-	return map[string]any{"id": item.ID, "tested": true, "generated": false, "sent": false, "title": item.Title, "remindAt": item.RemindAt, "messageContent": item.Content, "channel": item.Channel, "channels": item.Channels, "conversationId": item.ConversationID, "ownerId": item.OwnerID, "generation": item.Generation, "authorizationCheck": map[string]any{"allowed": true, "reason": "配置与执行权限验证通过；预览不会生成或发送消息"}}, nil
+	return map[string]any{"id": item.ID, "tested": true, "generated": false, "sent": false, "title": item.Title, "remindAt": item.RemindAt, "messageContent": item.Content, "channel": item.Channel, "channels": item.Channels, "conversationId": item.ConversationID, "ownerId": item.OwnerID, "generation": item.Generation, "authorizationCheck": map[string]any{"allowed": true, "reason": "配置与执行权限验证通过；正式执行时创建新对话；预览不会生成或发送消息"}}, nil
 }
 
 func (s *Service) historyFor(ctx context.Context, item *Reminder, limit int) ([]TriggerHistory, error) {
@@ -390,7 +402,7 @@ func (s *Service) Execute(ctx context.Context, def *schedule.ScheduleContributio
 	if err != nil {
 		return nil, err
 	}
-	if !result.MessageSaved || result.MessageID == "" || result.ConversationID != item.ConversationID {
+	if !result.MessageSaved || result.MessageID == "" || result.ConversationID == "" {
 		return nil, errors.New("提醒消息未确认保存")
 	}
 	state := "completed"

@@ -399,7 +399,22 @@ func (e *Engine) Edit(ctx context.Context, authority Request, edit EditRequest) 
 		}
 	}
 	mutations = append(mutations, coordination.Mutation{Kind: "checkpoint", ID: receiptID, RoleID: scope.RoleID, Body: proof})
-	return e.commit(ctx, coordination.Commit{Scope: scope, Mutations: mutations})
+	ack, err = e.commit(ctx, coordination.Commit{Scope: scope, Mutations: mutations})
+	if err != nil {
+		return ack, err
+	}
+	if edit.Kind == "message" && edit.Deleted {
+		var message struct {
+			Attachments []Attachment `json:"attachments"`
+		}
+		if err := json.Unmarshal(resource.Body, &message); err != nil {
+			return ack, fmt.Errorf("解析已删除消息附件失败: %w", err)
+		}
+		if err := e.removeChatAttachmentReferences(context.WithoutCancel(ctx), scope, message.Attachments, edit.ID); err != nil {
+			return ack, fmt.Errorf("清理已删除消息附件引用失败: %w", err)
+		}
+	}
+	return ack, nil
 }
 
 func applyMemoryVerificationChanges(document map[string]json.RawMessage, changes map[string]json.RawMessage, previousContent json.RawMessage, now time.Time) error {

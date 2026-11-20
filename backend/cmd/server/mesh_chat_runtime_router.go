@@ -22,17 +22,19 @@ import (
 
 type ownedRuntimeRequest struct {
 	business.Request
-	TurnID        string `json:"turnId"`
-	Content       string `json:"content"`
-	ApprovalID    string `json:"approvalId"`
-	Approved      bool   `json:"approved"`
-	AfterSequence int64  `json:"afterSequence"`
-	Cursor        string `json:"cursor"`
-	Limit         int    `json:"limit"`
+	TurnID          string   `json:"turnId"`
+	Content         string   `json:"content"`
+	ApprovalID      string   `json:"approvalId"`
+	Approved        bool     `json:"approved"`
+	AfterSequence   int64    `json:"afterSequence"`
+	Cursor          string   `json:"cursor"`
+	Limit           int      `json:"limit"`
+	QueuedRequestID string   `json:"queuedRequestId"`
+	QueueOrder      []string `json:"queueOrder"`
 }
 
 func registerMeshChatRuntimeRouter(mesh *gin.RouterGroup, services *AppServices, coreID string) {
-	for _, operation := range []string{"snapshot", "turns", "events", "interrupt", "steer", "retry", "approval", "queue/status"} {
+	for _, operation := range []string{"snapshot", "turns", "events", "interrupt", "steer", "retry", "approval", "queue/status", "queue/list", "queue/enqueue", "queue/reorder", "queue/delete", "queue/steer"} {
 		operation := operation
 		mesh.POST("/chat-runtime/"+operation, func(c *gin.Context) {
 			actor := security.GetActor(c)
@@ -41,8 +43,16 @@ func registerMeshChatRuntimeRouter(mesh *gin.RouterGroup, services *AppServices,
 				return
 			}
 			var request ownedRuntimeRequest
-			c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 512<<10)
-			if c.ShouldBindJSON(&request) != nil || request.ExpectedScope == nil || request.ConversationID == "" || len(request.ConversationID) > 512 || len(request.Content) > 128<<10 || request.AfterSequence < 0 || len(request.Cursor) > 8192 || request.Limit < 0 || request.Limit > 128 {
+			limit := int64(512 << 10)
+			if operation == "queue/enqueue" {
+				limit = 4 << 20
+			}
+			c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, limit)
+			if err := c.ShouldBindJSON(&request); err != nil {
+				c.JSON(400, gin.H{"message": err.Error()})
+				return
+			}
+			if request.ExpectedScope == nil || request.ConversationID == "" || len(request.ConversationID) > 512 || len(request.Content) > 128<<10 || request.AfterSequence < 0 || len(request.Cursor) > 8192 || request.Limit < 0 || request.Limit > 128 {
 				c.JSON(400, gin.H{"message": "聊天运行控制参数无效"})
 				return
 			}
@@ -98,6 +108,39 @@ func registerMeshChatRuntimeRouter(mesh *gin.RouterGroup, services *AppServices,
 				approvals := ownedRuntimeApprovals(services, view, turns)
 				data := gin.H{"executionScope": view.Scope, "version": conversationstream.ProtocolVersion, "revision": len(turns), "conversation": conversation, "messages": messages, "turns": turns, "lastEventSequence": runtime.LastEventSequence, "activeTurn": runtime.ActiveTurn, "approvals": approvals, "messageHistory": gin.H{"hasMore": view.Snapshot.NextCursors["message"] != "", "nextCursor": view.Snapshot.NextCursors["message"]}, "turnHistory": gin.H{"hasMore": view.Snapshot.NextCursors["checkpoint"] != "", "nextCursor": view.Snapshot.NextCursors["checkpoint"]}}
 				switch operation {
+				case "queue/list":
+					items, err := services.OwnedBusiness.ResumeConversationQueuedChats(ctx, request.Request)
+					if err != nil {
+						return err
+					}
+					c.JSON(200, gin.H{"code": 200, "data": gin.H{"executionScope": view.Scope, "items": items}})
+					return nil
+				case "queue/enqueue":
+					if strings.TrimSpace(request.Message) == "" {
+						return errors.New("排队消息内容为空")
+					}
+					queued, err := services.OwnedBusiness.QueueChat(ctx, view.Scope, request.Request)
+					if err != nil {
+						return err
+					}
+					c.JSON(200, gin.H{"code": 200, "data": queued})
+					return nil
+				case "queue/reorder":
+					if len(request.QueueOrder) > 128 {
+						return errors.New("排队消息数量超过上限")
+					}
+					items, err := services.OwnedBusiness.ReorderQueuedChats(ctx, request.Request, request.QueueOrder)
+					if err != nil {
+						return err
+					}
+					c.JSON(200, gin.H{"code": 200, "data": gin.H{"executionScope": view.Scope, "items": items}})
+					return nil
+				case "queue/delete":
+					if err := services.OwnedBusiness.DeleteQueuedChat(ctx, request.Request, request.QueuedRequestID); err != nil {
+						return err
+					}
+					c.JSON(200, gin.H{"code": 200, "data": gin.H{"executionScope": view.Scope, "deleted": true}})
+					return nil
 				case "snapshot":
 					queued, err := services.OwnedBusiness.ResumeConversationQueuedChats(ctx, request.Request)
 					if err != nil {
@@ -125,6 +168,15 @@ func registerMeshChatRuntimeRouter(mesh *gin.RouterGroup, services *AppServices,
 					return errors.New("目标执行不存在或不属于当前会话")
 				}
 				switch operation {
+				case "queue/steer":
+					content, err := services.OwnedBusiness.SteerQueuedChat(ctx, request.Request, request.QueuedRequestID, request.TurnID)
+					if err != nil {
+						return err
+					}
+					if err := publishOwnedControl(ctx, key, target, "turn.steered", "running", gin.H{"content": content}); err != nil {
+						return fmt.Errorf("引导已送达，但发布运行事件失败: %w", err)
+					}
+					data = gin.H{"accepted": true, "turnId": request.TurnID, "executionScope": view.Scope}
 				case "interrupt":
 					if !manager.Interrupt(key, request.TurnID) {
 						return errors.New("目标执行当前不可中断")
