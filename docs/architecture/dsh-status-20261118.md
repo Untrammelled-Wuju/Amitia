@@ -18,7 +18,7 @@
 ## 二、覆盖度（按 `catalog/compatibility.v1.json`）
 
 - UI 槽位 120/120。
-- Host Service 69 项：implemented 21、partial 7、pending 1、delegated 27、unavailable 13 → **93.5%**。
+- Host Service 69 项：implemented 25、partial 4、pending 0、delegated 27、unavailable 13 → **94.2%**。
 - Client Service 8 项：implemented 4、partial 4。
 - 加权（40/40/20）约 **93%**。
 
