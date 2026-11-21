@@ -1,10 +1,21 @@
 import '../backend_transport/backend_service_api.dart';
+import '../backend_transport/role_management_target.dart';
 import 'role_authority.dart';
 
 class CharacterDetailService {
   final BackendServiceApi _api;
+  final RoleManagementTarget? Function()? _target;
 
-  CharacterDetailService(this._api);
+  CharacterDetailService(this._api, {RoleManagementTarget? Function()? target})
+    : _target = target;
+
+  Map<String, String>? _headers(
+    String? roleAuthority, [
+    RoleManagementTarget? target,
+  ]) => withRoleManagementTarget(
+    roleAuthorityHeaders(roleAuthority),
+    target ?? _target?.call(),
+  );
 
   Future<Map<String, dynamic>?> test(String id, String message) async {
     final trimmed = message.trim();
@@ -14,6 +25,7 @@ class CharacterDetailService {
     return _api.post<Map<String, dynamic>>(
       '/api/characters/$id/test',
       data: {'message': trimmed},
+      headers: withRoleManagementTarget(null, _target?.call()),
     );
   }
 
@@ -24,7 +36,10 @@ class CharacterDetailService {
   }
 
   Future<List<Map<String, dynamic>>> templates() async {
-    final resp = await _api.get<List<dynamic>>('/api/character-templates');
+    final resp = await _api.get<List<dynamic>>(
+      '/api/character-templates',
+      headers: withRoleManagementTarget(null, _target?.call()),
+    );
     if (resp == null) return [];
     return resp.map((e) => e as Map<String, dynamic>).toList();
   }
@@ -35,13 +50,16 @@ class CharacterDetailService {
   }) async {
     final resp = await _api.post<Map<String, dynamic>>(
       '/api/character-templates/$templateId/create-character',
-      headers: roleAuthorityHeaders(roleAuthority),
+      headers: _headers(roleAuthority),
     );
     return resp;
   }
 
   Future<Map<String, dynamic>?> character(String id) async {
-    return _api.get<Map<String, dynamic>>('/api/characters/$id');
+    return _api.get<Map<String, dynamic>>(
+      '/api/characters/$id',
+      headers: withRoleManagementTarget(null, _target?.call()),
+    );
   }
 
   Future<Map<String, dynamic>?> updateCharacter(
@@ -52,7 +70,7 @@ class CharacterDetailService {
     return _api.put<Map<String, dynamic>>(
       '/api/characters/$id',
       data: data,
-      headers: roleAuthorityHeaders(roleAuthority),
+      headers: _headers(roleAuthority),
     );
   }
 
@@ -197,6 +215,7 @@ class CharacterDetailService {
       files: {
         'avatar': [filePath],
       },
+      headers: _headers(roleAuthority),
       fields: {'roleAuthority': ?roleAuthority},
     );
     return resp;

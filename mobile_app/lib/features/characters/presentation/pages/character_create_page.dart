@@ -13,7 +13,11 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
+import '../../../../core/backend_transport/role_management_target.dart';
+import '../../../../core/runtime/backend/mobile_backend_providers.dart';
+import '../../../../core/runtime/backend/mobile_deployment_mode.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/widgets/role_management_target_field.dart';
 import '../../../../core/settings/current_character_provider.dart';
 import '../../../../core/widgets/profile_avatar.dart';
 import '../../../../core/widgets/shared_core_read_only_banner.dart';
@@ -39,6 +43,7 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
   bool _isPickingAvatar = false;
   bool _isCreating = false;
   String _roleAuthority = '';
+  RoleManagementTarget _target = RoleManagementTarget.local;
 
   @override
   void initState() {
@@ -48,7 +53,9 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
 
   Future<void> _loadAuthority() async {
     try {
-      final authority = await ref.read(characterServiceProvider).authority();
+      final authority = await ref
+          .read(characterServiceProvider)
+          .authority(target: _target);
       if (mounted) setState(() => _roleAuthority = authority);
     } catch (error) {
       if (mounted) {
@@ -92,6 +99,15 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
     }
   }
 
+  void _switchTarget(RoleManagementTarget target) {
+    if (_target == target) return;
+    setState(() {
+      _target = target;
+      _roleAuthority = '';
+    });
+    _loadAuthority();
+  }
+
   Future<void> _finish() async {
     if (_isCreating) return;
     setState(() => _isCreating = true);
@@ -108,7 +124,11 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
         'status': '在线',
         'voiceSpeed': 1.0,
       };
-      final character = await svc.create(data, roleAuthority: _roleAuthority);
+      final character = await svc.create(
+        data,
+        roleAuthority: _roleAuthority,
+        target: _target,
+      );
       if (character == null || character.id.isEmpty) {
         throw StateError('角色创建结果为空，请确认服务连接后重试');
       }
@@ -116,6 +136,7 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
         await svc.setActive(
           character.id,
           roleAuthority: character.roleAuthority,
+          target: _target,
         );
       } catch (error, stackTrace) {
         print("[original-error] $error\n$stackTrace");
@@ -178,7 +199,8 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
   Widget build(BuildContext context) {
     final accessAsync = ref.watch(sharedCoreDataAccessProvider);
     final access = accessAsync.valueOrNull;
-    final canWrite = access?.write ?? false;
+    final centerTarget = _target == RoleManagementTarget.center;
+    final canWrite = centerTarget ? (access?.write ?? false) : true;
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '创建角色 (${_currentStep + 1}/${_steps.length})',
@@ -189,8 +211,23 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
         top: false,
         child: Column(
           children: [
-            if (access?.readOnly == true)
+            if (centerTarget && access?.readOnly == true)
               SharedCoreReadOnlyBanner(access: access!),
+            if (_target == RoleManagementTarget.center ||
+                ref.watch(mobileDeploymentConfigProvider).mode ==
+                    MobileDeploymentMode.cloud)
+              Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: AppSpacing.pagePadding,
+                  vertical: AppSpacing.xs,
+                ),
+                child: RoleManagementTargetField(
+                  noun: '角色',
+                  value: _target,
+                  enabled: !_isCreating,
+                  onChanged: _switchTarget,
+                ),
+              ),
             Padding(
               padding: EdgeInsets.symmetric(
                 horizontal: AppSpacing.pagePadding,

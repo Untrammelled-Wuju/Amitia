@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'dart:math';
 
 import 'package:dio/dio.dart';
@@ -934,6 +935,36 @@ class DeviceOwnedChatService {
         .toList();
   }
 
+  final Map<String, Map<String, dynamic>> _historicalScopes = {};
+
+  Future<Map<String, dynamic>?> _resolveHistoricalScope(
+    String ownerId,
+    String roleId,
+  ) async {
+    final key = '$ownerId/$roleId';
+    final cached = _historicalScopes[key];
+    if (cached != null) return cached;
+    try {
+      final result = await _api.get<Map<String, dynamic>>(
+        '/api/device-mesh/v1/business/historical-scope',
+        queryParameters: {'targetDeviceId': ownerId, 'characterId': roleId},
+      );
+      final scope = result?['executionScope'];
+      if (scope is! Map) return null;
+      final value = Map<String, dynamic>.from(scope);
+      _historicalScopes[key] = value;
+      return value;
+    } catch (error, stackTrace) {
+      developer.log(
+        '[original-error] $error',
+        name: 'device-owned-chat.historical-scope',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      return null;
+    }
+  }
+
   Future<void> edit(
     String kind,
     String id, {
@@ -952,6 +983,51 @@ class DeviceOwnedChatService {
         ? parseConversationReference(id)
         : null;
     final role = selectRole(characterId ?? resource?['roleId']?.toString());
+    var scope = expectedScope;
+    if (scope != null &&
+        expectedOwnerId != null &&
+        scope['coordinated'] == true &&
+        expectedOwnerId != scope['resourceOwnerId']) {
+      scope = await _resolveHistoricalScope(expectedOwnerId, role) ?? scope;
+    }
+    final historical = scope != null &&
+        expectedOwnerId != null &&
+        scope['coordinated'] == true &&
+        scope['resourceOwnerId'] == expectedOwnerId &&
+        scope['roleOwnerId'] == expectedOwnerId &&
+        scope['targetDeviceId'] == expectedOwnerId &&
+        scope['resourceOwnerId'] != scope['coreId'];
+    if (historical) {
+      if (expectedRevision == null) {
+        throw StateError('历史数据缺少版本，请重新加载');
+      }
+      final requestId =
+          'edit-${DateTime.now().microsecondsSinceEpoch}-${_editSequence++}';
+      final ack = await _api.post<Map<String, dynamic>>(
+        '/api/device-mesh/v1/business/resources/edit',
+        data: {
+          'requestId': requestId,
+          'kind': kind,
+          'id': id,
+          'characterId': role,
+          'expectedRevision': expectedRevision,
+          'expectedExecutionScope': scope,
+          'changes': changes,
+          'deleted': deleted,
+          'clear': clear,
+        },
+      );
+      if (ack?['ownerId'] != expectedOwnerId ||
+          ack?['versions'] is! Map ||
+          (ack!['versions'] as Map)['$kind/$id'] != expectedRevision + 1) {
+        throw StateError('数据所有者尚未确认操作结果');
+      }
+      if (captured != revision && !deleted) {
+        throw StateError('服务状态已变化，请重新加载确认操作结果');
+      }
+      _resources.clear();
+      return;
+    }
     if (resource == null) {
       if (origin != null && kind != 'conversation') {
         throw StateError('请先加载该记录并确认当前数据来源后再修改');
@@ -963,8 +1039,8 @@ class DeviceOwnedChatService {
           'id': origin?['id'] ?? id,
           'characterId': role,
           if (origin != null) 'targetDeviceId': origin['ownerId'],
-          if (expectedScope != null)
-            'memoryView': memoryViewForScope(expectedScope),
+          if (scope != null)
+            'memoryView': memoryViewForScope(scope),
         },
       );
       if (result?['resource'] is Map && result?['executionScope'] is Map) {
@@ -996,8 +1072,8 @@ class DeviceOwnedChatService {
     if (resource['executionScope'] is! Map) {
       throw StateError('记录缺少数据来源版本，请重新加载');
     }
-    if (expectedScope != null &&
-        _recordStamp(expectedScope) !=
+    if (scope != null &&
+        _recordStamp(scope) !=
             _recordStamp(resource['executionScope'] as Map)) {
       final refreshed = await _api.get<Map<String, dynamic>>(
         '/api/device-mesh/v1/business/resources',
@@ -1005,7 +1081,7 @@ class DeviceOwnedChatService {
           'kind': kind,
           'id': id,
           'characterId': role,
-          'memoryView': memoryViewForScope(expectedScope),
+          'memoryView': memoryViewForScope(scope),
         },
       );
       if (refreshed?['resource'] is Map &&
@@ -1017,7 +1093,7 @@ class DeviceOwnedChatService {
           );
       }
       if (resource['executionScope'] is! Map ||
-          _recordStamp(expectedScope) !=
+          _recordStamp(scope) !=
               _recordStamp(resource['executionScope'] as Map)) {
         throw StateError('记录原始归属已变化，请重新加载后再修改');
       }
@@ -1033,7 +1109,7 @@ class DeviceOwnedChatService {
         'id': resourceId,
         'characterId': role,
         'expectedRevision': expectedRevision ?? resource['revision'],
-        'expectedExecutionScope': expectedScope ?? resource['executionScope'],
+        'expectedExecutionScope': scope ?? resource['executionScope'],
         'changes': changes,
         'deleted': deleted,
         'clear': clear,
@@ -1397,7 +1473,8 @@ class DeviceOwnedChatService {
     Map<String, dynamic> changes = const {},
     bool deleted = false,
   }) async {
-    if (project.readOnly ||
+    final coordinated = project.executionScope?['coordinated'] == true;
+    if ((project.readOnly && !coordinated) ||
         project.executionScope == null ||
         project.ownerId.isEmpty ||
         project.revision < 1) {
@@ -1441,10 +1518,7 @@ class DeviceOwnedChatService {
           'sourceScope': Map<String, dynamic>.from(
             result['executionScope'] as Map,
           ),
-          'editable':
-              name == 'snapshot' &&
-              row['ownerId'] == result['executionScope']['resourceOwnerId'] &&
-              row['readOnly'] != true,
+          'editable': row['readOnly'] != true,
         };
         _summaryViews[conversationId] = value;
         if (_summaryViews.length > 64)
@@ -1466,7 +1540,7 @@ class DeviceOwnedChatService {
         displayed['editable'] != true ||
         displayed['sourceRevision'] is! int ||
         displayed['sourceScope'] is! Map) {
-      throw StateError('请先加载当前所有者的摘要，历史摘要需在原设备管理');
+      throw StateError('请先加载摘要，数据来源可能已变化');
     }
     if (displayedViewId == null ||
         displayedViewId != displayed['summaryViewId']) {

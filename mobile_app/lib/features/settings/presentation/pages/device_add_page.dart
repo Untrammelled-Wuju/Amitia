@@ -19,6 +19,7 @@ import '../../../../core/backend_connection/providers/backend_connection_provide
 import '../../../../core/backend_connection/backend_connection_availability.dart';
 import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
 import '../../../../core/backend_transport/state/backend_transport_state.dart';
+import '../../../../core/device_mesh/system_device_name.dart';
 import '../../../../core/errors/original_error.dart';
 import '../../../../core/runtime/backend/backend_topology.dart';
 import '../../../../core/runtime/backend/mobile_backend_lifecycle.dart';
@@ -119,12 +120,21 @@ class _DeviceAddPageState extends ConsumerState<DeviceAddPage> {
   @override
   void initState() {
     super.initState();
+    unawaited(_prefillDeviceName());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       unawaited(_refreshApprovals());
       unawaited(_startApprovalEvents());
       unawaited(_runRouteAction());
     });
+  }
+
+  Future<void> _prefillDeviceName() async {
+    final name = await resolveSystemDeviceName();
+    if (!mounted || name.isEmpty || _labelController.text.trim().isNotEmpty) {
+      return;
+    }
+    setState(() => _labelController.text = name);
   }
 
   Future<void> _runRouteAction() async {
@@ -545,7 +555,7 @@ class _DeviceAddPageState extends ConsumerState<DeviceAddPage> {
             SizedBox(height: AppSpacing.sm),
             AmitiaTextField(
               controller: _labelController,
-              hintText: '例如：我的 Android 手机',
+              hintText: '默认使用系统设备名，可自行修改',
               prefixIcon: const Icon(Icons.edit_outlined),
             ),
             SizedBox(height: AppSpacing.lg),

@@ -32,7 +32,8 @@ import '../core/settings/background_preferences.dart';
 import '../core/settings/ui_style_profile.dart';
 import '../core/settings/ui_style_command_service.dart';
 import '../core/settings/chat_permission_preferences.dart';
-import '../core/services/providers.dart' show extensionServiceProvider;
+import '../core/services/providers.dart'
+    show deviceNameReporterProvider, extensionServiceProvider;
 import '../features/desktop_pet/runtime/desktop_pet_mobile_runtime.dart';
 import '../features/extensions/presentation/widgets/mcp_interaction_guard.dart';
 import 'theme/app_theme.dart';
@@ -51,13 +52,39 @@ class AmitiaAppRoot extends ConsumerStatefulWidget {
   ConsumerState<AmitiaAppRoot> createState() => _AmitiaAppRootState();
 }
 
-class _AmitiaAppRootState extends ConsumerState<AmitiaAppRoot> {
+class _AmitiaAppRootState extends ConsumerState<AmitiaAppRoot>
+    with WidgetsBindingObserver {
   bool _bootstrapInitialized = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _initializeBootstrap();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    if (ref.read(mobileDeploymentConfigProvider).mode !=
+        MobileDeploymentMode.cloud) {
+      return;
+    }
+    unawaited(_reportDeviceName());
+  }
+
+  Future<void> _reportDeviceName() async {
+    try {
+      await ref.read(deviceNameReporterProvider).reportCurrentName();
+    } catch (error, stackTrace) {
+      print('[original-error] $error\n$stackTrace');
+    }
   }
 
   Future<void> _initializeBootstrap() async {
@@ -87,6 +114,9 @@ class _AmitiaAppRootState extends ConsumerState<AmitiaAppRoot> {
             bootstrapSnapshot.phase == RuntimeBootstrapPhase.unavailable);
     if (!localBootstrapBlocked) {
       await lifecycle.reconcile(config);
+    }
+    if (config.mode == MobileDeploymentMode.cloud) {
+      await _reportDeviceName();
     }
     await ref.read(uiRuntimeProvider.notifier).ensureLoaded();
 

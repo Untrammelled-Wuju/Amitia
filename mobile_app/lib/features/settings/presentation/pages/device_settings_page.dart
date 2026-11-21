@@ -13,6 +13,7 @@ import '../../../../core/runtime/backend/mobile_backend_providers.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
+import '../widgets/role_domain_settings.dart';
 
 class DeviceSettingsPage extends ConsumerWidget {
   const DeviceSettingsPage({super.key});
@@ -85,6 +86,7 @@ class DeviceSettingsPage extends ConsumerWidget {
                 subtitle: '来自 /api/device-mesh/v1/devices',
                 value: deviceCount == null ? '—' : '$deviceCount 台',
               ),
+              const RoleDomainSettings(),
             ]),
             _sectionTitle(context, '同步设置'),
             _group(context, [

@@ -6,10 +6,17 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../core/backend_transport/role_management_target.dart';
+import '../../../../core/backend_transport/routed_backend_service_api.dart';
+import '../../../../core/device_mesh/device_display_name.dart';
+import '../../../../core/device_mesh/ownership_label.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/backend_connection/backend_connection_availability.dart';
 import '../../../../core/backend_connection/providers/backend_connection_providers.dart';
+import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
+import '../../../../core/runtime/backend/mobile_backend_providers.dart';
+import '../../../../core/runtime/backend/mobile_deployment_mode.dart';
 import '../../../../core/artifact/artifact_providers.dart';
 import '../../../../core/services/error_utils.dart';
 import '../../../../core/services/providers.dart';
@@ -80,8 +87,42 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
     }
   }
 
+  RoleManagementTarget get _target =>
+      ref.watch(skillManagementTargetProvider) ?? RoleManagementTarget.local;
+
+  bool get _centerAvailable =>
+      ref.watch(mobileDeploymentConfigProvider).mode ==
+          MobileDeploymentMode.cloud &&
+      roleManagementCenterAvailable(
+        ref.watch(deviceCoordinationProvider).valueOrNull,
+      );
+
+  String get _localDeviceName {
+    final identity = ref.watch(localDeviceMeshIdentityProvider).valueOrNull;
+    final deviceId = (identity?['deviceId'] ?? '').toString();
+    if (deviceId.isEmpty) return '';
+    final devices =
+        ref.watch(deviceMeshDevicesProvider).valueOrNull ??
+        const <Map<String, dynamic>>[];
+    return deviceDisplayName(deviceId, devices);
+  }
+
+  String _skillLabel(String name) => _target == RoleManagementTarget.center
+      ? coreOwnershipLabel('skill', name)
+      : deviceOwnershipLabel(_localDeviceName, 'skill', name);
+
+  String _skillPath(String path) => _target == RoleManagementTarget.center
+      ? centerConsoleSkillPath(path)
+      : path;
+
   Future<Dio> _dio() async {
-    final availability = await ref.read(backendConnectionProvider.future);
+    final center = _target == RoleManagementTarget.center;
+    final availability = await ref.read(
+      (center
+              ? backendConnectionProvider
+              : deviceLocalBackendConnectionProvider)
+          .future,
+    );
     if (availability is! BackendConnectionAvailable)
       throw StateError('后端当前不可用');
     return createAuthenticatedDio(availability.config);
@@ -157,17 +198,24 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
       ),
       body: SafeArea(
         top: false,
-        child: _searchVisible
-            ? _buildSearchView()
-            : _skills.isEmpty
-            ? AmitiaEmptyState(
-                icon: Icons.auto_awesome_outlined,
-                title: '暂无 Agent Skill',
-                subtitle: '点击右上角导入 Agent Skill',
-                actionText: '导入',
-                onAction: _showImportSheet,
-              )
-            : _buildSkillList(_skills),
+        child: Column(
+          children: [
+            if (_centerAvailable) _buildSourceSwitcher(context),
+            Expanded(
+              child: _searchVisible
+                  ? _buildSearchView()
+                  : _skills.isEmpty
+                  ? AmitiaEmptyState(
+                      icon: Icons.auto_awesome_outlined,
+                      title: '暂无 Agent Skill',
+                      subtitle: '点击右上角导入 Agent Skill',
+                      actionText: '导入',
+                      onAction: _showImportSheet,
+                    )
+                  : _buildSkillList(_skills),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -216,6 +264,70 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
               : _buildSkillList(results),
         ),
       ],
+    );
+  }
+
+  Widget _buildSourceSwitcher(BuildContext context) {
+    final target = _target;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        AppSpacing.sm,
+        AppSpacing.pagePadding,
+        0,
+      ),
+      child: Row(
+        children: [
+          Text(
+            'Skill 来源',
+            style: AppTypography.caption(
+              context,
+            ).copyWith(color: context.textSecondary),
+          ),
+          const Spacer(),
+          for (final option in RoleManagementTarget.values)
+            Padding(
+              padding: const EdgeInsets.only(left: 6),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(999),
+                onTap: () {
+                  ref.read(skillManagementTargetProvider.notifier).state =
+                      option;
+                  setState(() {
+                    _skills = const [];
+                    _loading = true;
+                  });
+                  _loadSkills();
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: option == target
+                        ? context.accentPrimary.withValues(alpha: 0.12)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                      color: option == target
+                          ? context.accentPrimary
+                          : context.borderSecondary,
+                    ),
+                  ),
+                  child: Text(
+                    option.label,
+                    style: AppTypography.caption(context).copyWith(
+                      color: option == target
+                          ? context.accentPrimary
+                          : context.textSecondary,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -277,7 +389,10 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
                   children: [
                     Row(
                       children: [
-                        Text(name, style: AppTypography.cardTitle(context)),
+                        Text(
+                          _skillLabel(name),
+                          style: AppTypography.cardTitle(context),
+                        ),
                         const SizedBox(width: 8),
                         if (version.isNotEmpty)
                           Text(
@@ -542,7 +657,7 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
     try {
       dio = await _dio();
       final previewResponse = await dio.post(
-        '/api/extensions/kernel/agent-skills/import/preview',
+        _skillPath('/api/extensions/kernel/agent-skills/import/preview'),
         data: FormData.fromMap({
           'file': await MultipartFile.fromFile(file.path!, filename: file.name),
         }),
@@ -653,7 +768,7 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
       String installedSkillId = '';
       try {
         final installResponse = await dio.post(
-          '/api/extensions/kernel/agent-skills/import/install',
+          _skillPath('/api/extensions/kernel/agent-skills/import/install'),
           data: {
             'previewId': previewId,
             'enable': true,

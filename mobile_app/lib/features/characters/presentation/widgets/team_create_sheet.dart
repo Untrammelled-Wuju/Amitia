@@ -7,6 +7,8 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
+import '../../../../core/device_mesh/device_display_name.dart';
+import '../team_member_payload.dart';
 
 Future<Map<String, dynamic>?> showTeamCreateSheet(
   BuildContext context,
@@ -20,12 +22,30 @@ Future<Map<String, dynamic>?> showTeamCreateSheet(
   ]);
   final roles = _list(values[0]);
   final templates = _list(values[1]);
+  var devices = const <Map<String, dynamic>>[];
+  try {
+    final devicePayload = await api.get<dynamic>('/api/device-mesh/v1/devices');
+    devices = _list(
+      devicePayload is Map ? devicePayload['devices'] : devicePayload,
+    );
+  } catch (cause, stackTrace) {
+    developer.log(
+      '[original-error] $cause',
+      name: 'characters.teams.create-sheet.devices',
+      error: cause,
+      stackTrace: stackTrace,
+    );
+  }
   if (!context.mounted) return null;
   final name = TextEditingController();
   final description = TextEditingController();
   String templateId = '';
   String leadAgentId = '';
   final memberIds = <String>{};
+  String deviceId = '';
+  var deviceRoles = const <Map<String, dynamic>>[];
+  final deviceMemberIds = <String>{};
+  bool loadingDeviceRoles = false;
   bool sharedMemory = true;
   bool sharedWorkspace = true;
   bool creating = false;
@@ -135,6 +155,89 @@ Future<Map<String, dynamic>?> showTeamCreateSheet(
                     })
                     .toList(growable: false),
               ),
+              if (devices.isNotEmpty) ...[
+                SizedBox(height: AppSpacing.sm),
+                Text('其他设备角色', style: AppTypography.label(context)),
+                SizedBox(height: AppSpacing.xs),
+                DropdownButtonFormField<String>(
+                  initialValue: deviceId.isEmpty ? null : deviceId,
+                  decoration: const InputDecoration(labelText: '设备'),
+                  items: devices
+                      .map(
+                        (device) => DropdownMenuItem(
+                          value: device['deviceId'].toString(),
+                          child: Text(
+                            deviceDisplayName(
+                              device['deviceId'].toString(),
+                              devices,
+                            ),
+                          ),
+                        ),
+                      )
+                      .toList(growable: false),
+                  onChanged: (value) async {
+                    if (value == null || value.isEmpty) return;
+                    setSheetState(() {
+                      deviceId = value;
+                      deviceRoles = const [];
+                      deviceMemberIds.clear();
+                      loadingDeviceRoles = true;
+                    });
+                    try {
+                      final payload = await api.get<dynamic>(
+                        '/api/roles',
+                        queryParameters: {'device': value, 'domain': 'local'},
+                      );
+                      final list = payload is Map ? payload['roles'] : payload;
+                      setSheetState(() {
+                        deviceRoles = _list(list);
+                        loadingDeviceRoles = false;
+                      });
+                    } catch (cause, stackTrace) {
+                      developer.log(
+                        '[original-error] $cause',
+                        name: 'characters.teams.create-sheet.device-roles',
+                        error: cause,
+                        stackTrace: stackTrace,
+                      );
+                      setSheetState(() {
+                        deviceRoles = const [];
+                        loadingDeviceRoles = false;
+                        error = cause.toString();
+                      });
+                    }
+                  },
+                ),
+                if (loadingDeviceRoles)
+                  Padding(
+                    padding: EdgeInsets.only(top: AppSpacing.xs),
+                    child: LinearProgressIndicator(
+                      minHeight: 2,
+                      color: context.accentPrimary,
+                    ),
+                  )
+                else if (deviceRoles.isNotEmpty)
+                  Wrap(
+                    spacing: AppSpacing.xs,
+                    runSpacing: AppSpacing.xs,
+                    children: deviceRoles
+                        .map((role) {
+                          final id = role['id'].toString();
+                          return FilterChip(
+                            label: Text(role['name']?.toString() ?? ''),
+                            selected: deviceMemberIds.contains(id),
+                            onSelected: (selected) => setSheetState(() {
+                              if (selected) {
+                                deviceMemberIds.add(id);
+                              } else {
+                                deviceMemberIds.remove(id);
+                              }
+                            }),
+                          );
+                        })
+                        .toList(growable: false),
+                  ),
+              ],
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('共享团队记忆'),
@@ -165,6 +268,28 @@ Future<Map<String, dynamic>?> showTeamCreateSheet(
                           error = null;
                         });
                         try {
+                          final deviceMembers = deviceMemberIds
+                              .map(
+                                (roleId) => buildTeamMemberPayload(
+                                  source: 'device',
+                                  deviceId: deviceId,
+                                  roleId: roleId,
+                                  roleRevision:
+                                      int.tryParse(
+                                        deviceRoles
+                                                .firstWhere(
+                                                  (role) =>
+                                                      role['id']?.toString() ==
+                                                      roleId,
+                                                  orElse: () => const {},
+                                                )['revision']
+                                                ?.toString() ??
+                                            '',
+                                      ) ??
+                                      0,
+                                ),
+                              )
+                              .toList(growable: false);
                           final payload = <String, dynamic>{
                             'templateId': templateId,
                             'name': name.text.trim(),
@@ -173,6 +298,8 @@ Future<Map<String, dynamic>?> showTeamCreateSheet(
                             'memberIds': memberIds.toList(growable: false),
                             'sharedMemory': sharedMemory,
                             'sharedWorkspace': sharedWorkspace,
+                            if (templateId.isEmpty && deviceMembers.isNotEmpty)
+                              'members': deviceMembers,
                           };
                           final response = templateId.isNotEmpty
                               ? await api.post<dynamic>(
@@ -189,6 +316,15 @@ Future<Map<String, dynamic>?> showTeamCreateSheet(
                                     response['team'] as Map,
                                   )
                                 : Map<String, dynamic>.from(response);
+                            if (templateId.isNotEmpty &&
+                                deviceMembers.isNotEmpty) {
+                              for (final member in deviceMembers) {
+                                await api.post<dynamic>(
+                                  '/api/roles/teams/${team['id']}/members',
+                                  data: member,
+                                );
+                              }
+                            }
                             if (sheetContext.mounted) {
                               Navigator.pop(sheetContext, team);
                             }

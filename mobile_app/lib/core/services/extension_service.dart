@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 
 import '../backend_transport/backend_service_api.dart';
+import '../backend_transport/role_management_target.dart';
 import '../ui_runtime/ui_client_info.dart';
 import '../ui_runtime/ui_runtime_invalidation.dart';
 
@@ -226,8 +227,12 @@ class WorkflowApiTarget {
 
 class ExtensionService {
   final BackendServiceApi _api;
+  final RoleManagementTarget? Function()? agentSkillTarget;
 
-  ExtensionService(this._api);
+  ExtensionService(this._api, {this.agentSkillTarget});
+
+  Map<String, String>? get _agentSkillHeaders =>
+      withRoleManagementTarget(null, agentSkillTarget?.call());
 
   Future<Map<String, dynamic>> getUISnapshot(
     String platform, {
@@ -1022,6 +1027,7 @@ class ExtensionService {
         'pageSize': pageSize,
         if (query.isNotEmpty) 'query': query,
       },
+      headers: _agentSkillHeaders,
     );
     final items = resp?['items'];
     if (items is! List) return const [];
@@ -1032,17 +1038,26 @@ class ExtensionService {
   }
 
   Future<bool> enableAgentSkill(String id) async {
-    await _api.post('/api/extensions/kernel/agent-skills/$id/enable');
+    await _api.post(
+      '/api/extensions/kernel/agent-skills/$id/enable',
+      headers: _agentSkillHeaders,
+    );
     return true;
   }
 
   Future<bool> disableAgentSkill(String id) async {
-    await _api.post('/api/extensions/kernel/agent-skills/$id/disable');
+    await _api.post(
+      '/api/extensions/kernel/agent-skills/$id/disable',
+      headers: _agentSkillHeaders,
+    );
     return true;
   }
 
   Future<bool> removeAgentSkill(String id) async {
-    await _api.delete('/api/extensions/kernel/agent-skills/$id');
+    await _api.delete(
+      '/api/extensions/kernel/agent-skills/$id',
+      headers: _agentSkillHeaders,
+    );
     return true;
   }
 

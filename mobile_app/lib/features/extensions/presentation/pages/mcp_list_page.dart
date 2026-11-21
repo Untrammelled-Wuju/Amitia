@@ -6,6 +6,11 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../app/app_routes.dart';
+import '../../../../core/backend_transport/role_management_target.dart';
+import '../../../../core/device_mesh/device_display_name.dart';
+import '../../../../core/device_mesh/ownership_label.dart';
+import '../../../../core/runtime/backend/mobile_backend_providers.dart';
+import '../../../../core/runtime/backend/mobile_deployment_mode.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/services/providers.dart';
@@ -55,6 +60,30 @@ class _McpListPageState extends ConsumerState<McpListPage> {
         })
         .toList(growable: false);
   }
+
+  RoleManagementTarget get _target =>
+      ref.watch(mcpManagementTargetProvider) ?? RoleManagementTarget.local;
+
+  bool get _centerAvailable =>
+      ref.watch(mobileDeploymentConfigProvider).mode ==
+          MobileDeploymentMode.cloud &&
+      roleManagementCenterAvailable(
+        ref.watch(deviceCoordinationProvider).valueOrNull,
+      );
+
+  String get _localDeviceName {
+    final identity = ref.watch(localDeviceMeshIdentityProvider).valueOrNull;
+    final deviceId = (identity?['deviceId'] ?? '').toString();
+    if (deviceId.isEmpty) return '';
+    final devices =
+        ref.watch(deviceMeshDevicesProvider).valueOrNull ??
+        const <Map<String, dynamic>>[];
+    return deviceDisplayName(deviceId, devices);
+  }
+
+  String _serverLabel(String name) => _target == RoleManagementTarget.center
+      ? coreOwnershipLabel('mcp', name)
+      : deviceOwnershipLabel(_localDeviceName, 'mcp', name);
 
   Future<void> _loadServers() async {
     setState(() {
@@ -182,17 +211,88 @@ return MapEntry(id, <String>{});
       ),
       body: SafeArea(
         top: false,
-        child: _searchVisible
-            ? _buildSearchView()
-            : _servers.isEmpty
-            ? AmitiaEmptyState(
-                icon: Icons.dns_outlined,
-                title: '暂无 MCP 服务',
-                subtitle: '点击右上角添加 MCP 服务',
-                actionText: '添加',
-                onAction: _showAddServerSheet,
-              )
-            : _buildServerList(_servers),
+        child: Column(
+          children: [
+            if (_centerAvailable) _buildSourceSwitcher(context),
+            Expanded(
+              child: _searchVisible
+                  ? _buildSearchView()
+                  : _servers.isEmpty
+                  ? AmitiaEmptyState(
+                      icon: Icons.dns_outlined,
+                      title: '暂无 MCP 服务',
+                      subtitle: '点击右上角添加 MCP 服务',
+                      actionText: '添加',
+                      onAction: _showAddServerSheet,
+                    )
+                  : _buildServerList(_servers),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSourceSwitcher(BuildContext context) {
+    final target = _target;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        AppSpacing.sm,
+        AppSpacing.pagePadding,
+        0,
+      ),
+      child: Row(
+        children: [
+          Text(
+            'MCP 来源',
+            style: AppTypography.caption(
+              context,
+            ).copyWith(color: context.textSecondary),
+          ),
+          const Spacer(),
+          for (final option in RoleManagementTarget.values)
+            Padding(
+              padding: const EdgeInsets.only(left: 6),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(999),
+                onTap: () {
+                  ref.read(mcpManagementTargetProvider.notifier).state =
+                      option;
+                  setState(() {
+                    _servers = const [];
+                    _loading = true;
+                  });
+                  _loadServers();
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: option == target
+                        ? context.accentPrimary.withValues(alpha: 0.12)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                      color: option == target
+                          ? context.accentPrimary
+                          : context.borderSecondary,
+                    ),
+                  ),
+                  child: Text(
+                    option.label,
+                    style: AppTypography.caption(context).copyWith(
+                      color: option == target
+                          ? context.accentPrimary
+                          : context.textSecondary,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -301,7 +401,10 @@ return MapEntry(id, <String>{});
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(name, style: AppTypography.cardTitle(context)),
+                    Text(
+                      _serverLabel(name),
+                      style: AppTypography.cardTitle(context),
+                    ),
                     const SizedBox(height: 4),
                     Row(
                       children: [

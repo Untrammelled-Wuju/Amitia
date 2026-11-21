@@ -395,8 +395,12 @@ void main() {
     expect(find.text('暂无最近记忆'), findsOneWidget);
 
     expect(
-      tester.widget<Icon>(find.byKey(const ValueKey('main-tab-icon-扩展'))).icon,
-      Icons.extension_outlined,
+      tester
+          .widget<AmitiaIcon>(
+            find.byKey(const ValueKey('main-tab-icon-扩展')),
+          )
+          .glyph,
+      AmitiaIconGlyph.extensions,
     );
     await tester.tap(find.byKey(const ValueKey('main-tab-扩展')));
     await tester.pumpAndSettle();

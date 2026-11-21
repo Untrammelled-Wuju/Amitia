@@ -1,10 +1,15 @@
 import '../backend_transport/backend_service_api.dart';
+import '../backend_transport/role_management_target.dart';
 import '../models/reminder.dart';
 
 class ReminderService {
   final BackendServiceApi _api;
+  final RoleManagementTarget? Function()? taskTarget;
 
-  ReminderService(this._api);
+  ReminderService(this._api, {this.taskTarget});
+
+  Map<String, String>? get _headers =>
+      withRoleManagementTarget(null, taskTarget?.call());
 
   Map<String, dynamic> _required(Map<String, dynamic>? data) {
     if (data == null) throw StateError('服务未返回有效回执');
@@ -32,6 +37,7 @@ class ReminderService {
         await _api.post<Map<String, dynamic>>(
           '/api/reminders/$id/action',
           data: {'generation': generation, 'action': action},
+          headers: _headers,
         ),
       );
 
@@ -39,6 +45,7 @@ class ReminderService {
     final resp = await _api.get<List<dynamic>>(
       '/api/reminders',
       queryParameters: {'kind': kind},
+      headers: _headers,
     );
     if (resp == null) throw StateError('服务未返回任务列表');
     if (resp.any((item) => item is! Map)) throw StateError('任务列表包含无效记录');
@@ -48,7 +55,10 @@ class ReminderService {
   }
 
   Future<List<String>> channels() async {
-    final values = await _api.get<List<dynamic>>('/api/reminders/channels');
+    final values = await _api.get<List<dynamic>>(
+      '/api/reminders/channels',
+      headers: _headers,
+    );
     if (values == null || values.any((value) => value is! String))
       throw StateError('渠道列表响应无效');
     return values.cast<String>();
@@ -58,6 +68,7 @@ class ReminderService {
     final resp = await _api.post<Map<String, dynamic>>(
       '/api/reminders',
       data: data,
+      headers: _headers,
     );
     return _saved(resp);
   }
@@ -66,6 +77,7 @@ class ReminderService {
     final resp = await _api.put<Map<String, dynamic>>(
       '/api/reminders/$id',
       data: data,
+      headers: _headers,
     );
     return _saved(resp);
   }
@@ -75,6 +87,7 @@ class ReminderService {
       await _api.deleteWithResponse<Map<String, dynamic>>(
         '/api/reminders/$id',
         data: {'generation': generation},
+        headers: _headers,
       ),
     );
     return true;
@@ -84,6 +97,7 @@ class ReminderService {
     final resp = await _api.post<Map<String, dynamic>>(
       '/api/reminders/$id/toggle',
       data: {'generation': generation},
+      headers: _headers,
     );
     return _saved(resp);
   }
@@ -93,6 +107,7 @@ class ReminderService {
       await _api.post<Map<String, dynamic>>(
         '/api/reminders/$id/trigger',
         data: {'generation': generation},
+        headers: _headers,
       ),
     );
     if (result['accepted'] != true || result['triggerId'] == null)
@@ -102,7 +117,10 @@ class ReminderService {
 
   Future<Map<String, dynamic>> test(String id) async {
     final result = _required(
-      await _api.post<Map<String, dynamic>>('/api/reminders/$id/test'),
+      await _api.post<Map<String, dynamic>>(
+        '/api/reminders/$id/test',
+        headers: _headers,
+      ),
     );
     if (result['tested'] != true || result['id'] != id)
       throw StateError('服务未返回有效预览结果');
@@ -114,6 +132,7 @@ class ReminderService {
       await _api.get<Map<String, dynamic>>(
         '/api/reminders/status',
         queryParameters: {'kind': kind},
+        headers: _headers,
       ),
     );
     if (result['schedulerRunning'] is! bool || result['total'] is! num)
@@ -123,7 +142,10 @@ class ReminderService {
 
   Future<Map<String, dynamic>> cleanupConfig() async {
     return _required(
-      await _api.get<Map<String, dynamic>>('/api/reminders/cleanup-config'),
+      await _api.get<Map<String, dynamic>>(
+        '/api/reminders/cleanup-config',
+        headers: _headers,
+      ),
     );
   }
 
@@ -132,6 +154,7 @@ class ReminderService {
       await _api.put<Map<String, dynamic>>(
         '/api/reminders/cleanup-config',
         data: {'cleanupDays': cleanupDays},
+        headers: _headers,
       ),
     );
     if (response['cleanupDays'].toString() != cleanupDays)
@@ -149,6 +172,7 @@ class ReminderService {
         'kind': kind,
         if (characterId.isNotEmpty) 'characterId': characterId,
       },
+      headers: _headers,
     );
     if (resp == null) throw StateError('服务未返回计划列表');
     if (resp.any((item) => item is! Map)) throw StateError('计划列表包含无效记录');
@@ -164,6 +188,7 @@ class ReminderService {
       await _api.get<Map<String, dynamic>>(
         '/api/reminders/queue-summary',
         queryParameters: {'kind': kind},
+        headers: _headers,
       ),
     );
   }
@@ -183,6 +208,7 @@ class ReminderService {
           'pageSize': pageSize,
           if (state.isNotEmpty) 'state': state,
         },
+        headers: _headers,
       ),
     );
     if (result['items'] is! List ||
@@ -197,6 +223,7 @@ class ReminderService {
       await _api.post<Map<String, dynamic>>(
         '/api/reminders/clear-backpressure',
         queryParameters: {'kind': kind},
+        headers: _headers,
       ),
     );
     if (result['clearedCount'] is! num) throw StateError('服务未确认背压清理结果');

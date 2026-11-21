@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:amitia_app/core/backend_transport/backend_service_api.dart';
 import 'package:amitia_app/core/backend_transport/routed_backend_service_api.dart';
+import 'package:amitia_app/core/backend_transport/role_management_target.dart';
 
 class _RecordingApi implements BackendServiceApi {
   final List<_RoutedCall> calls = [];
@@ -434,6 +435,240 @@ void main() {
       final key1 = deviceLocalApi.calls[0].headers!['Idempotency-Key']!;
       final key2 = deviceLocalApi.calls[1].headers!['Idempotency-Key']!;
       expect(key1, isNot(equals(key2)));
+    });
+  });
+
+  group('RoutedBackendServiceApiProxy role target', () {
+    late _RecordingApi businessApi;
+    late _RecordingApi deviceLocalApi;
+
+    RoutedBackendServiceApiProxy buildProxy({required bool cloud}) =>
+        RoutedBackendServiceApiProxy(
+          businessApi: businessApi,
+          deviceLocalApi: deviceLocalApi,
+          isCloudDeployment: () => cloud,
+        );
+
+    setUp(() {
+      businessApi = _RecordingApi();
+      deviceLocalApi = _RecordingApi();
+    });
+
+    test('未指定来源时角色管理仍走统筹中心', () async {
+      await buildProxy(cloud: true).get('/api/characters');
+      expect(businessApi.calls.length, 1);
+      expect(deviceLocalApi.calls.length, 0);
+    });
+
+    test('选择本机时角色与团队写入落在设备本地', () async {
+      final proxy = buildProxy(cloud: true);
+      await proxy.post(
+        '/api/characters',
+        data: const {'name': '本机角色'},
+        headers: withRoleManagementTarget(null, RoleManagementTarget.local),
+      );
+      await proxy.post(
+        '/api/roles/teams',
+        data: const {'name': '本机团队'},
+        headers: withRoleManagementTarget(null, RoleManagementTarget.local),
+      );
+      expect(deviceLocalApi.calls.length, 2);
+      expect(businessApi.calls.length, 0);
+      expect(deviceLocalApi.calls.first.path, '/api/characters');
+      expect(deviceLocalApi.calls.last.path, '/api/roles/teams');
+    });
+
+    test('来源请求头不会透传给后端', () async {
+      await buildProxy(cloud: true).get(
+        '/api/characters',
+        headers: {
+          ...withRoleManagementTarget(
+            const {'X-Amitia-Client-Type': 'mobile'},
+            RoleManagementTarget.local,
+          )!,
+        },
+      );
+      final headers = deviceLocalApi.calls.first.headers;
+      expect(headers?[roleManagementTargetHeader], isNull);
+      expect(headers?['X-Amitia-Client-Type'], 'mobile');
+    });
+
+    test('选择统筹中心时角色管理走业务核心', () async {
+      await buildProxy(cloud: true).get(
+        '/api/characters',
+        headers: withRoleManagementTarget(null, RoleManagementTarget.center),
+      );
+      expect(businessApi.calls.length, 1);
+      expect(deviceLocalApi.calls.length, 0);
+    });
+
+    test('未接入统筹中心时拒绝使用统筹中心角色数据', () async {
+      await expectLater(
+        buildProxy(cloud: false).get(
+          '/api/characters',
+          headers: withRoleManagementTarget(null, RoleManagementTarget.center),
+        ),
+        throwsA(isA<StateError>()),
+      );
+      expect(businessApi.calls.length, 0);
+      expect(deviceLocalApi.calls.length, 0);
+    });
+
+    test('MCP 默认停留在设备本地', () async {
+      final proxy = buildProxy(cloud: true);
+      await proxy.get('/api/mcp/servers');
+      await proxy.post(
+        '/api/mcp/servers',
+        data: const {'name': '本机服务'},
+        headers: withRoleManagementTarget(null, RoleManagementTarget.local),
+      );
+      expect(deviceLocalApi.calls.length, 2);
+      expect(businessApi.calls.length, 0);
+      expect(deviceLocalApi.calls.first.path, '/api/mcp/servers');
+    });
+
+    test('MCP 选择统筹中心时改写到统筹中心控制台路由', () async {
+      final proxy = buildProxy(cloud: true);
+      await proxy.post(
+        '/api/mcp/servers',
+        data: const {'name': '中心服务'},
+        headers: withRoleManagementTarget(null, RoleManagementTarget.center),
+      );
+      await proxy.get(
+        '/api/mcp/servers/center-1/tools',
+        headers: withRoleManagementTarget(null, RoleManagementTarget.center),
+      );
+      expect(businessApi.calls.length, 2);
+      expect(deviceLocalApi.calls.length, 0);
+      expect(
+        businessApi.calls.first.path,
+        '/api/device-mesh/v1/business/console/mcp/servers',
+      );
+      expect(
+        businessApi.calls.last.path,
+        '/api/device-mesh/v1/business/console/mcp/servers/center-1/tools',
+      );
+      expect(
+        businessApi.calls.last.headers?[roleManagementTargetHeader],
+        isNull,
+      );
+      expect(businessApi.calls.last.headers?['Idempotency-Key'], isNull);
+    });
+
+    test('未接入统筹中心时拒绝使用统筹中心 MCP', () async {
+      await expectLater(
+        buildProxy(cloud: false).get(
+          '/api/mcp/servers',
+          headers: withRoleManagementTarget(null, RoleManagementTarget.center),
+        ),
+        throwsA(isA<StateError>()),
+      );
+      expect(businessApi.calls.length, 0);
+      expect(deviceLocalApi.calls.length, 0);
+    });
+
+    test('skill 默认停留在设备本地', () async {
+      final proxy = buildProxy(cloud: true);
+      await proxy.get('/api/extensions/kernel/agent-skills');
+      await proxy.post(
+        '/api/extensions/kernel/agent-skills/import/preview',
+        data: const {'path': '/tmp/skill'},
+        headers: withRoleManagementTarget(null, RoleManagementTarget.local),
+      );
+      expect(deviceLocalApi.calls.length, 2);
+      expect(businessApi.calls.length, 0);
+      expect(
+        deviceLocalApi.calls.first.path,
+        '/api/extensions/kernel/agent-skills',
+      );
+      expect(deviceLocalApi.calls.last.headers?['Idempotency-Key'], isNotNull);
+    });
+
+    test('skill 选择统筹中心时改写到统筹中心控制台路由', () async {
+      final proxy = buildProxy(cloud: true);
+      await proxy.get(
+        '/api/extensions/kernel/agent-skills',
+        headers: withRoleManagementTarget(null, RoleManagementTarget.center),
+      );
+      await proxy.post(
+        '/api/extensions/kernel/agent-skills/center-1/enable',
+        data: const {},
+        headers: withRoleManagementTarget(null, RoleManagementTarget.center),
+      );
+      expect(businessApi.calls.length, 2);
+      expect(deviceLocalApi.calls.length, 0);
+      expect(
+        businessApi.calls.first.path,
+        '/api/device-mesh/v1/business/console/skills',
+      );
+      expect(
+        businessApi.calls.last.path,
+        '/api/device-mesh/v1/business/console/skills/center-1/enable',
+      );
+      expect(
+        businessApi.calls.last.headers?[roleManagementTargetHeader],
+        isNull,
+      );
+      expect(businessApi.calls.last.headers?['Idempotency-Key'], isNull);
+    });
+
+    test('未接入统筹中心时拒绝使用统筹中心 skill', () async {
+      await expectLater(
+        buildProxy(cloud: false).get(
+          '/api/extensions/kernel/agent-skills',
+          headers: withRoleManagementTarget(null, RoleManagementTarget.center),
+        ),
+        throwsA(isA<StateError>()),
+      );
+      expect(businessApi.calls.length, 0);
+      expect(deviceLocalApi.calls.length, 0);
+    });
+
+    test('任务默认停留在设备本地', () async {
+      final proxy = buildProxy(cloud: true);
+      await proxy.get('/api/reminders?kind=user_reminder');
+      await proxy.post(
+        '/api/reminders',
+        data: const {'title': '喝水'},
+        headers: withRoleManagementTarget(null, RoleManagementTarget.local),
+      );
+      expect(deviceLocalApi.calls.length, 2);
+      expect(businessApi.calls.length, 0);
+      expect(deviceLocalApi.calls.first.path, '/api/reminders?kind=user_reminder');
+    });
+
+    test('任务选择统筹中心时走统筹中心业务核心', () async {
+      final proxy = buildProxy(cloud: true);
+      await proxy.get(
+        '/api/reminders',
+        queryParameters: const {'kind': 'user_reminder'},
+        headers: withRoleManagementTarget(null, RoleManagementTarget.center),
+      );
+      await proxy.put(
+        '/api/reminders/task-1',
+        data: const {'title': '喝水'},
+        headers: withRoleManagementTarget(null, RoleManagementTarget.center),
+      );
+      expect(businessApi.calls.length, 2);
+      expect(deviceLocalApi.calls.length, 0);
+      expect(businessApi.calls.first.path, '/api/reminders');
+      expect(businessApi.calls.last.path, '/api/reminders/task-1');
+      expect(
+        businessApi.calls.last.headers?[roleManagementTargetHeader],
+        isNull,
+      );
+    });
+
+    test('未接入统筹中心时拒绝使用统筹中心任务', () async {
+      await expectLater(
+        buildProxy(cloud: false).get(
+          '/api/reminders',
+          headers: withRoleManagementTarget(null, RoleManagementTarget.center),
+        ),
+        throwsA(isA<StateError>()),
+      );
+      expect(businessApi.calls.length, 0);
+      expect(deviceLocalApi.calls.length, 0);
     });
   });
 }

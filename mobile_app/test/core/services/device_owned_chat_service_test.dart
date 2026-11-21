@@ -49,6 +49,19 @@ class _OwnedApi implements BackendServiceApi {
     T Function(dynamic)? fromJson,
   }) async {
     queryPath = path;
+    if (path.endsWith('/historical-scope')) {
+      final owner = queryParameters?['targetDeviceId']?.toString() ?? 'old';
+      return {
+            'executionScope': {
+              ...scope(),
+              'coordinated': true,
+              'targetDeviceId': owner,
+              'roleOwnerId': owner,
+              'resourceOwnerId': owner,
+            },
+          }
+          as T;
+    }
     if (path.endsWith('/projections') && projectionResponse != null)
       return projectionResponse as T;
     if (path.endsWith('/coordination/me'))
@@ -976,7 +989,7 @@ void main() {
       throwsStateError,
     );
   });
-  test('手机历史摘要可查看但禁止修改其他来源', () async {
+  test('手机历史摘要通过原设备范围修改', () async {
     final api = _OwnedApi();
     final service = DeviceOwnedChatService(
       api,
@@ -984,8 +997,14 @@ void main() {
     );
     await service.refresh();
     api.pages.add({
-      'executionScope': scope(),
-      'snapshot': {'ownerId': 'a', 'resources': []},
+      'executionScope': {
+        ...scope(),
+        'coordinated': true,
+        'targetDeviceId': 'a',
+        'roleOwnerId': 'core-b',
+        'resourceOwnerId': 'core-b',
+      },
+      'snapshot': {'ownerId': 'core-b', 'resources': []},
       'historicalSnapshot': {
         'ownerId': 'old',
         'resources': [
@@ -1001,15 +1020,23 @@ void main() {
         ],
       },
     });
+    final displayed = await service.conversationSummary('meshconv1:a:chat');
+    expect(displayed?['editable'], isTrue);
+    api.editAck = {
+      'ownerId': 'old',
+      'versions': {'summary/chat/summary': 4},
+    };
+    await service.editConversationSummary(
+      'meshconv1:a:chat',
+      text: 'edited',
+      displayedViewId: displayed?['summaryViewId'] as String,
+    );
     expect(
-      (await service.conversationSummary('meshconv1:a:chat'))?['editable'],
-      isFalse,
+      (api.editRequest?['expectedExecutionScope'] as Map)['resourceOwnerId'],
+      'old',
     );
-    await expectLater(
-      service.editConversationSummary('meshconv1:a:chat', deleted: true),
-      throwsStateError,
-    );
-    expect(api.editRequest, isNull);
+    expect(api.editRequest?['expectedRevision'], 3);
+    expect(api.editRequest?['id'], 'chat/summary');
   });
   test('手机完整历史分别读取所有者页面，保留同名来源消息', () async {
     final api = _OwnedApi();

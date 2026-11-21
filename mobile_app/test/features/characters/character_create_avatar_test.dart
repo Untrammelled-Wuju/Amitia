@@ -10,6 +10,7 @@ import 'package:amitia_app/features/characters/presentation/pages/character_crea
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:amitia_app/core/backend_transport/role_management_target.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker_platform_interface/image_picker_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -28,7 +29,7 @@ class _Characters extends Fake implements CharacterService {
   static const authorityValue =
       'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
   @override
-  Future<String> authority() async => authorityValue;
+  Future<String> authority({RoleManagementTarget? target}) async => authorityValue;
   int creates = 0;
   Map<String, dynamic>? payload;
 
@@ -36,6 +37,7 @@ class _Characters extends Fake implements CharacterService {
   Future<CharacterDto?> create(
     Map<String, dynamic> data, {
     String? roleAuthority,
+    RoleManagementTarget? target,
   }) async {
     expect(roleAuthority, authorityValue);
     creates++;
@@ -48,7 +50,11 @@ class _Characters extends Fake implements CharacterService {
   }
 
   @override
-  Future<CharacterDto?> setActive(String id, {String? roleAuthority}) async {
+  Future<CharacterDto?> setActive(
+    String id, {
+    String? roleAuthority,
+    RoleManagementTarget? target,
+  }) async {
     expect(roleAuthority, authorityValue);
     return CharacterDto(id: id, name: payload!['name'] as String);
   }

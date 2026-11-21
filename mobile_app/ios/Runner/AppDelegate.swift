@@ -9,6 +9,7 @@ import UIKit
   private var nativeTransport: IOSNativeTransport?
   private var notificationPlatform: IOSNotificationPlatform?
   private var deviceMeshIdentity: IOSDeviceMeshIdentity?
+  private var systemDeviceName: IOSSystemDeviceName?
   private var runtimeBridge: IOSRuntimeBridge?
 
   override func application(
@@ -32,6 +33,14 @@ import UIKit
     self.deviceMeshIdentity = IOSDeviceMeshIdentity()
     self.deviceMeshIdentity?.register(
       messenger: deviceMeshRegistrar.messenger()
+    )
+
+    let systemDeviceRegistrar = self.registrar(
+      forPlugin: "IOSSystemDeviceName"
+    )!
+    self.systemDeviceName = IOSSystemDeviceName()
+    self.systemDeviceName?.register(
+      messenger: systemDeviceRegistrar.messenger()
     )
 
     let bridge = IOSSandboxBridge.shared()

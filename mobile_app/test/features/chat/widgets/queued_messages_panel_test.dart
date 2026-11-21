@@ -25,6 +25,7 @@ void main() {
               onReorder: (ids) => reordered = ids,
               onSteer: (id) => steered = id,
               onDelete: (id) => deleted = id,
+              onEdit: (_) {},
               onShowError: (_) {},
             ),
           ),
@@ -67,6 +68,7 @@ void main() {
             onReorder: (_) {},
             onSteer: (_) {},
             onDelete: (_) {},
+            onEdit: (_) {},
             onShowError: (value) => error = value,
           ),
         ),
@@ -79,5 +81,51 @@ void main() {
     expect(steer.onPressed, isNull);
     await tester.tap(find.text('查看原始错误'));
     expect(error, '底层错误\n完整原因链');
+  });
+  testWidgets('⋯ 菜单提供编辑与关闭排队，整行长按可拖拽', (tester) async {
+    String? edited;
+    String? deleted;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 900,
+            height: 400,
+            child: QueuedMessagesPanel(
+              items: const [
+                {'requestId': 'a', 'message': '待编辑消息', 'status': 'queued'},
+              ],
+              busy: false,
+              canSteer: true,
+              error: '',
+              onReorder: (_) {},
+              onSteer: (_) {},
+              onDelete: (id) => deleted = id,
+              onEdit: (id) => edited = id,
+              onShowError: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.byTooltip('排队消息操作'));
+    await tester.pumpAndSettle();
+    expect(find.text('编辑消息'), findsOneWidget);
+    await tester.tap(find.text('编辑消息'));
+    await tester.pumpAndSettle();
+    expect(edited, 'a');
+
+    await tester.tap(find.byTooltip('排队消息操作'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('关闭排队'));
+    await tester.pumpAndSettle();
+    expect(deleted, 'a');
+
+    final drag = find.byType(ReorderableDelayedDragStartListener);
+    expect(drag, findsOneWidget);
+    expect(
+      find.descendant(of: drag, matching: find.text('待编辑消息')),
+      findsOneWidget,
+    );
   });
 }

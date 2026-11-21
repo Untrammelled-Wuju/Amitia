@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:amitia_app/core/artifact/artifact_model.dart';
 import 'package:amitia_app/core/backend_transport/backend_service_api.dart';
+import 'package:amitia_app/core/services/device_owned_attachments.dart';
 import 'package:amitia_app/core/services/device_owned_realtime_service.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -28,6 +30,32 @@ Map<String, dynamic> scope() => {
   'turnId': '',
   'executionId': '',
 };
+
+ArtifactMetadata visualArtifact(
+  Uint8List bytes, {
+  int? sizeBytes,
+  String digest = '',
+}) => ArtifactMetadata(
+  id: 'artifact-visual',
+  ownerSpaceId: 'space',
+  ownerDeviceId: 'phone',
+  storageDeviceId: 'phone',
+  workspaceId: 'workspace',
+  kind: ArtifactKind.image,
+  blobDigest: digest.isEmpty ? 'sha256:${sha256.convert(bytes)}' : digest,
+  sizeBytes: sizeBytes ?? bytes.length,
+  mimeType: 'image/png',
+  filename: 'realtime-frame.png',
+  fileExtension: 'png',
+  status: ArtifactStatus.ready,
+  source: 'realtime.visual',
+  width: 1,
+  height: 1,
+  durationMs: 0,
+  revision: 1,
+  createdAt: DateTime.utc(2026, 1, 1),
+  updatedAt: DateTime.utc(2026, 1, 1),
+);
 
 DeviceOwnedRealtimeService service(
   TaskTransport transport, {
@@ -179,20 +207,33 @@ void main() {
       () => owned.validateScope({'executionScope': scope()}),
       throwsStateError,
     );
-    expect(
-      () => owned.image(Uint8List.fromList([1]), 'image/jpeg'),
-      throwsStateError,
-    );
+    expect(() => owned.assertConnection(), throwsStateError);
     await expectLater(owned.audio(audio('turn'), 'turn'), throwsStateError);
   });
-  test('视觉发送实际原始字节及哈希限制', () {
-    final owned = service(TaskTransport([]));
+  test('视觉帧以附件元数据传递原始字节哈希与大小', () {
     final bytes = Uint8List.fromList([1, 2, 3]);
-    final frame = owned.image(bytes, 'image/png');
-    expect(base64Decode(frame['data'] as String), bytes);
-    expect(frame['sha256'], sha256.convert(bytes).toString());
+    final attachment = ownedAttachmentFromArtifact(
+      visualArtifact(bytes),
+      kind: 'image',
+    );
+    expect(attachment['kind'], 'image');
+    expect(attachment['sha256'], sha256.convert(bytes).toString());
+    expect(attachment['sizeBytes'], bytes.length);
+    expect(attachment['mimeType'], 'image/png');
+    expect(attachment['name'], 'realtime-frame.png');
+    expect(ownedAttachment(attachment), isNotNull);
     expect(
-      () => owned.image(Uint8List(1048577), 'image/png'),
+      () => ownedAttachmentFromArtifact(
+        visualArtifact(bytes, sizeBytes: 0),
+        kind: 'image',
+      ),
+      throwsStateError,
+    );
+    expect(
+      () => ownedAttachmentFromArtifact(
+        visualArtifact(bytes, digest: 'sha256:${'0' * 63}'),
+        kind: 'image',
+      ),
       throwsStateError,
     );
   });

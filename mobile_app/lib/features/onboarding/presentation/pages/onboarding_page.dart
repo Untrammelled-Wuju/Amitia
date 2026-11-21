@@ -9,6 +9,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/backend_connection/providers/backend_connection_providers.dart';
 import '../../../../core/backend_transport/core_configuration_intent.dart';
 import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
+import '../../../../core/device_mesh/system_device_name.dart';
 import '../../../../core/errors/original_error.dart';
 import '../../../../core/runtime/backend/mobile_backend_providers.dart';
 import '../../../../core/runtime/backend/mobile_deployment_mode.dart';
@@ -69,7 +70,9 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
   final _pairingCodeCtrl = TextEditingController();
 
   final _providerCtrl = TextEditingController(text: 'DeepSeek');
-  final _baseUrlCtrl = TextEditingController(text: 'https://api.deepseek.com/v1');
+  final _baseUrlCtrl = TextEditingController(
+    text: 'https://api.deepseek.com/v1',
+  );
   final _modelCtrl = TextEditingController(text: 'deepseek-chat');
   final _keyCtrl = TextEditingController();
   bool _detecting = false;
@@ -495,7 +498,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
             deviceId: deviceId,
             runtimeId: runtimeId,
             platform: platform,
-            label: 'Mobile',
+            label: await resolveSystemDeviceName(),
             offerToken: offerToken,
             setupCode: setupCode,
           );
@@ -818,29 +821,30 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
           onPair: _pairDevice,
           pairingVerified: _deployMode == 1 && _devicePaired,
         ),
-        _ => _skipCoreModels
-            ? const _SkippedModelNotice()
-            : OnboardingModelStep(
-                providerController: _providerCtrl,
-                baseUrlController: _baseUrlCtrl,
-                modelController: _modelCtrl,
-                keyController: _keyCtrl,
-                detecting: _detecting,
-                statusText: _modelStatus,
-                statusOk: _modelStatusOk,
-                detectedModels: _detectedModels,
-                onSelectModel: (value) => setState(() {
-                  _modelCtrl.text = value;
-                }),
-                onDetect: _detectModel,
-                onFieldChanged: () => setState(() {
-                  _modelStatus = '';
-                  _modelStatusOk = false;
-                  _detectedModels = const [];
-                }),
-                showKey: _showKey,
-                onToggleKey: () => setState(() => _showKey = !_showKey),
-              ),
+        _ =>
+          _skipCoreModels
+              ? const _SkippedModelNotice()
+              : OnboardingModelStep(
+                  providerController: _providerCtrl,
+                  baseUrlController: _baseUrlCtrl,
+                  modelController: _modelCtrl,
+                  keyController: _keyCtrl,
+                  detecting: _detecting,
+                  statusText: _modelStatus,
+                  statusOk: _modelStatusOk,
+                  detectedModels: _detectedModels,
+                  onSelectModel: (value) => setState(() {
+                    _modelCtrl.text = value;
+                  }),
+                  onDetect: _detectModel,
+                  onFieldChanged: () => setState(() {
+                    _modelStatus = '';
+                    _modelStatusOk = false;
+                    _detectedModels = const [];
+                  }),
+                  showKey: _showKey,
+                  onToggleKey: () => setState(() => _showKey = !_showKey),
+                ),
       },
     );
   }

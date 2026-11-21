@@ -340,6 +340,15 @@ class ConversationRuntimeController extends ChangeNotifier {
     });
   }
 
+  Future<void> updateQueuedMessage(
+    String id,
+    String message, {
+    List<Map<String, dynamic>> attachments = const [],
+  }) => _queueAction('queue/update', {
+    'queuedRequestId': id,
+    'message': message,
+    'attachments': attachments,
+  });
   Future<void> reorderQueuedMessages(List<String> ids) =>
       _queueAction('queue/reorder', {'queueOrder': ids});
   Future<void> deleteQueuedMessage(String id) =>

@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import com.amitia.amitia_app.nativeprovider.AndroidNativeBridgePlugin
@@ -20,6 +21,7 @@ import com.amitia.amitia_app.update.AppUpdatePlugin
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.android.FlutterView
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.MethodChannel
 import androidx.core.app.ActivityCompat
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -190,6 +192,34 @@ class MainActivity : FlutterActivity() {
         flutterEngine.plugins.add(RealtimeAudioPlugin())
         flutterEngine.plugins.add(RealtimeVisualPlugin())
         flutterEngine.plugins.add(AppUpdatePlugin())
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "com.amitia.system/device",
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "deviceName" -> result.success(systemDeviceName())
+                else -> result.notImplemented()
+            }
+        }
+    }
+
+    private fun systemDeviceName(): String {
+        val configured = try {
+            Settings.Global.getString(contentResolver, Settings.Global.DEVICE_NAME)
+                ?.trim()
+                .orEmpty()
+        } catch (error: Exception) {
+            Log.w("AmitiaDeviceName", "[original-error]", error)
+            ""
+        }
+        if (configured.isNotEmpty()) return configured
+        val manufacturer = Build.MANUFACTURER.trim()
+        val model = Build.MODEL.trim()
+        if (model.isEmpty()) return manufacturer
+        if (manufacturer.isEmpty() || model.startsWith(manufacturer, ignoreCase = true)) {
+            return model
+        }
+        return "$manufacturer $model"
     }
 
     override fun onPostResume() {

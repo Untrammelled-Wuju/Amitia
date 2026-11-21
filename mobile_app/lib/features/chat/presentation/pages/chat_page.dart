@@ -133,6 +133,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   String _cachedProviderActionsCharacterId = '';
   Timer? _conversationCollectionRefreshTimer;
   ChatMessage? _replyTarget;
+  ({String requestId, List<Map<String, dynamic>> attachments})?
+  _editingQueuedMessage;
   List<WorkspaceMountDto> _recentWorkspaces = const <WorkspaceMountDto>[];
   bool _workspaceBusy = false;
   final RealtimeAudioBridge _realtimeAudio = RealtimeAudioBridge();
@@ -1057,6 +1059,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   }
 
   void _onSend(String text) {
+    if (_editingQueuedMessage != null) {
+      unawaited(_submitQueueEdit(text));
+      return;
+    }
     if (_runtime.isGenerating || _runtime.sending) {
       final conversation = _runtime.conversationId;
       final reply = _replyTarget;
@@ -1138,14 +1144,134 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       busy: _runtime.queueBusy,
       canSteer: _runtime.isGenerating,
       error: _runtime.queueError,
+      editingId: _editingQueuedMessage?.requestId ?? '',
       onReorder: (ids) =>
           unawaited(_runQueueAction(() => _runtime.reorderQueuedMessages(ids))),
       onSteer: (id) =>
           unawaited(_runQueueAction(() => _runtime.steerQueuedMessage(id))),
       onDelete: (id) =>
           unawaited(_runQueueAction(() => _runtime.deleteQueuedMessage(id))),
+      onEdit: _beginQueueEdit,
       onShowError: (detail) =>
           unawaited(_showQueueError(detail, StackTrace.current)),
+    );
+  }
+
+  void _beginQueueEdit(String id) {
+    final item = _runtime.queuedMessages.firstWhere(
+      (row) => row['requestId'].toString() == id,
+      orElse: () => const <String, dynamic>{},
+    );
+    if (item.isEmpty) return;
+    final message = item['message']?.toString() ?? '';
+    if (item['status']?.toString() != 'queued') {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('该排队消息已开始执行，无法编辑')));
+      return;
+    }
+    final attachments = item['attachments'];
+    setState(() {
+      _editingQueuedMessage = (
+        requestId: id,
+        attachments: attachments is List
+            ? attachments
+                  .whereType<Map>()
+                  .map((row) => Map<String, dynamic>.from(row))
+                  .toList()
+            : <Map<String, dynamic>>[],
+      );
+    });
+    _composerController.value = TextEditingValue(
+      text: message,
+      selection: TextSelection.collapsed(offset: message.length),
+    );
+  }
+
+  void _cancelQueueEdit() {
+    if (_editingQueuedMessage == null) return;
+    setState(() => _editingQueuedMessage = null);
+    _composerController.clear();
+  }
+
+  void _removeEditingAttachment(int index) {
+    final editing = _editingQueuedMessage;
+    if (editing == null) return;
+    final next = [...editing.attachments]..removeAt(index);
+    setState(
+      () => _editingQueuedMessage = (
+        requestId: editing.requestId,
+        attachments: next,
+      ),
+    );
+  }
+
+  Future<void> _submitQueueEdit(String text) async {
+    final editing = _editingQueuedMessage;
+    if (editing == null) return;
+    final conversation = _runtime.conversationId;
+    try {
+      await _runtime.updateQueuedMessage(
+        editing.requestId,
+        text.trim(),
+        attachments: editing.attachments,
+      );
+      if (!mounted || _runtime.conversationId != conversation) return;
+      setState(() => _editingQueuedMessage = null);
+      _composerController.clear();
+    } catch (error, stackTrace) {
+      if (mounted &&
+          _runtime.conversationId == conversation &&
+          _composerController.text.isEmpty) {
+        _composerController.text = text;
+      }
+      await _showQueueError(
+        error,
+        stackTrace,
+        message: text,
+        title: '更新排队消息失败',
+      );
+    }
+  }
+
+  Widget _buildQueueEditBar() {
+    final editing = _editingQueuedMessage!;
+    final theme = Theme.of(context);
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primary.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Text('正在编辑排队消息', style: theme.textTheme.labelSmall),
+          const SizedBox(width: 6),
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  for (var index = 0; index < editing.attachments.length; index++)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: InputChip(
+                        visualDensity: VisualDensity.compact,
+                        label: Text(
+                          editing.attachments[index]['name']?.toString() ??
+                              '附件',
+                        ),
+                        onDeleted: () => _removeEditingAttachment(index),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          TextButton(onPressed: _cancelQueueEdit, child: const Text('取消编辑')),
+        ],
+      ),
     );
   }
 
@@ -3296,6 +3422,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               ],
             ),
           ),
+        if (_editingQueuedMessage != null) _buildQueueEditBar(),
         _buildQueuedMessages(),
         UIProviderHost(
           capability: UICapability.conversationComposer,
@@ -3533,11 +3660,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                       child: Stack(
                         children: [
                           Positioned.fill(
-                            child: UIProviderHost(
-                              capability: UICapability.conversationMessages,
-                              context: providerContext,
-                              actions: providerActions,
-                              fallback: AnimatedSwitcher(
+                            child: AnimatedSwitcher(
                                 duration: AppMotion.standard,
                                 reverseDuration: AppMotion.quick,
                                 switchInCurve: AppMotion.enterCurve,
@@ -4000,7 +4123,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                         ),
                                 ),
                               ),
-                            ),
                           ),
                           _ChatScrollFade(
                             alignment: Alignment.topCenter,

@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:dio/dio.dart';
 
 import 'backend_service_api.dart';
+import 'role_management_target.dart';
 
 const List<String> _deviceLocalApiPrefixes = <String>[
   '/api/extension-center',
@@ -44,6 +45,41 @@ bool isDeviceLocalApiPath(String path) {
   );
 }
 
+const String centerConsoleMCPPrefix = '/api/device-mesh/v1/business/console/mcp';
+
+bool isDeviceMCPPath(String path) {
+  final normalized = path.split('?').first;
+  return normalized == '/api/mcp' || normalized.startsWith('/api/mcp/');
+}
+
+String centerConsoleMCPPath(String path) {
+  if (!isDeviceMCPPath(path)) return path;
+  return path.replaceFirst('/api/mcp', centerConsoleMCPPrefix);
+}
+
+const String deviceAgentSkillPrefix = '/api/extensions/kernel/agent-skills';
+const String centerConsoleSkillPrefix =
+    '/api/device-mesh/v1/business/console/skills';
+
+bool isDeviceAgentSkillPath(String path) {
+  final normalized = path.split('?').first;
+  return normalized == deviceAgentSkillPrefix ||
+      normalized.startsWith('$deviceAgentSkillPrefix/');
+}
+
+String centerConsoleSkillPath(String path) {
+  if (!isDeviceAgentSkillPath(path)) return path;
+  return path.replaceFirst(deviceAgentSkillPrefix, centerConsoleSkillPrefix);
+}
+
+const String deviceReminderPrefix = '/api/reminders';
+
+bool isDeviceReminderPath(String path) {
+  final normalized = path.split('?').first;
+  return normalized == deviceReminderPrefix ||
+      normalized.startsWith('$deviceReminderPrefix/');
+}
+
 bool isDeviceRoleManagementPath(String path) {
   final normalized = path.split('?').first;
   if (normalized == '/api/characters/generate-card' ||
@@ -54,7 +90,15 @@ bool isDeviceRoleManagementPath(String path) {
     '/api/characters',
     '/api/character-templates',
     '/api/companion/role-profile',
+    '/api/roles',
   ].any((prefix) => normalized == prefix || normalized.startsWith('$prefix/'));
+}
+
+Map<String, String>? stripRoleManagementTarget(Map<String, String>? headers) {
+  if (headers == null || !headers.containsKey(roleManagementTargetHeader)) {
+    return headers;
+  }
+  return Map<String, String>.from(headers)..remove(roleManagementTargetHeader);
 }
 
 final class RoutedBackendServiceApiProxy implements BackendServiceApi {
@@ -72,23 +116,84 @@ final class RoutedBackendServiceApiProxy implements BackendServiceApi {
   final Random _random = Random.secure();
   int _requestCounter = 0;
 
-  Future<BackendServiceApi> _apiFor(String path) async {
-    if (isDeviceRoleManagementPath(path) &&
-        (_isCloudDeployment?.call() ?? false)) {
-      return _businessApi;
+  Future<_ResolvedCall> _apiFor(
+    String path,
+    Map<String, String>? headers,
+  ) async {
+    if (isDeviceMCPPath(path)) {
+      final target = roleManagementTargetFromWire(
+        headers?[roleManagementTargetHeader],
+      );
+      if (target != RoleManagementTarget.center) {
+        return _ResolvedCall(_deviceLocalApi, path);
+      }
+      if (!(_isCloudDeployment?.call() ?? false)) {
+        throw StateError('当前设备未接入统筹中心，无法使用统筹中心 MCP 数据');
+      }
+      return _ResolvedCall(_businessApi, centerConsoleMCPPath(path));
     }
-    return isDeviceLocalApiPath(path) ? _deviceLocalApi : _businessApi;
+    if (isDeviceAgentSkillPath(path)) {
+      final target = roleManagementTargetFromWire(
+        headers?[roleManagementTargetHeader],
+      );
+      if (target != RoleManagementTarget.center) {
+        return _ResolvedCall(_deviceLocalApi, path);
+      }
+      if (!(_isCloudDeployment?.call() ?? false)) {
+        throw StateError('当前设备未接入统筹中心，无法使用统筹中心 skill 数据');
+      }
+      return _ResolvedCall(_businessApi, centerConsoleSkillPath(path));
+    }
+    if (isDeviceReminderPath(path)) {
+      final target = roleManagementTargetFromWire(
+        headers?[roleManagementTargetHeader],
+      );
+      if (target != RoleManagementTarget.center) {
+        return _ResolvedCall(_deviceLocalApi, path);
+      }
+      if (!(_isCloudDeployment?.call() ?? false)) {
+        throw StateError('当前设备未接入统筹中心，无法使用统筹中心任务数据');
+      }
+      return _ResolvedCall(_businessApi, path);
+    }
+    if (!isDeviceRoleManagementPath(path)) {
+      return _ResolvedCall(
+        isDeviceLocalApiPath(path) ? _deviceLocalApi : _businessApi,
+        path,
+      );
+    }
+    final target = roleManagementTargetFromWire(
+      headers?[roleManagementTargetHeader],
+    );
+    if (target == RoleManagementTarget.local) {
+      return _ResolvedCall(_deviceLocalApi, path);
+    }
+    if (target == RoleManagementTarget.center &&
+        !(_isCloudDeployment?.call() ?? false)) {
+      throw StateError('当前设备未接入统筹中心，无法使用统筹中心角色数据');
+    }
+    return _ResolvedCall(_businessApi, path);
   }
 
   Map<String, String>? _headersForMutation(
     String path,
     Map<String, String>? headers,
   ) {
-    if (!isDeviceLocalApiPath(path)) return headers;
-    final result = <String, String>{...?headers};
+    final stripped = stripRoleManagementTarget(headers);
+    if (!isDeviceLocalApiPath(path)) return stripped;
+    final result = <String, String>{...?stripped};
     result.putIfAbsent('X-Amitia-Client-Type', () => 'mobile');
     result.putIfAbsent('Idempotency-Key', _nextIdempotencyKey);
     return result;
+  }
+
+  Map<String, String>? _headersForRead(
+    String path,
+    Map<String, String>? headers,
+  ) {
+    final stripped = stripRoleManagementTarget(headers);
+    if (!isDeviceLocalApiPath(path)) return stripped;
+    return <String, String>{...?stripped, 'X-Amitia-Client-Type': 'mobile'};
   }
 
   String _nextIdempotencyKey() {
@@ -107,13 +212,11 @@ final class RoutedBackendServiceApiProxy implements BackendServiceApi {
     Map<String, String>? headers,
     T Function(dynamic)? fromJson,
   }) async {
-    final routedHeaders = isDeviceLocalApiPath(path)
-        ? <String, String>{...?headers, 'X-Amitia-Client-Type': 'mobile'}
-        : headers;
-    return (await _apiFor(path)).get<T>(
-      path,
+    final call = await _apiFor(path, headers);
+    return call.api.get<T>(
+      call.path,
       queryParameters: queryParameters,
-      headers: routedHeaders,
+      headers: _headersForRead(call.path, headers),
       fromJson: fromJson,
     );
   }
@@ -125,13 +228,11 @@ final class RoutedBackendServiceApiProxy implements BackendServiceApi {
     Map<String, String>? headers,
     CancelToken? cancelToken,
   }) async {
-    final routedHeaders = isDeviceLocalApiPath(path)
-        ? <String, String>{...?headers, 'X-Amitia-Client-Type': 'mobile'}
-        : headers;
-    return (await _apiFor(path)).getStream(
-      path,
+    final call = await _apiFor(path, headers);
+    return call.api.getStream(
+      call.path,
       queryParameters: queryParameters,
-      headers: routedHeaders,
+      headers: _headersForRead(call.path, headers),
       cancelToken: cancelToken,
     );
   }
@@ -144,11 +245,12 @@ final class RoutedBackendServiceApiProxy implements BackendServiceApi {
     Map<String, String>? headers,
     CancelToken? cancelToken,
   }) async {
-    return (await _apiFor(path)).postStream(
-      path,
+    final call = await _apiFor(path, headers);
+    return call.api.postStream(
+      call.path,
       data: data,
       queryParameters: queryParameters,
-      headers: _headersForMutation(path, headers),
+      headers: _headersForMutation(call.path, headers),
       cancelToken: cancelToken,
     );
   }
@@ -162,12 +264,13 @@ final class RoutedBackendServiceApiProxy implements BackendServiceApi {
     Map<String, String>? headers,
     T Function(dynamic)? fromJson,
   }) async {
-    return (await _apiFor(path)).postMultipart<T>(
-      path,
+    final call = await _apiFor(path, headers);
+    return call.api.postMultipart<T>(
+      call.path,
       fields: fields,
       files: files,
       queryParameters: queryParameters,
-      headers: _headersForMutation(path, headers),
+      headers: _headersForMutation(call.path, headers),
       fromJson: fromJson,
     );
   }
@@ -180,11 +283,12 @@ final class RoutedBackendServiceApiProxy implements BackendServiceApi {
     Map<String, String>? headers,
     T Function(dynamic)? fromJson,
   }) async {
-    return (await _apiFor(path)).post<T>(
-      path,
+    final call = await _apiFor(path, headers);
+    return call.api.post<T>(
+      call.path,
       data: data,
       queryParameters: queryParameters,
-      headers: _headersForMutation(path, headers),
+      headers: _headersForMutation(call.path, headers),
       fromJson: fromJson,
     );
   }
@@ -196,10 +300,11 @@ final class RoutedBackendServiceApiProxy implements BackendServiceApi {
     Map<String, String>? headers,
     T Function(dynamic)? fromJson,
   }) async {
-    return (await _apiFor(path)).postPayload<T>(
-      path,
+    final call = await _apiFor(path, headers);
+    return call.api.postPayload<T>(
+      call.path,
       data: data,
-      headers: _headersForMutation(path, headers),
+      headers: _headersForMutation(call.path, headers),
       fromJson: fromJson,
     );
   }
@@ -212,11 +317,12 @@ final class RoutedBackendServiceApiProxy implements BackendServiceApi {
     Map<String, String>? headers,
     T Function(dynamic)? fromJson,
   }) async {
-    return (await _apiFor(path)).put<T>(
-      path,
+    final call = await _apiFor(path, headers);
+    return call.api.put<T>(
+      call.path,
       data: data,
       queryParameters: queryParameters,
-      headers: _headersForMutation(path, headers),
+      headers: _headersForMutation(call.path, headers),
       fromJson: fromJson,
     );
   }
@@ -229,11 +335,12 @@ final class RoutedBackendServiceApiProxy implements BackendServiceApi {
     Map<String, String>? headers,
     T Function(dynamic)? fromJson,
   }) async {
-    return (await _apiFor(path)).patch<T>(
-      path,
+    final call = await _apiFor(path, headers);
+    return call.api.patch<T>(
+      call.path,
       data: data,
       queryParameters: queryParameters,
-      headers: _headersForMutation(path, headers),
+      headers: _headersForMutation(call.path, headers),
       fromJson: fromJson,
     );
   }
@@ -244,10 +351,11 @@ final class RoutedBackendServiceApiProxy implements BackendServiceApi {
     Map<String, dynamic>? queryParameters,
     Map<String, String>? headers,
   }) async {
-    return (await _apiFor(path)).delete(
-      path,
+    final call = await _apiFor(path, headers);
+    return call.api.delete(
+      call.path,
       queryParameters: queryParameters,
-      headers: _headersForMutation(path, headers),
+      headers: _headersForMutation(call.path, headers),
     );
   }
 
@@ -258,11 +366,19 @@ final class RoutedBackendServiceApiProxy implements BackendServiceApi {
     Map<String, String>? headers,
     T Function(dynamic)? fromJson,
   }) async {
-    return (await _apiFor(path)).deleteWithResponse<T>(
-      path,
+    final call = await _apiFor(path, headers);
+    return call.api.deleteWithResponse<T>(
+      call.path,
       data: data,
-      headers: _headersForMutation(path, headers),
+      headers: _headersForMutation(call.path, headers),
       fromJson: fromJson,
     );
   }
+}
+
+final class _ResolvedCall {
+  const _ResolvedCall(this.api, this.path);
+
+  final BackendServiceApi api;
+  final String path;
 }

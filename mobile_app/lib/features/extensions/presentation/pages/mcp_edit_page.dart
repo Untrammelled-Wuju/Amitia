@@ -8,10 +8,13 @@ import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../core/backend_transport/role_management_target.dart';
+import '../../../../core/services/channel_service.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
+import '../../../../core/widgets/role_management_target_field.dart';
 
 class McpEditPage extends ConsumerStatefulWidget {
   final String mcpId;
@@ -48,6 +51,7 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
 
   bool get _isNew => widget.mcpId.trim().isEmpty || widget.mcpId == 'new';
   bool get _isHttp => _transportIndex == 0;
+  MCPService get _service => ref.read(mcpServiceProvider);
 
   static const _authLabels = <String, String>{
     'none': '无需认证',
@@ -69,7 +73,7 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
       return;
     }
     try {
-      final svc = ref.read(mcpServiceProvider);
+      final svc = _service;
       final data = await svc.getServer(widget.mcpId);
       if (data == null) throw StateError('MCP 服务不存在');
       final capabilities = await svc.capabilities(widget.mcpId);
@@ -181,6 +185,21 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (_isNew) ...[
+                RoleManagementTargetField(
+                  noun: 'MCP 服务',
+                  value:
+                      ref.watch(mcpManagementTargetProvider) ??
+                      RoleManagementTarget.local,
+                  onChanged: (next) {
+                    ref.read(mcpManagementTargetProvider.notifier).state =
+                        next;
+                    setState(() {});
+                  },
+                  enabled: !_saving,
+                ),
+                SizedBox(height: AppSpacing.sectionGap),
+              ],
               _buildBasicSection(context),
               SizedBox(height: AppSpacing.sectionGap),
               _buildTransportSection(context),
@@ -428,7 +447,7 @@ _showMessage('凭据必须是 JSON 对象', error: true);
 
     setState(() => _saving = true);
     try {
-      final svc = ref.read(mcpServiceProvider);
+      final svc = _service;
       final payload = <String, dynamic>{
         'name': name,
         'displayName': _displayNameController.text.trim(),

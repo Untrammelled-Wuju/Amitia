@@ -81,6 +81,7 @@
 		A1B2C3D4E5F60205 /* Intents.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60029 /* Intents.framework */; };
 		A1B2C3D4E5F60207 /* UserNotifications.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6002B /* UserNotifications.framework */; };
 		A1B2C3D4E5F60301 /* IOSDeviceMeshIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60300 /* IOSDeviceMeshIdentity.swift */; };
+		A1B2C3D4E5F60311 /* IOSSystemDeviceName.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60310 /* IOSSystemDeviceName.swift */; };
 		A1B2C3D4E5F60400 /* AmitiaRunAttributes.swift in Runner Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60402 /* AmitiaRunAttributes.swift */; };
 		A1B2C3D4E5F60401 /* AmitiaRunAttributes.swift in LiveActivity Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60402 /* AmitiaRunAttributes.swift */; };
 /* End PBXBuildFile section */
@@ -219,6 +220,7 @@
 		A1B2C3D4E5F60203 /* AmitiaNotificationService.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = AmitiaNotificationService.entitlements; sourceTree = "<group>"; };
 		A1B2C3D4E5F60204 /* AmitiaNotificationService.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = AmitiaNotificationService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1B2C3D4E5F60300 /* IOSDeviceMeshIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSDeviceMeshIdentity.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60310 /* IOSSystemDeviceName.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSSystemDeviceName.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60402 /* AmitiaRunAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Notifications/AmitiaRunAttributes.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -335,6 +337,7 @@
 				AD105A0000000000000000CA,
 				AD105A0000000000000000CB,
 				A1B2C3D4E5F60300 /* IOSDeviceMeshIdentity.swift */,
+				A1B2C3D4E5F60310 /* IOSSystemDeviceName.swift */,
 				A1B2C3D4E5F60101 /* IOSNotificationPlatform.swift */,
 				A1B2C3D4E5F60402 /* AmitiaRunAttributes.swift */,
 				A1B2C3D4E5F60001 /* libish.a */,
@@ -732,6 +735,7 @@
 				AD105A00000000000000000C,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 				A1B2C3D4E5F60301 /* IOSDeviceMeshIdentity.swift in Sources */,
+				A1B2C3D4E5F60311 /* IOSSystemDeviceName.swift in Sources */,
 				A1B2C3D4E5F60030 /* IOSNativeHost.swift in Sources */,
 				A1B2C3D4E5F60031 /* HealthKitNativeHandler.swift in Sources */,
 				A1B2C3D4E5F60032 /* CalendarNativeHandler.swift in Sources */,

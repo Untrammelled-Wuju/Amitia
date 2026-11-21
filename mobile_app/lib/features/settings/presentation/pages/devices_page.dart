@@ -9,6 +9,7 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../core/device_mesh/device_display_name.dart';
 import '../../../../core/device_mesh/device_presence.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/services/device_mesh_service.dart';
@@ -44,8 +45,17 @@ final _devicesProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>(
       localDeviceMeshIdentityProvider.future,
     );
     final localDeviceId = localIdentity?['deviceId']?.toString().trim();
-    return excludeDeviceMeshIdentity(devices, localDeviceId)
-        .map((device) => {...device, '_managementIntent': intent})
+    final visible = excludeDeviceMeshIdentity(devices, localDeviceId);
+    final displayNames = resolveDeviceDisplayNames(visible);
+    return visible
+        .map(
+          (device) => {
+            ...device,
+            '_managementIntent': intent,
+            '_displayName':
+                displayNames[device['deviceId']?.toString()] ?? unnamedDevice,
+          },
+        )
         .toList(growable: false);
   },
 );
@@ -188,6 +198,9 @@ class DevicesPage extends ConsumerWidget {
                       for (var i = 0; i < items.length; i++) ...[
                         _DeviceTile(
                           item: items[i],
+                          onConfirmName: items[i].intent.canAdminister
+                              ? () => _confirmDeviceName(context, ref, items[i])
+                              : null,
                           onRevoke: items[i].intent.canAdminister
                               ? () => _confirmRevoke(context, ref, items[i])
                               : null,
@@ -310,6 +323,35 @@ class DevicesPage extends ConsumerWidget {
     }
   }
 
+  Future<void> _confirmDeviceName(
+    BuildContext context,
+    WidgetRef ref,
+    _DeviceItem item,
+  ) async {
+    try {
+      final service = ref.read(deviceMeshServiceProvider);
+      item.intent.requireAdministrator();
+      item.intent.validate(await service.coordination());
+      await service.confirmDeviceName(
+        item.deviceId,
+        headers: item.intent.headers,
+      );
+      item.intent.validate(await service.coordination());
+      ref.invalidate(_devicesProvider);
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('设备名称已变更')));
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('变更失败：${_message(e)}')));
+      }
+    }
+  }
+
   static String _message(Object error) {
     if (error is StateError) return error.message.toString();
     return error.toString().replaceFirst('Exception: ', '');
@@ -343,6 +385,7 @@ class _DeviceItem {
   final DeviceManagementIntent intent;
   final String deviceId;
   final String name;
+  final String pendingName;
   final String platform;
   final String trustState;
   final String presence;
@@ -353,6 +396,7 @@ class _DeviceItem {
     required this.intent,
     required this.deviceId,
     required this.name,
+    required this.pendingName,
     required this.platform,
     required this.trustState,
     required this.presence,
@@ -362,7 +406,8 @@ class _DeviceItem {
 
   factory _DeviceItem.fromJson(Map<String, dynamic> json) {
     final deviceId = (json['deviceId'] ?? '').toString();
-    final label = (json['label'] ?? '').toString().trim();
+    final displayName = (json['_displayName'] ?? '').toString().trim();
+    final pendingName = (json['pendingName'] ?? '').toString().trim();
     final rawRuntimes = json['runtimes'];
     final runtimes = rawRuntimes is List
         ? rawRuntimes
@@ -376,7 +421,8 @@ class _DeviceItem {
     return _DeviceItem(
       intent: json['_managementIntent'] as DeviceManagementIntent,
       deviceId: deviceId,
-      name: label.isEmpty ? (deviceId.isEmpty ? '未命名设备' : deviceId) : label,
+      name: displayName.isEmpty ? unnamedDevice : displayName,
+      pendingName: pendingName,
       platform: (json['platform'] ?? 'unknown').toString(),
       trustState: (json['trustState'] ?? '').toString(),
       presence: (json['presence'] ?? 'offline').toString(),
@@ -390,6 +436,7 @@ class _DeviceItem {
 
 class _DeviceTile extends StatefulWidget {
   final _DeviceItem item;
+  final Future<void> Function()? onConfirmName;
   final VoidCallback? onRevoke;
   final VoidCallback? onGrants;
   final Future<Map<String, dynamic>?> Function() onLoadSync;
@@ -397,6 +444,7 @@ class _DeviceTile extends StatefulWidget {
 
   const _DeviceTile({
     required this.item,
+    this.onConfirmName,
     required this.onRevoke,
     this.onGrants,
     required this.onLoadSync,
@@ -410,6 +458,7 @@ class _DeviceTile extends StatefulWidget {
 class _DeviceTileState extends State<_DeviceTile> {
   Map<String, dynamic>? _sync;
   bool _syncLoading = false;
+  bool _nameConfirming = false;
   String _probeBusy = '';
 
   @override
@@ -491,6 +540,17 @@ class _DeviceTileState extends State<_DeviceTile> {
       if (mounted && identical(intent, widget.item.intent)) {
         setState(() => _syncLoading = false);
       }
+    }
+  }
+
+  Future<void> _confirmName() async {
+    final callback = widget.onConfirmName;
+    if (callback == null || _nameConfirming) return;
+    setState(() => _nameConfirming = true);
+    try {
+      await callback();
+    } finally {
+      if (mounted) setState(() => _nameConfirming = false);
     }
   }
 
@@ -621,6 +681,33 @@ class _DeviceTileState extends State<_DeviceTile> {
               ),
             ],
           ),
+          if (item.pendingName.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: context.surfaceSecondary,
+                borderRadius: AppRadius.brSmall,
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '此设备已更名为：${item.pendingName}',
+                      style: AppTypography.caption(context),
+                    ),
+                  ),
+                  if (widget.onConfirmName != null) ...[
+                    const SizedBox(width: 8),
+                    TextButton(
+                      onPressed: _nameConfirming ? null : _confirmName,
+                      child: Text(_nameConfirming ? '变更中…' : '变更'),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
           if (item.runtimes.isNotEmpty) ...[
             const SizedBox(height: 10),
             for (final runtime in item.runtimes)

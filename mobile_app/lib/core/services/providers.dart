@@ -7,6 +7,7 @@ import '../errors/original_error.dart';
 import '../backend_transport/errors/backend_transport_error.dart';
 import '../backend_transport/errors/backend_transport_error_code.dart';
 import '../backend_transport/providers/backend_transport_providers.dart';
+import '../backend_transport/role_management_target.dart';
 import '../ui_runtime/ui_runtime_invalidation.dart';
 import 'space_profile_service.dart';
 import 'character_service.dart';
@@ -45,6 +46,7 @@ import '../models/reminder.dart';
 import '../models/model_config.dart';
 import '../runtime/backend/mobile_backend_providers.dart';
 import '../runtime/backend/mobile_deployment_mode.dart';
+import '../device_mesh/device_name_reporter.dart';
 import '../device_mesh/mobile_device_mesh_identity.dart';
 import '../device_mesh/mobile_device_mesh_provisioning.dart';
 
@@ -61,11 +63,17 @@ final onboardingServiceProvider = Provider<OnboardingService>(
 );
 
 final characterServiceProvider = Provider<CharacterService>(
-  (ref) => CharacterService(_getDynamicServiceApi(ref)),
+  (ref) => CharacterService(
+    _getDynamicServiceApi(ref),
+    target: () => ref.read(roleManagementTargetProvider),
+  ),
 );
 
 final characterDetailServiceProvider = Provider<CharacterDetailService>(
-  (ref) => CharacterDetailService(_getDynamicServiceApi(ref)),
+  (ref) => CharacterDetailService(
+    _getDynamicServiceApi(ref),
+    target: () => ref.read(roleManagementTargetProvider),
+  ),
 );
 
 final chatServiceProvider = Provider<ChatService>(
@@ -156,7 +164,10 @@ final continuityServiceProvider = Provider<ContinuityService>(
 );
 
 final reminderServiceProvider = Provider<ReminderService>(
-  (ref) => ReminderService(_getDynamicServiceApi(ref)),
+  (ref) => ReminderService(
+    _getDynamicServiceApi(ref),
+    taskTarget: () => ref.read(taskManagementTargetProvider),
+  ),
 );
 
 final attentionServiceProvider = Provider<AttentionService>(
@@ -188,7 +199,10 @@ final asrServiceProvider = Provider<ASRService>(
 );
 
 final extensionServiceProvider = Provider<ExtensionService>(
-  (ref) => ExtensionService(_getDynamicServiceApi(ref)),
+  (ref) => ExtensionService(
+    _getDynamicServiceApi(ref),
+    agentSkillTarget: () => ref.read(skillManagementTargetProvider),
+  ),
 );
 
 final channelSandboxServiceProvider = Provider<ChannelSandboxService>(
@@ -247,7 +261,10 @@ final safetyServiceProvider = Provider<SafetyService>(
 );
 
 final mcpServiceProvider = Provider<MCPService>(
-  (ref) => MCPService(_getDynamicServiceApi(ref)),
+  (ref) => MCPService(
+    _getDynamicServiceApi(ref),
+    target: () => ref.read(mcpManagementTargetProvider),
+  ),
 );
 
 final imageGenServiceProvider = Provider<ImageGenService>(
@@ -272,6 +289,10 @@ final workspaceServiceProvider = Provider<WorkspaceService>(
 
 final deviceMeshServiceProvider = Provider<DeviceMeshService>(
   (ref) => DeviceMeshService(_getDynamicServiceApi(ref)),
+);
+
+final deviceNameReporterProvider = Provider<DeviceNameReporter>(
+  (ref) => DeviceNameReporter(ref.watch(deviceMeshServiceProvider)),
 );
 
 bool retryableSharedCoreAccessError(Object error) {
@@ -404,8 +425,9 @@ final currentSpaceProfileProvider = FutureProvider.autoDispose<SpaceProfile?>((
 final characterListProvider = FutureProvider.autoDispose<List<CharacterDto>>((
   ref,
 ) async {
+  final target = ref.watch(roleManagementTargetProvider);
   final svc = ref.read(characterServiceProvider);
-  return svc.list();
+  return svc.list(target: target);
 });
 
 final conversationListProvider =

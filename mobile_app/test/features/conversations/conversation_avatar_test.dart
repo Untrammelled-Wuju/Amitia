@@ -4,6 +4,7 @@ import 'package:amitia_app/core/backend_connection/backend_connection_availabili
 import 'package:amitia_app/core/backend_connection/backend_connection_error.dart';
 import 'package:amitia_app/core/backend_connection/providers/backend_connection_providers.dart';
 import 'package:amitia_app/core/backend_transport/backend_service_api.dart';
+import 'package:amitia_app/core/backend_transport/role_management_target.dart';
 import 'package:amitia_app/core/models/character.dart';
 import 'package:amitia_app/core/models/conversation.dart';
 import 'package:amitia_app/core/services/character_service.dart';
@@ -30,7 +31,10 @@ class _Characters extends CharacterService {
   final requested = <String>[];
 
   @override
-  Future<CharacterDto?> getById(String id) async {
+  Future<CharacterDto?> getById(
+    String id, {
+    RoleManagementTarget? target,
+  }) async {
     requested.add(id);
     return characters[id];
   }

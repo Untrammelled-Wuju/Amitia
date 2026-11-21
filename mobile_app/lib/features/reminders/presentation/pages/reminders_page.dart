@@ -9,15 +9,20 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../app/app_routes.dart';
+import '../../../../core/backend_transport/role_management_target.dart';
 import '../../../../core/models/reminder.dart';
 import '../../../../core/models/attention.dart';
 import '../../../../core/models/character.dart';
 import '../../../../core/models/conversation.dart';
+import '../../../../core/device_mesh/device_display_name.dart';
+import '../../../../core/device_mesh/ownership_label.dart';
 import '../../../../core/services/owned_conversation_reference.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../chat/runtime/conversation_runtime_controller.dart';
+import '../../../../core/runtime/backend/mobile_backend_providers.dart';
+import '../../../../core/runtime/backend/mobile_deployment_mode.dart';
 
 class RemindersPage extends ConsumerStatefulWidget {
   const RemindersPage({super.key, this.initialCharacterId = ''});
@@ -43,6 +48,30 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
   Timer? _refreshTimer;
   bool _refreshing = false;
   bool get _isProactiveTask => _taskKind == 'proactive_task';
+
+  RoleManagementTarget get _target =>
+      ref.watch(taskManagementTargetProvider) ?? RoleManagementTarget.local;
+
+  bool get _centerAvailable =>
+      ref.watch(mobileDeploymentConfigProvider).mode ==
+          MobileDeploymentMode.cloud &&
+      roleManagementCenterAvailable(
+        ref.watch(deviceCoordinationProvider).valueOrNull,
+      );
+
+  String get _localDeviceName {
+    final identity = ref.watch(localDeviceMeshIdentityProvider).valueOrNull;
+    final deviceId = (identity?['deviceId'] ?? '').toString();
+    if (deviceId.isEmpty) return '';
+    final devices =
+        ref.watch(deviceMeshDevicesProvider).valueOrNull ??
+        const <Map<String, dynamic>>[];
+    return deviceDisplayName(deviceId, devices);
+  }
+
+  String _taskLabel(String title) => _target == RoleManagementTarget.center
+      ? coreOwnershipLabel('任务', title)
+      : deviceOwnershipLabel(_localDeviceName, '任务', title);
 
   @override
   void initState() {
@@ -79,20 +108,22 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
       String? attentionError;
       List<AgentSourcePolicy> sourcePolicies = const [];
       String? sourcePolicyError;
-      try {
-        final attentionValues = await Future.wait<dynamic>([
-          attentionService.items(),
-          attentionService.budget(),
-        ]);
-        attentionItems = attentionValues[0] as List<AttentionItem>;
-        attentionStats = attentionValues[1] as AttentionBudgetStats;
+      if (_target != RoleManagementTarget.center) {
         try {
-          sourcePolicies = await attentionService.policies();
-        } catch (policyFailure) {
-          sourcePolicyError = policyFailure.toString();
+          final attentionValues = await Future.wait<dynamic>([
+            attentionService.items(),
+            attentionService.budget(),
+          ]);
+          attentionItems = attentionValues[0] as List<AttentionItem>;
+          attentionStats = attentionValues[1] as AttentionBudgetStats;
+          try {
+            sourcePolicies = await attentionService.policies();
+          } catch (policyFailure) {
+            sourcePolicyError = policyFailure.toString();
+          }
+        } catch (attentionFailure) {
+          attentionError = attentionFailure.toString();
         }
-      } catch (attentionFailure) {
-        attentionError = attentionFailure.toString();
       }
       if (!mounted) return;
       setState(() {
@@ -166,6 +197,7 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
         child: Column(
           children: [
             _buildSchedulerStatus(),
+            if (_centerAvailable) _buildSourceSwitcher(context),
             if (_attentionError != null)
               Padding(
                 padding: EdgeInsets.fromLTRB(
@@ -240,6 +272,74 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
         ),
       ),
     );
+  }
+
+  Widget _buildSourceSwitcher(BuildContext context) {
+    final target = _target;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        0,
+        AppSpacing.pagePadding,
+        AppSpacing.sm,
+      ),
+      child: Row(
+        children: [
+          Text(
+            '任务来源',
+            style: AppTypography.caption(
+              context,
+            ).copyWith(color: context.textSecondary),
+          ),
+          const Spacer(),
+          for (final option in RoleManagementTarget.values)
+            Padding(
+              padding: const EdgeInsets.only(left: 6),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(999),
+                onTap: () => _switchTarget(option),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: option == target
+                        ? context.accentPrimary.withValues(alpha: 0.12)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                      color: option == target
+                          ? context.accentPrimary
+                          : context.borderSecondary,
+                    ),
+                  ),
+                  child: Text(
+                    option.label,
+                    style: AppTypography.caption(context).copyWith(
+                      color: option == target
+                          ? context.accentPrimary
+                          : context.textSecondary,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _switchTarget(RoleManagementTarget target) {
+    if (_target == target) return;
+    ref.read(taskManagementTargetProvider.notifier).state = target;
+    setState(() {
+      _reminders = const [];
+      _attentionItems = const [];
+      _status = const {};
+      _loading = true;
+    });
+    unawaited(_load());
   }
 
   Widget _buildAttentionSection() {
@@ -1213,7 +1313,7 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      reminder.title,
+                      _taskLabel(reminder.title),
                       style: AppTypography.cardTitle(context),
                     ),
                     if (reminder.content.isNotEmpty) ...[

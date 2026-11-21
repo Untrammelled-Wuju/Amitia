@@ -141,6 +141,80 @@ class DeviceMeshService {
     return result;
   }
 
+  Future<List<Map<String, dynamic>>> domainRoles(String domain) async {
+    if (domain != 'center' && domain != 'local') {
+      throw StateError('默认角色域只能是 center 或 local');
+    }
+    final response = await _api.get<Map<String, dynamic>>(
+      '/api/device-mesh/v1/business/roles',
+      queryParameters: <String, dynamic>{'domain': domain},
+    );
+    final roles = response?['roles'];
+    if (roles is! List) return const [];
+    return roles
+        .whereType<Map>()
+        .map((value) => Map<String, dynamic>.from(value))
+        .toList(growable: false);
+  }
+
+  Future<List<Map<String, dynamic>>> deviceRoles(
+    String deviceId, {
+    String domain = 'local',
+  }) async {
+    final normalized = deviceId.trim();
+    if (normalized.isEmpty) {
+      throw StateError('读取设备角色目录缺少设备标识');
+    }
+    if (domain != 'center' && domain != 'local') {
+      throw StateError('角色域只能是 center 或 local');
+    }
+    final response = await _api.get<Map<String, dynamic>>(
+      '/api/device-mesh/v1/business/roles',
+      queryParameters: <String, dynamic>{
+        'device': normalized,
+        'domain': domain,
+      },
+    );
+    final roles = response?['roles'];
+    if (roles is! List) return const [];
+    return roles
+        .whereType<Map>()
+        .map((value) => Map<String, dynamic>.from(value))
+        .toList(growable: false);
+  }
+
+  Future<Map<String, dynamic>> selectRoleDomain(
+    String deviceId, {
+    required String domain,
+    required String role,
+    required int expectedRevision,
+    Map<String, String>? headers,
+  }) async {
+    if (deviceId.trim().isEmpty) {
+      throw StateError('默认角色保存缺少设备标识');
+    }
+    if (domain != 'center' && domain != 'local') {
+      throw StateError('默认角色域只能是 center 或 local');
+    }
+    final normalizedRole = role.trim();
+    final response = await _api.put<Map<String, dynamic>>(
+      '/api/device-mesh/v1/devices/${Uri.encodeComponent(deviceId)}/role',
+      headers: headers,
+      data: <String, dynamic>{
+        'domain': domain,
+        'role': normalizedRole,
+        'expectedRevision': expectedRevision,
+      },
+    );
+    final policy = response?['policy'];
+    if (policy is! Map ||
+        policy['selectedRole']?.toString() != normalizedRole ||
+        policy['coordinated'] != (domain == 'center')) {
+      throw StateError('统筹中心未确认默认角色保存结果');
+    }
+    return Map<String, dynamic>.from(policy);
+  }
+
   Future<void> grantAdministrator(
     String deviceId, {
     required bool grant,
@@ -164,6 +238,39 @@ class DeviceMeshService {
         .whereType<Map>()
         .map((item) => Map<String, dynamic>.from(item))
         .toList();
+  }
+
+  Future<Map<String, dynamic>> reportDeviceName(
+    String deviceId,
+    String name,
+  ) async {
+    if (deviceId.trim().isEmpty || name.trim().isEmpty) {
+      throw StateError('设备名称上报缺少设备标识或名称');
+    }
+    final response = await _api.put<Map<String, dynamic>>(
+      '/api/device-mesh/v1/devices/${Uri.encodeComponent(deviceId)}/name',
+      data: <String, dynamic>{'name': name.trim()},
+    );
+    final device = response?['device'];
+    if (device is! Map || device['deviceId']?.toString() != deviceId) {
+      throw StateError('统筹中心未确认设备名称上报结果');
+    }
+    return Map<String, dynamic>.from(device);
+  }
+
+  Future<Map<String, dynamic>> confirmDeviceName(
+    String deviceId, {
+    Map<String, String>? headers,
+  }) async {
+    final response = await _api.post<Map<String, dynamic>>(
+      '/api/device-mesh/v1/devices/${Uri.encodeComponent(deviceId)}/name/confirm',
+      headers: headers,
+    );
+    final device = response?['device'];
+    if (device is! Map || device['deviceId']?.toString() != deviceId) {
+      throw StateError('统筹中心未确认设备名称变更结果');
+    }
+    return Map<String, dynamic>.from(device);
   }
 
   Future<Map<String, dynamic>> createPairingOffer({

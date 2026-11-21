@@ -91,7 +91,7 @@ void main() {
     addTearDown(router.dispose);
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [rawBackendServiceApiProvider.overrideWithValue(api)],
+        overrides: [backendServiceProvider.overrideWithValue(api)],
         child: MaterialApp.router(
           theme: AppTheme.lightTheme(),
           routerConfig: router,
@@ -101,7 +101,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('研究团队'), findsWidgets);
-    expect(find.text('资料研究员'), findsOneWidget);
+    expect(find.text('统筹中心-角色-资料研究员'), findsOneWidget);
     expect(find.text('结论必须附来源'), findsOneWidget);
     expect(find.text('添加成员'), findsOneWidget);
     await tester.tap(find.byTooltip('新建团队'));

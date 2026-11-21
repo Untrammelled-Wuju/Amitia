@@ -19,6 +19,9 @@ import '../../../../core/services/providers.dart';
 import '../../../../core/services/shared_core_data_access.dart';
 import '../../../../core/services/role_authority.dart';
 import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
+import '../../../../core/backend_transport/role_management_target.dart';
+import '../../../../core/runtime/backend/mobile_backend_providers.dart';
+import '../../../../core/runtime/backend/mobile_deployment_mode.dart';
 import '../../../../core/models/character.dart';
 import '../../../../core/widgets/shared_core_read_only_banner.dart';
 
@@ -84,6 +87,16 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
               : '正在确认统筹中心数据权限',
           coreId: '',
         );
+    final isCloud =
+        ref.watch(mobileDeploymentConfigProvider).mode ==
+        MobileDeploymentMode.cloud;
+    final effectiveTarget = resolveRoleManagementTarget(
+      ref.watch(roleManagementTargetProvider),
+      cloud: isCloud,
+    );
+    final canCreate =
+        effectiveTarget == RoleManagementTarget.local || coreAccess.write;
+    final centerAccess = effectiveTarget == RoleManagementTarget.center;
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: _searchVisible ? '搜索角色' : widget.title,
@@ -148,7 +161,10 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
             final activeChars = _activeCharacters;
             return Column(
               children: [
-                SharedCoreReadOnlyBanner(access: coreAccess),
+                if (isCloud)
+                  _buildScopeSwitcher(context, effectiveTarget),
+                if (centerAccess)
+                  SharedCoreReadOnlyBanner(access: coreAccess),
                 Expanded(
                   child: activeChars.isEmpty
                       ? Center(
@@ -179,7 +195,7 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
                           label: '创建新角色',
                           icon: Icons.person_add_alt_1,
                           isFullWidth: true,
-                          onPressed: coreAccess.write
+                          onPressed: canCreate
                               ? () => context.push(AppRoutes.charactersCreate)
                               : null,
                         ),
@@ -206,6 +222,68 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
     );
   }
 
+  Widget _buildScopeSwitcher(
+    BuildContext context,
+    RoleManagementTarget effective,
+  ) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        AppSpacing.sm,
+        AppSpacing.pagePadding,
+        0,
+      ),
+      child: Row(
+        children: [
+          Text(
+            '角色来源',
+            style: AppTypography.caption(
+              context,
+            ).copyWith(color: context.textSecondary),
+          ),
+          const Spacer(),
+          for (final target in RoleManagementTarget.values)
+            Padding(
+              padding: const EdgeInsets.only(left: 6),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(999),
+                onTap: () {
+                  ref.read(roleManagementTargetProvider.notifier).state =
+                      target;
+                  ref.invalidate(characterListProvider);
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: target == effective
+                        ? context.accentPrimary.withValues(alpha: 0.12)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                      color: target == effective
+                          ? context.accentPrimary
+                          : context.borderSecondary,
+                    ),
+                  ),
+                  child: Text(
+                    target.label,
+                    style: AppTypography.caption(context).copyWith(
+                      color: target == effective
+                          ? context.accentPrimary
+                          : context.textSecondary,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSearchView(
     BuildContext context,
     BackendConnectionAvailability? backendAvailability,
@@ -215,7 +293,6 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
     final results = query.isEmpty ? const <CharacterDto>[] : _activeCharacters;
     return Column(
       children: [
-        SharedCoreReadOnlyBanner(access: coreAccess),
         Padding(
           padding: EdgeInsets.fromLTRB(
             AppSpacing.pagePadding,
