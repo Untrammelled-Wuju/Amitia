@@ -45,6 +45,30 @@ abstract final class UIPageProviderRegistry {
     return null;
   }
 
+  static String? extensionIdForPageId(
+    UIProviderSnapshot? snapshot,
+    String pageId, {
+    String? platform,
+  }) {
+    final target = pageId.trim();
+    if (snapshot == null || target.isEmpty) return null;
+    final resolvedPlatform = platform ?? currentUIPlatform();
+    final matches = <String>{};
+    for (final provider in snapshot.providers) {
+      if (!provider.enabled || provider.builtin) continue;
+      final extensionId = provider.extensionId.trim();
+      if (extensionId.isEmpty) continue;
+      final entry = provider.entryFor(resolvedPlatform);
+      if (entry == null) continue;
+      if ((entry.contributionId ?? '').trim() != target) continue;
+      if (!provider.compatibleWith(snapshot.context, resolvedPlatform)) {
+        continue;
+      }
+      matches.add(extensionId);
+    }
+    return matches.length == 1 ? matches.single : null;
+  }
+
   static bool _hasSelectors(UIProviderDefinition provider) {
     final metadata = provider.metadata;
     return ((metadata['routes'] as List?)?.isNotEmpty ?? false) ||

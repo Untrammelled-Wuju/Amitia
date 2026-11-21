@@ -8,7 +8,7 @@
     "description": {
       "default": "在一个普通 Amitia 插件中安装 DSH 插件，并将 DSH 能力映射为 Amitia 通用插件贡献。"
     },
-    "version": "0.2.98",
+    "version": "0.2.99",
     "license": "AGPL-3.0-only",
     "homepage": "https://amitia.untrammelled.top",
     "categories": [
@@ -2683,7 +2683,7 @@
             "default": "DSH 插件兼容宿主路由"
           },
           "description": {
-            "default": "向桌面和移动端注册 DSH 容器管理入口。"
+            "default": "向桌面端注册 DSH 容器管理入口。"
           },
           "spec": {
             "providerId": "dsh-compatible-route",
@@ -2703,15 +2703,6 @@
                 "type": "declarative"
               },
               "web": {
-                "type": "declarative"
-              },
-              "android": {
-                "type": "declarative"
-              },
-              "ios": {
-                "type": "declarative"
-              },
-              "mobile": {
                 "type": "declarative"
               }
             },
@@ -2750,12 +2741,12 @@
             "default": "DSH 插件管理入口"
           },
           "description": {
-            "default": "在移动端扩展页面的扩展入口中注册 DSH 插件管理页面。"
+            "default": "在移动端扩展中心注册 DSH 插件管理页面入口。"
           },
           "spec": {
             "providerId": "dsh-compatible-mobile-navigation",
             "capability": "app.navigation",
-            "mode": "append",
+            "mode": "augment",
             "priority": 500,
             "placement": "any",
             "trustLevel": "official",
@@ -2775,7 +2766,7 @@
                 {
                   "id": "dsh-compatible-mobile-host-manage",
                   "label": "DSH 插件管理",
-                  "route": "/extension/page/dsh-compatible-mobile-page?extensionId=com.amitia%2Fdsh-compatible-host",
+                  "route": "/extension/page/dsh-compatible-mobile-page",
                   "icon": "extension",
                   "group": "compatibility",
                   "groupLabel": "兼容性",

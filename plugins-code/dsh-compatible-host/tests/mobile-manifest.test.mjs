@@ -71,23 +71,50 @@ test("uses the panel contract for the complete conversation region", () => {
   assert.equal(contribution.spec.slot.slot_id, "provider.conversation.messages");
 });
 
-test("registers the DSH management page in the mobile extension entry group", () => {
+test("registers the DSH management page as a mobile-only navigation entry", () => {
   const navigation = contributions.find((item) => item.id === "dsh-compatible-mobile-navigation");
   assert.ok(navigation);
   assert.equal(navigation.kind, "ui_provider");
   assert.equal(navigation.spec.capability, "app.navigation");
+  assert.equal(navigation.spec.mode, "augment");
+  assert.deepEqual(Object.keys(navigation.spec.entries).sort(), ["android", "ios", "mobile"]);
   for (const platform of ["android", "ios", "mobile"]) {
     assert.equal(navigation.spec.entries[platform].type, "declarative");
   }
   const item = navigation.spec.metadata.navigationItems[0];
   assert.equal(item.label, "DSH 插件管理");
   assert.equal(item.icon, "extension");
-  assert.equal(
-    item.route,
-    "/extension/page/dsh-compatible-mobile-page?extensionId=com.amitia%2Fdsh-compatible-host",
-  );
+  assert.equal(item.route, "/extension/page/dsh-compatible-mobile-page");
+  assert.equal(/[?#%\\]/.test(item.route), false, "Core safeRoutePath 拒绝查询串与编码字符");
   const page = contributions.find((entry) => entry.id === "dsh-compatible-mobile-page");
   assert.ok(page);
-  assert.ok(page.spec.visibility.platforms.includes("android"));
-  assert.ok(page.spec.visibility.platforms.includes("ios"));
+  assert.equal(page.kind, "ui_page");
+  assert.deepEqual([...page.spec.visibility.platforms].sort(), ["android", "ios"]);
+  const provider = contributions.find((entry) => entry.id === "dsh-compatible-page-provider");
+  assert.ok(provider);
+  for (const platform of ["android", "ios", "mobile"]) {
+    assert.equal(provider.spec.entries[platform].type, "mobile_web_runtime");
+    assert.equal(provider.spec.entries[platform].contributionId, "dsh-compatible-mobile-page");
+    assert.equal(provider.spec.entries[platform].path, "modules/dsh-compatible-ui/mobile/index.mjs");
+    assert.equal(provider.spec.entries[platform].stylePath, "modules/dsh-compatible-ui/mobile/index.css");
+  }
+});
+
+test("keeps the shared container route on desktop entries only", () => {
+  const routeProvider = contributions.find((item) => item.id === "dsh-compatible-route");
+  assert.ok(routeProvider);
+  assert.deepEqual(Object.keys(routeProvider.spec.entries).sort(), [
+    "electron_linux",
+    "electron_macos",
+    "electron_windows",
+    "web",
+  ]);
+  const navigationItems = contributions.flatMap(
+    (item) => item.spec?.metadata?.navigationItems ?? [],
+  );
+  assert.deepEqual(
+    navigationItems.filter((item) => item.route === "/extension/page/dsh-compatible-mobile-page")
+      .map((item) => item.id),
+    ["dsh-compatible-mobile-host-manage"],
+  );
 });

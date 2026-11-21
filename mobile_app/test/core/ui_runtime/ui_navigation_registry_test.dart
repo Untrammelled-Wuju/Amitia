@@ -505,4 +505,40 @@ void main() {
     ).singleWhere((entry) => entry.extensionId == 'tools');
     expect(item.panel, UINavigationPanel.more);
   });
+
+  test('keeps extension page entries declared through app.navigation', () {
+    final snapshot = _snapshot([
+      _provider(
+        id: 'dsh-compatible-mobile-navigation',
+        extensionId: 'com.amitia/dsh-compatible-host',
+        capability: UICapability.appNavigation,
+        priority: 500,
+        metadata: const <String, dynamic>{
+          'navigationItems': [
+            {
+              'id': 'dsh-compatible-mobile-host-manage',
+              'label': 'DSH 插件管理',
+              'route': '/extension/page/dsh-compatible-mobile-page',
+              'icon': 'extension',
+              'group': 'compatibility',
+              'groupLabel': '兼容性',
+              'order': 900,
+              'placement': 'contextual',
+            },
+          ],
+        },
+      ),
+    ]);
+
+    final item = UINavigationRegistry.resolve(snapshot).singleWhere(
+      (entry) =>
+          entry.id ==
+          'com.amitia/dsh-compatible-host:dsh-compatible-mobile-host-manage',
+    );
+    expect(item.label, 'DSH 插件管理');
+    expect(item.route, '/extension/page/dsh-compatible-mobile-page');
+    expect(item.placement, UINavigationPlacement.contextual);
+    expect(item.panel, UINavigationPanel.more);
+    expect(item.extensionId, 'com.amitia/dsh-compatible-host');
+  });
 }

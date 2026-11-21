@@ -24,6 +24,7 @@ import { createDshConfigForms } from "../client-abi/config-forms.mjs";
 import { createDshFileDragActions } from "../client-abi/file-drag.mjs";
 import { createDshSettingsSchema } from "../client-abi/settings-schema.mjs";
 import { createConversationData, registerConversationData } from "./conversation-data.mjs";
+import { acquireDshClient, invalidateDshClient } from "./client-registry.mjs";
 
 Zod.config({ jitless: true });
 
@@ -2489,7 +2490,15 @@ export default {
       for (const plugin of status.value.packages ?? []) {
         const hasClient = Array.isArray(plugin.clientEntries) && plugin.clientEntries.length > 0 || Boolean(plugin.clientEntry);
         if (!plugin.enabled || !hasClient || activeClients.has(plugin.pluginId)) continue;
-        activeClients.set(plugin.pluginId, await instantiateClient(plugin));
+        const handle = acquireDshClient(plugin.pluginId, () => instantiateClient(plugin));
+        activeClients.set(plugin.pluginId, handle);
+        try {
+          await handle.ready();
+        } catch (failure) {
+          activeClients.delete(plugin.pluginId);
+          await handle.release();
+          throw failure;
+        }
       }
     }
 
@@ -2530,7 +2539,7 @@ export default {
         if (!enabled) {
           const client = activeClients.get(id);
           activeClients.delete(id);
-          await client?.dispose();
+          await client?.release();
         }
       });
     }
@@ -2539,7 +2548,8 @@ export default {
       await run(async () => {
         const client = activeClients.get(id);
         activeClients.delete(id);
-        await client?.dispose();
+        await invalidateDshClient(id);
+        await client?.release();
         await command({ action: "remove", pluginId: id });
       });
     }
@@ -2549,7 +2559,7 @@ export default {
     globalThis.__dshUiNavigate = props.uiNavigate;
     Vue.onMounted(refresh);
     Vue.onBeforeUnmount(() => {
-      for (const client of activeClients.values()) void client?.dispose();
+      for (const client of activeClients.values()) void client?.release();
       activeClients.clear();
       delete globalThis.__dshHostCommand;
       delete globalThis.__dshUiActions;

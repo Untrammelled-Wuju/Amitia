@@ -8,7 +8,9 @@ import '../../../../core/services/providers.dart';
 import '../../../../core/ui_runtime/mobile_style_runtime.dart';
 import '../../../../core/ui_runtime/renderers/sandbox_web_provider_host.dart';
 import '../../../../core/ui_runtime/renderers/schema_provider_host.dart';
+import '../../../../core/ui_runtime/ui_page_provider_registry.dart';
 import '../../../../core/ui_runtime/ui_provider.dart';
+import '../../../../core/ui_runtime/ui_runtime_controller.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 
@@ -35,15 +37,17 @@ class _ExtensionPageHostPageState extends ConsumerState<ExtensionPageHostPage> {
   List<String> _missingPermissions = const [];
   Timer? _pollTimer;
   String? _registeredStyleTarget;
+  String _extensionId = '';
 
   String get _pageStyleTarget {
-    return 'plugin.page.${_styleTargetSegment(widget.extensionId)}.'
+    return 'plugin.page.${_styleTargetSegment(_extensionId)}.'
         '${_styleTargetSegment(widget.pageId)}';
   }
 
   @override
   void initState() {
     super.initState();
+    _extensionId = _resolveExtensionId();
     _registerStyleTarget();
     Future.microtask(_open);
   }
@@ -53,9 +57,20 @@ class _ExtensionPageHostPageState extends ConsumerState<ExtensionPageHostPage> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.pageId != widget.pageId ||
         oldWidget.extensionId != widget.extensionId) {
+      _extensionId = _resolveExtensionId();
       _registerStyleTarget();
       _restart();
     }
+  }
+
+  String _resolveExtensionId() {
+    final declared = widget.extensionId.trim();
+    if (declared.isNotEmpty) return declared;
+    return UIPageProviderRegistry.extensionIdForPageId(
+          ref.read(effectiveUIRuntimeSnapshotProvider),
+          widget.pageId,
+        ) ??
+        '';
   }
 
   Future<void> _restart() async {
@@ -64,11 +79,16 @@ class _ExtensionPageHostPageState extends ConsumerState<ExtensionPageHostPage> {
   }
 
   Future<void> _open() async {
-    if (widget.extensionId.trim().isEmpty || widget.pageId.trim().isEmpty) {
+    if (_extensionId.isEmpty) {
+      _extensionId = _resolveExtensionId();
+    }
+    if (_extensionId.isEmpty || widget.pageId.trim().isEmpty) {
       if (mounted) {
         setState(() {
           _state = 'failed';
-          _error = '缺少 extensionId。请通过扩展中心打开该页面。';
+          _error = _extensionId.isEmpty
+              ? '缺少 extensionId，且未能从已加载的扩展页声明中解析出该页面所属扩展。请确认扩展已安装并启用后重试。'
+              : '缺少 pageId。';
         });
       }
       return;
@@ -84,7 +104,7 @@ class _ExtensionPageHostPageState extends ConsumerState<ExtensionPageHostPage> {
       final result = await ref
           .read(extensionServiceProvider)
           .openExtensionPage(
-            widget.extensionId,
+            _extensionId,
             widget.pageId,
             scopeSnapshot: jsonEncode({
               'platform': currentUIPlatform(),
@@ -278,8 +298,8 @@ class _ExtensionPageHostPageState extends ConsumerState<ExtensionPageHostPage> {
     };
     if (entry == null) return null;
     return UIProviderDefinition(
-      providerId: 'extension-page:${widget.extensionId}:${widget.pageId}',
-      extensionId: widget.extensionId,
+      providerId: 'extension-page:$_extensionId:${widget.pageId}',
+      extensionId: _extensionId,
       capability: UICapability.extensionPage,
       mode: UIProviderMode.replace,
       placement: UIProviderPlacement.any,
@@ -298,6 +318,17 @@ class _ExtensionPageHostPageState extends ConsumerState<ExtensionPageHostPage> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(effectiveUIRuntimeSnapshotProvider, (previous, next) {
+      if (_extensionId.isNotEmpty || next == null) return;
+      final resolved = UIPageProviderRegistry.extensionIdForPageId(
+        next,
+        widget.pageId,
+      );
+      if (resolved == null || resolved.isEmpty) return;
+      _extensionId = resolved;
+      _registerStyleTarget();
+      if (mounted) unawaited(_restart());
+    });
     final title = ((_definition?['title'] as Map?)?['default'] ?? widget.pageId)
         .toString();
     return AmitiaScaffold(

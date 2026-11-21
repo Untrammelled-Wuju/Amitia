@@ -1,4 +1,5 @@
 import { applyWebIndexInjections, instantiateClient, rawError, setDshActiveSession } from "./index.mjs";
+import { acquireDshClient } from "./client-registry.mjs";
 
 async function resolveStatusPayload(response) {
   if (response && typeof response === "object" && Array.isArray(response.packages)) return response;
@@ -104,11 +105,15 @@ export default {
       }
       for (const plugin of packages) {
         if (!plugin.enabled) continue;
+        const hasClient = Array.isArray(plugin.clientEntries) && plugin.clientEntries.length > 0 || Boolean(plugin.clientEntry);
+        if (!hasClient) continue;
+        const pluginId = plugin.pluginId ?? plugin.id ?? "unknown";
+        const handle = acquireDshClient(pluginId, () => instantiateClient(plugin));
         try {
-          const instance = await instantiateClient(plugin);
-          if (instance && typeof instance.dispose === "function") active.push(() => instance.dispose());
+          await handle.ready();
+          active.push(() => handle.release());
         } catch (error) {
-          const pluginId = plugin.pluginId ?? plugin.id ?? "unknown";
+          await handle.release();
           failures.push(`plugin ${pluginId}: ${rawError(error)}`);
           console.error(`[dsh-shell] DSH 客户端模块 ${pluginId} 装载失败\n[original-error] ${rawError(error)}`);
         }
