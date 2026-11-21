@@ -19,13 +19,14 @@ import (
 )
 
 type CreateTeamInput struct {
-	Name            string   `json:"name"`
-	Description     string   `json:"description"`
-	OwnerID         string   `json:"ownerId"`
-	LeadAgentID     string   `json:"leadAgentId"`
-	MemberIDs       []string `json:"memberIds"`
-	SharedMemory    bool     `json:"sharedMemory"`
-	SharedWorkspace bool     `json:"sharedWorkspace"`
+	Name            string            `json:"name"`
+	Description     string            `json:"description"`
+	OwnerID         string            `json:"ownerId"`
+	LeadAgentID     string            `json:"leadAgentId"`
+	MemberIDs       []string          `json:"memberIds"`
+	Members         []TeamMemberInput `json:"members"`
+	SharedMemory    bool              `json:"sharedMemory"`
+	SharedWorkspace bool              `json:"sharedWorkspace"`
 }
 
 type UpdateTeamInput struct {
@@ -89,11 +90,17 @@ type RouteTeamMessageInput struct {
 }
 
 type TeamRouteTarget struct {
-	AgentID       string   `json:"agentId"`
-	MemberID      string   `json:"memberId"`
-	Role          string   `json:"role"`
-	ResponderMode string   `json:"responderMode"`
-	Capabilities  []string `json:"capabilities"`
+	AgentID        string   `json:"agentId"`
+	MemberID       string   `json:"memberId"`
+	MemberType     string   `json:"memberType"`
+	Role           string   `json:"role"`
+	ResponderMode  string   `json:"responderMode"`
+	Capabilities   []string `json:"capabilities"`
+	OwnerType      string   `json:"ownerType"`
+	OwnerID        string   `json:"ownerId"`
+	InvocationMode string   `json:"invocationMode"`
+	RoleRevision   int64    `json:"roleRevision"`
+	RequiresDevice bool     `json:"requiresDevice"`
 }
 
 type TeamRouteResult struct {
@@ -314,8 +321,61 @@ func (s *Service) CreateTeam(ctx context.Context, spaceID string, input CreateTe
 		return Team{}, errors.New("团队名称不能为空")
 	}
 	leadAgentID := strings.TrimSpace(input.LeadAgentID)
-	memberIDs := uniqueNonEmptyStrings(append([]string{leadAgentID}, input.MemberIDs...))
-	if err := s.validateTeamAgentIDs(ctx, spaceID, memberIDs); err != nil {
+	seenSpecs := make(map[string]struct{}, len(input.Members)+len(input.MemberIDs)+1)
+	specs := make([]TeamMemberInput, 0, len(input.Members)+len(input.MemberIDs)+1)
+	appendSpec := func(spec TeamMemberInput, rejectDuplicate bool) error {
+		key := teamMemberSpecKey(spec)
+		if _, exists := seenSpecs[key]; exists {
+			if rejectDuplicate {
+				return fmt.Errorf("团队成员重复: %s", spec.MemberID)
+			}
+			return nil
+		}
+		seenSpecs[key] = struct{}{}
+		specs = append(specs, spec)
+		return nil
+	}
+	if leadAgentID != "" {
+		lead, err := normalizeTeamMemberInput(TeamMemberInput{MemberType: TeamMemberTypeAgent, MemberID: leadAgentID, Role: "lead"})
+		if err != nil {
+			return Team{}, err
+		}
+		lead.ResponderMode = "lead"
+		lead.Capabilities = []string{"*"}
+		if err := appendSpec(lead, false); err != nil {
+			return Team{}, err
+		}
+	}
+	for _, raw := range input.MemberIDs {
+		memberID := strings.TrimSpace(raw)
+		if memberID == "" {
+			continue
+		}
+		spec, err := normalizeTeamMemberInput(TeamMemberInput{MemberType: TeamMemberTypeAgent, MemberID: memberID})
+		if err != nil {
+			return Team{}, err
+		}
+		if err := appendSpec(spec, false); err != nil {
+			return Team{}, err
+		}
+	}
+	for _, raw := range input.Members {
+		spec, err := normalizeTeamMemberInput(raw)
+		if err != nil {
+			return Team{}, err
+		}
+		if err := appendSpec(spec, true); err != nil {
+			return Team{}, err
+		}
+	}
+	uniqueSpecs := specs
+	centerAgentIDs := make([]string, 0, len(specs))
+	for _, spec := range uniqueSpecs {
+		if spec.isCenterAgent() {
+			centerAgentIDs = append(centerAgentIDs, spec.MemberID)
+		}
+	}
+	if err := s.validateTeamAgentIDs(ctx, spaceID, uniqueNonEmptyStrings(centerAgentIDs)); err != nil {
 		return Team{}, err
 	}
 	now := time.Now().UTC()
@@ -337,33 +397,27 @@ func (s *Service) CreateTeam(ctx context.Context, spaceID string, input CreateTe
 		if err := tx.Create(&team).Error; err != nil {
 			return fmt.Errorf("创建团队: %w", err)
 		}
-		if leadAgentID != "" {
+		for _, spec := range uniqueSpecs {
+			capabilitiesJSON, _, err := hashJSON(spec.Capabilities)
+			if err != nil {
+				return err
+			}
 			member := TeamMember{
 				ID: newID("teammember"), SpaceID: spaceID, TeamID: team.ID,
-				MemberType: "agent", MemberID: leadAgentID, Role: "lead",
-				ResponderMode: "lead", Capabilities: `["*"]`, CreatedAt: now, UpdatedAt: now,
+				MemberType: spec.MemberType, MemberID: spec.MemberID,
+				OwnerType: spec.OwnerType, OwnerID: spec.OwnerID,
+				InvocationMode: spec.InvocationMode, RoleRevision: spec.RoleRevision,
+				Role: spec.Role, ResponderMode: spec.ResponderMode, Capabilities: capabilitiesJSON,
+				CreatedAt: now, UpdatedAt: now,
 			}
 			if err := tx.Create(&member).Error; err != nil {
-				return fmt.Errorf("添加团队负责人: %w", err)
+				return fmt.Errorf("添加团队成员 %s: %w", spec.MemberID, err)
 			}
-			if err := tx.Model(&AgentProfile{}).Where("id = ? AND space_id = ?", leadAgentID, spaceID).Updates(map[string]any{"team_id": team.ID, "updated_at": now}).Error; err != nil {
-				return fmt.Errorf("绑定团队负责人 Agent: %w", err)
-			}
-		}
-		for _, memberID := range memberIDs {
-			if memberID == leadAgentID {
+			if !spec.isCenterAgent() {
 				continue
 			}
-			member := TeamMember{
-				ID: newID("teammember"), SpaceID: spaceID, TeamID: team.ID,
-				MemberType: "agent", MemberID: memberID, Role: "member",
-				ResponderMode: "mention_or_lead", Capabilities: "[]", CreatedAt: now, UpdatedAt: now,
-			}
-			if err := tx.Create(&member).Error; err != nil {
-				return fmt.Errorf("添加团队成员 %s: %w", memberID, err)
-			}
-			if err := tx.Model(&AgentProfile{}).Where("id = ? AND space_id = ?", memberID, spaceID).Updates(map[string]any{"team_id": team.ID, "updated_at": now}).Error; err != nil {
-				return fmt.Errorf("绑定团队成员 %s: %w", memberID, err)
+			if err := tx.Model(&AgentProfile{}).Where("id = ? AND space_id = ?", spec.MemberID, spaceID).Updates(map[string]any{"team_id": team.ID, "updated_at": now}).Error; err != nil {
+				return fmt.Errorf("绑定团队成员 %s: %w", spec.MemberID, err)
 			}
 		}
 		return nil
@@ -500,7 +554,7 @@ func (s *Service) RouteTeamMessage(ctx context.Context, spaceID, teamID string, 
 	}
 	result := TeamRouteResult{TeamID: teamID, Targets: []TeamRouteTarget{}}
 	for _, member := range detail.Members {
-		if member.MemberType != "agent" {
+		if member.MemberType != TeamMemberTypeAgent && member.MemberType != TeamMemberTypeDevice {
 			continue
 		}
 		var capabilities []string
@@ -510,6 +564,9 @@ func (s *Service) RouteTeamMessage(ctx context.Context, spaceID, teamID string, 
 		selected := false
 		if len(mentions) > 0 {
 			_, selected = mentions[member.MemberID]
+			if !selected && member.OwnerID != "" {
+				_, selected = mentions[member.OwnerID]
+			}
 			result.Strategy = "mention"
 		} else if input.RequiredCapability != "" {
 			selected = teamContainsString(capabilities, input.RequiredCapability) || teamContainsString(capabilities, "*")
@@ -519,25 +576,22 @@ func (s *Service) RouteTeamMessage(ctx context.Context, spaceID, teamID string, 
 			result.Strategy = "lead"
 		}
 		if selected {
-			result.Targets = append(result.Targets, TeamRouteTarget{
-				AgentID: member.MemberID, MemberID: member.ID, Role: member.Role,
-				ResponderMode: member.ResponderMode, Capabilities: capabilities,
-			})
+			result.Targets = append(result.Targets, routeTargetFor(member, capabilities))
 		}
 	}
 	if len(result.Targets) == 0 {
 		for _, member := range detail.Members {
-			if member.MemberType != "agent" || member.ResponderMode == "disabled" {
+			if member.MemberType != TeamMemberTypeAgent && member.MemberType != TeamMemberTypeDevice {
+				continue
+			}
+			if member.ResponderMode == "disabled" {
 				continue
 			}
 			var capabilities []string
 			if err := json.Unmarshal([]byte(member.Capabilities), &capabilities); err != nil {
 				return TeamRouteResult{}, fmt.Errorf("解析团队成员能力: %w", err)
 			}
-			result.Targets = append(result.Targets, TeamRouteTarget{
-				AgentID: member.MemberID, MemberID: member.ID, Role: member.Role,
-				ResponderMode: member.ResponderMode, Capabilities: capabilities,
-			})
+			result.Targets = append(result.Targets, routeTargetFor(member, capabilities))
 		}
 		result.Strategy = "broadcast"
 	}
@@ -557,6 +611,33 @@ func (s *Service) RouteTeamMessage(ctx context.Context, spaceID, teamID string, 
 		return TeamRouteResult{}, err
 	}
 	return result, nil
+}
+
+func routeTargetFor(member TeamMember, capabilities []string) TeamRouteTarget {
+	invocationMode := strings.TrimSpace(member.InvocationMode)
+	if invocationMode == "" {
+		if member.MemberType == TeamMemberTypeDevice {
+			invocationMode = InvocationModeCapability
+		} else {
+			invocationMode = InvocationModeRole
+		}
+	}
+	ownerType := strings.TrimSpace(member.OwnerType)
+	if ownerType == "" {
+		if member.MemberType == TeamMemberTypeDevice {
+			ownerType = MemberOwnerDevice
+		} else {
+			ownerType = MemberOwnerCenter
+		}
+	}
+	ownerID := strings.TrimSpace(member.OwnerID)
+	requiresDevice := ownerType == MemberOwnerDevice && ownerID != ""
+	return TeamRouteTarget{
+		AgentID: member.MemberID, MemberID: member.ID, MemberType: member.MemberType,
+		Role: member.Role, ResponderMode: member.ResponderMode, Capabilities: capabilities,
+		OwnerType: ownerType, OwnerID: ownerID, InvocationMode: invocationMode,
+		RoleRevision: member.RoleRevision, RequiresDevice: requiresDevice,
+	}
 }
 
 func teamContainsString(values []string, expected string) bool {
@@ -675,35 +756,59 @@ func (s *Service) ensureTeamWorkspace(ctx context.Context, team Team) (string, s
 	return registered.ID, registered.RootURI, nil
 }
 
-func (s *Service) AddTeamMember(ctx context.Context, spaceID, teamID, memberType, memberID, role, responderMode string, capabilities []string) (TeamMember, error) {
-	memberType = strings.TrimSpace(memberType)
-	if memberType != "agent" && memberType != "user" {
-		return TeamMember{}, errors.New("团队成员类型必须是 agent 或 user")
-	}
-	if strings.TrimSpace(memberID) == "" {
-		return TeamMember{}, errors.New("团队成员 ID 不能为空")
-	}
-	if role == "" {
-		role = "member"
-	}
-	if responderMode == "" {
-		responderMode = "mention_or_lead"
-	}
-	capabilitiesJSON, _, err := hashJSON(capabilities)
+func (s *Service) AddTeamMember(ctx context.Context, spaceID, teamID string, input TeamMemberInput) (TeamMember, error) {
+	spec, err := normalizeTeamMemberInput(input)
 	if err != nil {
 		return TeamMember{}, err
 	}
+	var team Team
+	if err := s.db.WithContext(ctx).Where("id = ? AND space_id = ? AND deleted_at IS NULL", teamID, spaceID).First(&team).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return TeamMember{}, errors.New("团队不存在")
+		}
+		return TeamMember{}, fmt.Errorf("读取团队: %w", err)
+	}
+	if spec.isCenterAgent() {
+		if err := s.validateTeamAgentIDs(ctx, spaceID, []string{spec.MemberID}); err != nil {
+			return TeamMember{}, err
+		}
+	}
+	capabilitiesJSON, _, err := hashJSON(spec.Capabilities)
+	if err != nil {
+		return TeamMember{}, err
+	}
+	var existing int64
+	if err := s.db.WithContext(ctx).Model(&TeamMember{}).
+		Where("space_id = ? AND team_id = ? AND member_type = ? AND member_id = ? AND owner_type = ? AND owner_id = ? AND invocation_mode = ?",
+			spaceID, teamID, spec.MemberType, spec.MemberID, spec.OwnerType, spec.OwnerID, spec.InvocationMode).
+		Count(&existing).Error; err != nil {
+		return TeamMember{}, fmt.Errorf("检查团队成员: %w", err)
+	}
+	if existing > 0 {
+		return TeamMember{}, errors.New("该成员已在此团队中")
+	}
 	now := time.Now().UTC()
-	member := TeamMember{ID: newID("teammember"), SpaceID: spaceID, TeamID: teamID, MemberType: memberType, MemberID: memberID, Role: role, ResponderMode: responderMode, Capabilities: capabilitiesJSON, CreatedAt: now, UpdatedAt: now}
+	member := TeamMember{
+		ID: newID("teammember"), SpaceID: spaceID, TeamID: teamID,
+		MemberType: spec.MemberType, MemberID: spec.MemberID,
+		OwnerType: spec.OwnerType, OwnerID: spec.OwnerID,
+		InvocationMode: spec.InvocationMode, RoleRevision: spec.RoleRevision,
+		Role: spec.Role, ResponderMode: spec.ResponderMode, Capabilities: capabilitiesJSON,
+		CreatedAt: now, UpdatedAt: now,
+	}
 	if err := s.db.WithContext(ctx).Create(&member).Error; err != nil {
 		return TeamMember{}, fmt.Errorf("添加团队成员: %w", err)
 	}
-	if err := s.recordActivity(ctx, ActivityEvent{SpaceID: spaceID, TeamID: teamID, AgentID: func() string {
-		if memberType == "agent" {
-			return memberID
+	if spec.isCenterAgent() {
+		if err := s.db.WithContext(ctx).Model(&AgentProfile{}).Where("id = ? AND space_id = ?", spec.MemberID, spaceID).Updates(map[string]any{"team_id": teamID, "updated_at": now}).Error; err != nil {
+			return TeamMember{}, fmt.Errorf("绑定团队成员 Agent: %w", err)
 		}
-		return ""
-	}(), Kind: "team.membership", State: "added", Title: "团队成员已添加", Detail: memberID}); err != nil {
+	}
+	activityAgentID := ""
+	if spec.isCenterAgent() {
+		activityAgentID = spec.MemberID
+	}
+	if err := s.recordActivity(ctx, ActivityEvent{SpaceID: spaceID, TeamID: teamID, AgentID: activityAgentID, Kind: "team.membership", State: "added", Title: "团队成员已添加", Detail: spec.MemberID}); err != nil {
 		return TeamMember{}, err
 	}
 	return member, nil

@@ -153,7 +153,7 @@ func (s *Service) ArchiveRoleAgent(tx *gorm.DB, spaceID, characterID string) err
 	for _, profile := range profiles {
 		agentIDs = append(agentIDs, profile.ID)
 	}
-	if err := tx.Where("member_type = ? AND member_id IN ?", "agent", agentIDs).Delete(&TeamMember{}).Error; err != nil {
+	if err := tx.Where("member_type = ? AND member_id IN ? AND owner_type = ?", "agent", agentIDs, MemberOwnerCenter).Delete(&TeamMember{}).Error; err != nil {
 		return fmt.Errorf("移除已删除角色的团队成员关系: %w", err)
 	}
 	if err := tx.Model(&Team{}).Where("space_id = ? AND lead_agent_id IN ?", spaceID, agentIDs).Updates(map[string]any{"lead_agent_id": "", "updated_at": now}).Error; err != nil {
@@ -313,12 +313,12 @@ func mergeRoleAgentDuplicates(tx *gorm.DB, spaceID string, canonical AgentProfil
 		return nil
 	}
 	var memberships []TeamMember
-	if err := tx.Where("member_type = ? AND member_id IN ?", "agent", duplicateIDs).Find(&memberships).Error; err != nil {
+	if err := tx.Where("space_id = ? AND member_type = ? AND member_id IN ? AND owner_type = ?", spaceID, "agent", duplicateIDs, MemberOwnerCenter).Find(&memberships).Error; err != nil {
 		return fmt.Errorf("读取待迁移团队成员: %w", err)
 	}
 	for _, membership := range memberships {
 		var canonicalCount int64
-		if err := tx.Model(&TeamMember{}).Where("space_id = ? AND team_id = ? AND member_type = ? AND member_id = ?", spaceID, membership.TeamID, "agent", canonical.ID).Count(&canonicalCount).Error; err != nil {
+		if err := tx.Model(&TeamMember{}).Where("space_id = ? AND team_id = ? AND member_type = ? AND member_id = ? AND owner_type = ?", spaceID, membership.TeamID, "agent", canonical.ID, MemberOwnerCenter).Count(&canonicalCount).Error; err != nil {
 			return fmt.Errorf("检查团队保留成员: %w", err)
 		}
 		if canonicalCount > 0 {

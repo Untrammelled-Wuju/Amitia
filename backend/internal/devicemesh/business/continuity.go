@@ -100,6 +100,13 @@ func (e *Engine) continuityAuthority(ctx context.Context, request Request) (cont
 		}
 	}
 	roleOwner = request.CoreID
+	if request.ExpectedScope != nil &&
+		request.TargetDeviceID != "" &&
+		request.TargetDeviceID != request.CoreID &&
+		request.ExpectedScope.RoleOwnerID == request.TargetDeviceID &&
+		request.ExpectedScope.TargetDeviceID == request.TargetDeviceID {
+		roleOwner = request.TargetDeviceID
+	}
 	ctx, scope, finish, err := e.coordination.BeginWithOwners(ctx, request.SpaceID, request.DeviceID, request.TargetDeviceID, request.CoreID, request.RoleID, request.RequestID, resourceOwner, roleOwner)
 	if err != nil {
 		return ctx, scope, func() {}, err

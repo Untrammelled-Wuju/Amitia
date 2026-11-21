@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 
 	meshaudit "github.com/u-ai/backend/internal/devicemesh/audit"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
@@ -38,6 +39,9 @@ var schemaStmts = []string{
 		space_id TEXT NOT NULL,
 		platform TEXT NOT NULL DEFAULT '',
 		label TEXT NOT NULL DEFAULT '',
+		reported_name TEXT NOT NULL DEFAULT '',
+		pending_name TEXT NOT NULL DEFAULT '',
+		name_revision INTEGER NOT NULL DEFAULT 0,
 		trust_state TEXT NOT NULL DEFAULT 'pending',
 		created_at TEXT NOT NULL,
 		trusted_at TEXT,
@@ -91,6 +95,44 @@ func EnsureSchema(ctx context.Context, db *sql.DB) error {
 	for _, stmt := range schemaStmts {
 		if _, err := db.ExecContext(ctx, stmt); err != nil {
 			return fmt.Errorf("devicemesh: ensure schema: %w", err)
+		}
+	}
+	if err := ensureDeviceNameColumns(ctx, db); err != nil {
+		return err
+	}
+	return ensureCoordinationRoleColumns(ctx, db)
+}
+
+var coordinationRoleColumnStatements = []string{
+	`ALTER TABLE kernel_device_coordination ADD COLUMN center_role TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE kernel_device_coordination ADD COLUMN local_role TEXT NOT NULL DEFAULT ''`,
+}
+
+func ensureCoordinationRoleColumns(ctx context.Context, db *sql.DB) error {
+	for _, stmt := range coordinationRoleColumnStatements {
+		if _, err := db.ExecContext(ctx, stmt); err != nil {
+			if strings.Contains(strings.ToLower(err.Error()), "duplicate column name") {
+				continue
+			}
+			return fmt.Errorf("devicemesh: ensure coordination role columns: %w", err)
+		}
+	}
+	return nil
+}
+
+var deviceNameColumnStatements = []string{
+	`ALTER TABLE kernel_devices ADD COLUMN reported_name TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE kernel_devices ADD COLUMN pending_name TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE kernel_devices ADD COLUMN name_revision INTEGER NOT NULL DEFAULT 0`,
+}
+
+func ensureDeviceNameColumns(ctx context.Context, db *sql.DB) error {
+	for _, stmt := range deviceNameColumnStatements {
+		if _, err := db.ExecContext(ctx, stmt); err != nil {
+			if strings.Contains(strings.ToLower(err.Error()), "duplicate column name") {
+				continue
+			}
+			return fmt.Errorf("devicemesh: ensure device name columns: %w", err)
 		}
 	}
 	return nil

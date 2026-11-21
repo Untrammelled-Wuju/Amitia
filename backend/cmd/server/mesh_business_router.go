@@ -20,6 +20,7 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/middleware/security"
+	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/internal/runtimeprofile"
 	"github.com/u-ai/backend/pkg/util"
 )
@@ -34,6 +35,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 	registerMeshRealtimeInvitationRouter(mesh, services, coreID)
 	registerMeshProjectRouter(mesh, services, coreID)
 	registerMeshMemoryManagementRouter(mesh, services, coreID)
+	registerMeshTeamDispatchRouter(mesh, services, coreID)
 	registerMeshWorldbookRouter(mesh, services, coreID)
 	registerMeshRuntimeStateRouter(mesh, services, coreID)
 	registerMeshRelationshipTimeRouter(mesh, services, coreID)
@@ -43,6 +45,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 	registerMeshChatAttachmentRouter(mesh, services, coreID)
 	registerMeshTaskOwnerRouter(mesh, services)
 	registerMeshTaskSubmissionRouter(mesh, services, coreID)
+	registerMeshConsoleRouter(mesh, services, coreID)
 	mesh.POST("/continuity/signals", func(c *gin.Context) {
 		actor := security.GetActor(c)
 		if actor == nil || actor.DeviceID == "" {
@@ -334,6 +337,59 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 		}
 		c.JSON(200, gin.H{"code": 200, "data": gin.H{"roles": roles, "executionScope": scope}})
 	})
+	mesh.GET("/historical-scope", func(c *gin.Context) {
+		actor := security.GetActor(c)
+		if actor == nil || actor.DeviceID == "" {
+			c.AbortWithStatus(401)
+			return
+		}
+		target := strings.TrimSpace(c.Query("targetDeviceId"))
+		roleID := strings.TrimSpace(c.Query("characterId"))
+		if target == "" || roleID == "" {
+			c.JSON(400, gin.H{"code": "mesh.invalid_historical_scope", "message": "需要目标设备与角色"})
+			return
+		}
+		policy, err := services.DeviceMesh.Coordination.Get(c.Request.Context(), actor.SpaceID.String(), actor.DeviceID.String())
+		if err != nil {
+			c.JSON(503, gin.H{"message": err.Error()})
+			return
+		}
+		isConsole, err := services.DeviceMesh.Coordination.IsCoreConsole(c.Request.Context(), actor.SpaceID.String(), actor.DeviceID.String())
+		if err != nil {
+			c.JSON(503, gin.H{"message": err.Error()})
+			return
+		}
+		if !policy.Administrator && !isConsole {
+			c.JSON(403, gin.H{"code": "mesh.administrator_required", "message": "管理其他设备的原库数据需要统筹中心管理员授权"})
+			return
+		}
+		if _, err := services.DeviceMesh.Coordination.Get(c.Request.Context(), actor.SpaceID.String(), target); err != nil {
+			c.JSON(404, gin.H{"code": "mesh.device_not_found", "message": "设备未接入统筹中心"})
+			return
+		}
+		ctx, scope, finish, err := services.DeviceMesh.Coordination.BeginWithOwners(c.Request.Context(), actor.SpaceID.String(), actor.DeviceID.String(), target, coreID, roleID, uuid.NewString(), target, target)
+		if err != nil {
+			c.JSON(409, gin.H{"code": "mesh.historical_scope_unavailable", "message": err.Error()})
+			return
+		}
+		defer finish()
+		roles, err := services.DeviceMesh.Roles(ctx, scope)
+		if err != nil {
+			c.JSON(503, gin.H{"code": "mesh.role_source_unavailable", "message": err.Error()})
+			return
+		}
+		role, err := coordination.ResolveRole(roleID, roles)
+		if err != nil {
+			c.JSON(409, gin.H{"code": "mesh.historical_scope_unavailable", "message": err.Error()})
+			return
+		}
+		scope.RoleID, scope.RoleRevision = role.ID, role.Revision
+		if err := coordination.ResolveMemoryScope(&scope, c.Query("memoryView")); err != nil {
+			c.JSON(409, gin.H{"code": "mesh.historical_scope_unavailable", "message": err.Error()})
+			return
+		}
+		c.JSON(200, gin.H{"code": 200, "data": gin.H{"executionScope": scope}})
+	})
 	projectionHandler := func(c *gin.Context) {
 		actor := security.GetActor(c)
 		if actor == nil || actor.DeviceID == "" {
@@ -416,6 +472,31 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 		if edit.ExpectedScope == nil || edit.ExpectedScope.CoreID == "" || edit.ExpectedScope.ResourceOwnerID == "" || edit.ExpectedScope.ModeRevision < 1 {
 			c.JSON(400, gin.H{"message": "修改请求缺少数据来源版本，请刷新后重试"})
 			return
+		}
+		if target := edit.ExpectedScope.TargetDeviceID; target != "" && target != actor.DeviceID.String() {
+			policy, policyErr := services.DeviceMesh.Coordination.Get(c.Request.Context(), actor.SpaceID.String(), actor.DeviceID.String())
+			if policyErr != nil {
+				c.JSON(503, gin.H{"message": policyErr.Error()})
+				return
+			}
+			isConsole, consoleErr := services.DeviceMesh.Coordination.IsCoreConsole(c.Request.Context(), actor.SpaceID.String(), actor.DeviceID.String())
+			if consoleErr != nil {
+				c.JSON(503, gin.H{"message": consoleErr.Error()})
+				return
+			}
+			if !policy.Administrator && !isConsole {
+				c.JSON(403, gin.H{"code": "mesh.administrator_required", "message": "跨设备修改历史数据需要统筹中心管理员授权"})
+				return
+			}
+			if edit.ExpectedScope.RoleOwnerID != target || edit.ExpectedScope.ResourceOwnerID != target {
+				c.JSON(409, gin.H{"code": "mesh.historical_scope_required", "message": "跨设备写入必须携带该设备原归属的执行范围"})
+				return
+			}
+			if _, targetErr := services.DeviceMesh.Coordination.Get(c.Request.Context(), actor.SpaceID.String(), target); targetErr != nil {
+				c.JSON(404, gin.H{"code": "mesh.device_not_found", "message": "设备未接入统筹中心"})
+				return
+			}
+			edit.TargetDeviceID = target
 		}
 		ack, err := services.OwnedBusiness.Edit(c.Request.Context(), business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID}, edit)
 		if err != nil {
@@ -548,21 +629,62 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 			c.AbortWithStatus(http.StatusUnauthorized)
 			return
 		}
-		ctx, scope, finish, err := services.DeviceMesh.Coordination.BeginWithOwners(c.Request.Context(), actor.SpaceID.String(), actor.DeviceID.String(), actor.DeviceID.String(), coreID, "", uuid.NewString(), actor.DeviceID.String(), coreID)
+		domain := strings.TrimSpace(c.Query("domain"))
+		if domain != "" && domain != coordination.RoleDomainCenter && domain != coordination.RoleDomainLocal {
+			c.JSON(400, gin.H{"code": "mesh.invalid_role_domain", "message": coordination.ErrRoleDomain.Error()})
+			return
+		}
+		target := actor.DeviceID.String()
+		roleOwner := coreID
+		if domain == coordination.RoleDomainLocal {
+			roleOwner = target
+		}
+		if requestedDevice := strings.TrimSpace(c.Query("device")); requestedDevice != "" && requestedDevice != target {
+			callerPolicy, policyErr := services.DeviceMesh.Coordination.Get(c.Request.Context(), actor.SpaceID.String(), actor.DeviceID.String())
+			if policyErr != nil {
+				c.JSON(503, gin.H{"code": "mesh.policy_unavailable", "message": policyErr.Error()})
+				return
+			}
+			callerConsole, consoleErr := services.DeviceMesh.Coordination.IsCoreConsole(c.Request.Context(), actor.SpaceID.String(), actor.DeviceID.String())
+			if consoleErr != nil {
+				c.JSON(503, gin.H{"code": "mesh.policy_unavailable", "message": consoleErr.Error()})
+				return
+			}
+			if !callerPolicy.Administrator && !callerConsole {
+				c.JSON(403, gin.H{"code": "mesh.administrator_required", "message": "调用其他设备的角色目录需要统筹中心管理员授权"})
+				return
+			}
+			targetPolicy, targetErr := services.DeviceMesh.Coordination.Get(c.Request.Context(), actor.SpaceID.String(), requestedDevice)
+			if targetErr != nil {
+				c.JSON(404, gin.H{"code": "mesh.device_not_found", "message": "设备未接入统筹中心"})
+				return
+			}
+			registered, registeredErr := services.KernelContainer.DeviceRegistry.GetDevice(c.Request.Context(), runtimeidentity.ParseDeviceID(requestedDevice))
+			if registeredErr != nil || registered == nil || registered.SpaceID != actor.SpaceID {
+				c.JSON(404, gin.H{"code": "mesh.device_not_found", "message": "设备未接入统筹中心"})
+				return
+			}
+			if domain == coordination.RoleDomainCenter && !targetPolicy.Coordinated {
+				c.JSON(409, gin.H{"code": "mesh.device_not_coordinated", "message": "目标设备处于本机模式，统筹中心角色目录不可用"})
+				return
+			}
+			target = requestedDevice
+			if domain == coordination.RoleDomainLocal {
+				roleOwner = requestedDevice
+			}
+		}
+		ctx, scope, finish, err := services.DeviceMesh.Coordination.BeginWithOwners(c.Request.Context(), actor.SpaceID.String(), actor.DeviceID.String(), target, coreID, "", uuid.NewString(), target, roleOwner)
 		if err != nil {
 			c.JSON(409, gin.H{"code": "mesh.scope_expired", "message": err.Error()})
 			return
 		}
-		defer finish()
-		if err := services.DeviceMesh.Coordination.RequireCapability(ctx, scope.SpaceID, scope.InitiatorDeviceID, scope.TargetDeviceID, "ai.chat"); err != nil {
-			c.JSON(403, gin.H{"code": "mesh.target_grant_required", "message": err.Error()})
-			return
-		}
 		roles, err := services.DeviceMesh.Roles(ctx, scope)
 		if err != nil {
+			finish()
 			c.JSON(503, gin.H{"code": "mesh.role_source_unavailable", "message": err.Error()})
 			return
 		}
+		defer finish()
 		visibleRoles := make([]gin.H, 0, len(roles))
 		for _, role := range roles {
 			visibleRoles = append(visibleRoles, gin.H{
@@ -583,7 +705,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 		chatScope.TargetProviderEpoch = targetPolicy.ProviderEpoch
 		chatScope.ModeRevision = targetPolicy.ModeRevision
 		chatScope.Coordinated = targetPolicy.Coordinated
-		c.JSON(200, gin.H{"roles": visibleRoles, "roleOwnerId": scope.RoleOwnerID, "providerEpoch": scope.ProviderEpoch, "modeRevision": scope.ModeRevision, "executionScope": chatScope})
+		c.JSON(200, gin.H{"roles": visibleRoles, "roleOwnerId": scope.RoleOwnerID, "domain": domain, "providerEpoch": scope.ProviderEpoch, "modeRevision": scope.ModeRevision, "executionScope": chatScope})
 	})
 	mesh.POST("/messages", func(c *gin.Context) {
 		actor := security.GetActor(c)

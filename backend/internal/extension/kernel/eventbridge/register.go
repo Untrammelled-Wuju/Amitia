@@ -40,6 +40,9 @@ const (
 	taskRunPaused                         event.EventTypeID = "task.run.paused"
 	taskRunTimedOut                       event.EventTypeID = "task.run.timed_out"
 	taskRunRecoveryRequired               event.EventTypeID = "task.run.recovery_required"
+
+	approvalRequested event.EventTypeID = "approval.requested"
+	approvalResolved  event.EventTypeID = "approval.resolved"
 )
 
 const eventVersion = 1
@@ -92,6 +95,8 @@ func RegisterCloudFoundationEventTypes(
 		taskRunPaused,
 		taskRunTimedOut,
 		taskRunRecoveryRequired,
+		approvalRequested,
+		approvalResolved,
 	}
 	for _, id := range types {
 		if err := registry.RegisterEventType(ctx, event.EventTypeDefinition{

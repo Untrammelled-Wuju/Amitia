@@ -28,7 +28,7 @@ func TestSyncUsesCanonicalDeviceTrust(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, statement := range []string{
-		`CREATE TABLE kernel_devices(device_id TEXT PRIMARY KEY,space_id TEXT,platform TEXT,label TEXT,trust_state TEXT,created_at TEXT,trusted_at TEXT,last_seen_at TEXT,revision INTEGER)`,
+		`CREATE TABLE kernel_devices(device_id TEXT PRIMARY KEY,space_id TEXT,platform TEXT,label TEXT,reported_name TEXT NOT NULL DEFAULT '',pending_name TEXT NOT NULL DEFAULT '',name_revision INTEGER NOT NULL DEFAULT 0,trust_state TEXT,created_at TEXT,trusted_at TEXT,last_seen_at TEXT,revision INTEGER)`,
 		`CREATE TABLE sync_changes(change_id TEXT PRIMARY KEY,seq INTEGER)`,
 		`CREATE TABLE sync_cursors(device_id TEXT,space_id TEXT,scope TEXT,last_applied INTEGER,last_pushed INTEGER,updated_at DATETIME)`,
 	} {

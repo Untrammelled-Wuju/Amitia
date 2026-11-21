@@ -27,18 +27,27 @@ import (
 var ErrPDFTextUnavailable = errors.New("PDF has no extractable text")
 
 func ExtractAttachmentText(ctx context.Context, filePath, mimeType string) (string, error) {
-	if mimeType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" {
+	format, err := ResolveAttachmentFormat(filePath, mimeType)
+	if err != nil {
+		return "", err
+	}
+	switch format {
+	case AttachmentFormatWord:
 		return ownedWordText(ctx, filePath)
-	}
-	if mimeType == "application/pdf" {
+	case AttachmentFormatPDF:
 		return ownedPDFText(ctx, filePath)
-	}
-	if mimeType == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" {
+	case AttachmentFormatSpreadsheet:
 		return ownedSpreadsheetText(ctx, filePath)
-	}
-	if mimeType == "application/vnd.openxmlformats-officedocument.presentationml.presentation" {
+	case AttachmentFormatPresentation:
 		return ownedPresentationText(ctx, filePath)
+	case AttachmentFormatText, AttachmentFormatCSV:
+		return ownedPlainText(ctx, filePath, mimeType)
+	default:
+		return "", unsupportedFormatError(format, mimeType, filepath.Base(filePath))
 	}
+}
+
+func ownedPlainText(ctx context.Context, filePath, mimeType string) (string, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return "", err
@@ -52,7 +61,7 @@ func ExtractAttachmentText(ctx context.Context, filePath, mimeType string) (stri
 		return "", errors.New("text attachment exceeds the 8 MiB extraction limit")
 	}
 	if !utf8.Valid(data) || bytes.IndexByte(data, 0) >= 0 {
-		return "", errors.New("file content is not valid UTF-8 text")
+		return "", fmt.Errorf("按文本解析的附件不是有效 UTF-8：mimeType=%q name=%q: %w", mimeType, filepath.Base(filePath), ErrUnsupportedAttachmentFormat)
 	}
 	return string(data), ctx.Err()
 }

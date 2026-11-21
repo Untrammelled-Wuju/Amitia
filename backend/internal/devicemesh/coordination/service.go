@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -16,7 +17,8 @@ const PolicySchema = `CREATE TABLE IF NOT EXISTS kernel_device_coordination (
 	space_id TEXT NOT NULL, device_id TEXT NOT NULL,
 	coordinated INTEGER NOT NULL DEFAULT 0, mode_revision INTEGER NOT NULL DEFAULT 1,
 	administrator INTEGER NOT NULL DEFAULT 0, permission_revision INTEGER NOT NULL DEFAULT 1,
-	selected_role TEXT NOT NULL DEFAULT '', provider_epoch INTEGER NOT NULL DEFAULT 1,
+	selected_role TEXT NOT NULL DEFAULT '', center_role TEXT NOT NULL DEFAULT '',
+	local_role TEXT NOT NULL DEFAULT '', provider_epoch INTEGER NOT NULL DEFAULT 1,
 	PRIMARY KEY(space_id, device_id))`
 
 var ErrRevision = errors.New("设备状态已变化，请刷新后重试")
@@ -24,6 +26,12 @@ var ErrAdministratorMode = errors.New("只有云端统筹设备可以授予管�
 var ErrScopeExpired = errors.New("服务提供者、数据归属或权限已变化，当前回复已中断")
 var ErrRoleRequired = errors.New("没有可用角色，拒绝调用")
 var ErrRoleSelection = errors.New("存在多个角色，请先指定调用角色")
+var ErrRoleDomain = errors.New("默认角色域只能是 center 或 local")
+
+const (
+	RoleDomainCenter = "center"
+	RoleDomainLocal  = "local"
+)
 
 type Policy struct {
 	DeviceID           string `json:"deviceId"`
@@ -32,6 +40,8 @@ type Policy struct {
 	Administrator      bool   `json:"administrator"`
 	PermissionRevision int64  `json:"permissionRevision"`
 	SelectedRole       string `json:"selectedRole"`
+	CenterRole         string `json:"centerRole"`
+	LocalRole          string `json:"localRole"`
 	ProviderEpoch      int64  `json:"providerEpoch"`
 }
 
@@ -247,7 +257,7 @@ func (s *Service) CoordinateTrustedDevices(ctx context.Context, space, core stri
 
 func (s *Service) Get(ctx context.Context, space, device string) (Policy, error) {
 	p := Policy{DeviceID: device, ModeRevision: 1, PermissionRevision: 1, ProviderEpoch: 1}
-	err := currentQueryExecutor(ctx, s.db).QueryRowContext(ctx, `SELECT coordinated, mode_revision, administrator, permission_revision, selected_role, provider_epoch FROM kernel_device_coordination WHERE space_id=? AND device_id=?`, space, device).Scan(&p.Coordinated, &p.ModeRevision, &p.Administrator, &p.PermissionRevision, &p.SelectedRole, &p.ProviderEpoch)
+	err := currentQueryExecutor(ctx, s.db).QueryRowContext(ctx, `SELECT coordinated, mode_revision, administrator, permission_revision, selected_role, center_role, local_role, provider_epoch FROM kernel_device_coordination WHERE space_id=? AND device_id=?`, space, device).Scan(&p.Coordinated, &p.ModeRevision, &p.Administrator, &p.PermissionRevision, &p.SelectedRole, &p.CenterRole, &p.LocalRole, &p.ProviderEpoch)
 	if errors.Is(err, sql.ErrNoRows) {
 		return p, nil
 	}
@@ -281,7 +291,7 @@ func (s *Service) InitializeCoordinated(ctx context.Context, space, device strin
 	if _, err = tx.ExecContext(ctx, `INSERT INTO kernel_device_coordination(space_id,device_id) VALUES(?,?) ON CONFLICT DO NOTHING`, space, device); err != nil {
 		return Policy{}, err
 	}
-	result, err := tx.ExecContext(ctx, `UPDATE kernel_device_coordination SET coordinated=1, selected_role=?, mode_revision=mode_revision+1, permission_revision=permission_revision+1 WHERE space_id=? AND device_id=? AND mode_revision=? AND coordinated=0`, role, space, device, expected)
+	result, err := tx.ExecContext(ctx, `UPDATE kernel_device_coordination SET coordinated=1, selected_role=?, center_role=?, mode_revision=mode_revision+1, permission_revision=permission_revision+1 WHERE space_id=? AND device_id=? AND mode_revision=? AND coordinated=0`, role, role, space, device, expected)
 	if err != nil {
 		return Policy{}, err
 	}
@@ -299,9 +309,77 @@ func (s *Service) InitializeCoordinated(ctx context.Context, space, device strin
 	s.cancelLocked(space, device)
 	previous.Coordinated = coordinated
 	previous.SelectedRole = role
+	previous.CenterRole = role
 	previous.ModeRevision++
 	previous.PermissionRevision++
 	previous.Administrator = administrator
+	return previous, nil
+}
+
+func (s *Service) SelectRoleDomain(ctx context.Context, space, device string, expected int64, domain, role string) (Policy, error) {
+	domain = strings.TrimSpace(domain)
+	role = strings.TrimSpace(role)
+	if domain != RoleDomainCenter && domain != RoleDomainLocal {
+		return Policy{}, ErrRoleDomain
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.validateRequestAuthorities(ctx); err != nil {
+		return Policy{}, err
+	}
+	previous, err := s.Get(ctx, space, device)
+	if err != nil {
+		return Policy{}, err
+	}
+	if previous.ModeRevision != expected {
+		return Policy{}, ErrRevision
+	}
+	if err := s.fenceAuthorityLocked(ctx, space, device, previous.PermissionRevision, false); err != nil {
+		return Policy{}, err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Policy{}, err
+	}
+	defer tx.Rollback()
+	if err := ValidateRequestAuthorityTx(ctx, tx); err != nil {
+		return Policy{}, err
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO kernel_device_coordination(space_id,device_id) VALUES(?,?) ON CONFLICT DO NOTHING`, space, device); err != nil {
+		return Policy{}, err
+	}
+	var result sql.Result
+	coordinated := domain == RoleDomainCenter
+	administrator := previous.Administrator
+	if coordinated {
+		result, err = tx.ExecContext(ctx, `UPDATE kernel_device_coordination SET coordinated=1, selected_role=?, center_role=?, mode_revision=mode_revision+1, permission_revision=permission_revision+1 WHERE space_id=? AND device_id=? AND mode_revision=?`, role, role, space, device, expected)
+	} else {
+		administrator = false
+		result, err = tx.ExecContext(ctx, `UPDATE kernel_device_coordination SET coordinated=0, administrator=0, selected_role=?, local_role=?, mode_revision=mode_revision+1, permission_revision=permission_revision+1 WHERE space_id=? AND device_id=? AND mode_revision=?`, role, role, space, device, expected)
+	}
+	if err != nil {
+		return Policy{}, err
+	}
+	if n, _ := result.RowsAffected(); n != 1 {
+		return Policy{}, ErrRevision
+	}
+	if err := meshaudit.QueueTx(ctx, tx, space, device, "device_mesh.role_domain_selected", meshaudit.Details{ModeRevision: expected + 1, PermissionRevision: previous.PermissionRevision + 1, ProviderEpoch: previous.ProviderEpoch, Coordinated: &coordinated, Administrator: &administrator}); err != nil {
+		return Policy{}, err
+	}
+	if err = tx.Commit(); err != nil {
+		return Policy{}, err
+	}
+	s.cancelLocked(space, device)
+	previous.Coordinated = coordinated
+	previous.Administrator = administrator
+	previous.SelectedRole = role
+	previous.ModeRevision++
+	previous.PermissionRevision++
+	if coordinated {
+		previous.CenterRole = role
+	} else {
+		previous.LocalRole = role
+	}
 	return previous, nil
 }
 
@@ -461,7 +539,7 @@ func (s *Service) begin(ctx context.Context, space, device, target, core, role, 
 	if roleOwner == "" {
 		roleOwner = core
 	}
-	if roleOwner != owner && roleOwner != core {
+	if roleOwner != owner && roleOwner != core && roleOwner != target {
 		return ctx, ExecutionScope{}, nil, ErrWrongOwner
 	}
 	if resourceOwner == "" {

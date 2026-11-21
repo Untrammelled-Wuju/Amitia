@@ -32,9 +32,14 @@ type QueuedChatResponse struct {
 }
 
 type QueuedChatAttachment struct {
-	Kind     string `json:"kind"`
-	Name     string `json:"name"`
-	MIMEType string `json:"mimeType"`
+	ArtifactID      string `json:"artifactId,omitempty"`
+	OwnerDeviceID   string `json:"ownerDeviceId,omitempty"`
+	StorageDeviceID string `json:"storageDeviceId,omitempty"`
+	Kind            string `json:"kind"`
+	Name            string `json:"name"`
+	MIMEType        string `json:"mimeType"`
+	SHA256          string `json:"sha256,omitempty"`
+	SizeBytes       int64  `json:"sizeBytes,omitempty"`
 }
 
 type QueuedChatQuote struct {
@@ -656,7 +661,16 @@ func (e *Engine) queuedChatResponse(document queuedChatDocument, scope coordinat
 	}
 	attachments := make([]QueuedChatAttachment, 0, len(document.Request.Attachments))
 	for _, attachment := range document.Request.Attachments {
-		attachments = append(attachments, QueuedChatAttachment{Kind: attachment.Kind, Name: attachment.Name, MIMEType: attachment.MIMEType})
+		attachments = append(attachments, QueuedChatAttachment{
+			ArtifactID:      attachment.ArtifactID,
+			OwnerDeviceID:   attachment.OwnerDeviceID,
+			StorageDeviceID: attachment.StorageDeviceID,
+			Kind:            attachment.Kind,
+			Name:            attachment.Name,
+			MIMEType:        attachment.MIMEType,
+			SHA256:          attachment.SHA256,
+			SizeBytes:       attachment.SizeBytes,
+		})
 	}
 	var quote *QueuedChatQuote
 	if document.Request.Quote != nil {
@@ -755,6 +769,66 @@ func (e *Engine) DeleteQueuedChat(ctx context.Context, request Request, queuedRe
 		}
 		return errors.New("排队消息已开始执行或不存在")
 	})
+}
+
+// UpdateQueuedChat 原位替换尚未执行的排队消息内容与附件。
+// 保留 requestId、position 与创建顺序，不改变队列位置，也不触发重新排队。
+func (e *Engine) UpdateQueuedChat(ctx context.Context, request Request, queuedRequestID, message string, attachments []Attachment) (QueuedChatResponse, error) {
+	if request.ExpectedScope == nil || request.ConversationID == "" || queuedRequestID == "" {
+		return QueuedChatResponse{}, coordination.ErrWrongOwner
+	}
+	message = strings.TrimSpace(message)
+	switch {
+	case message == "":
+		return QueuedChatResponse{}, fmt.Errorf("%w: 消息内容为空", ErrInvalidRequest)
+	case len(message) > 128<<10:
+		return QueuedChatResponse{}, fmt.Errorf("%w: 消息内容长度 %d 超过上限 %d", ErrInvalidRequest, len(message), 128<<10)
+	}
+	if err := ValidateAttachments(attachments); err != nil {
+		return QueuedChatResponse{}, err
+	}
+	scope := *request.ExpectedScope
+	unlock, err := e.lockContext(ctx, "queue-control\x00"+RuntimeKey(scope, request.ConversationID))
+	if err != nil {
+		return QueuedChatResponse{}, err
+	}
+	defer unlock()
+	var response QueuedChatResponse
+	err = e.WithConversationExecutionScope(ctx, scope, request.ConversationID, func(current context.Context) error {
+		items, err := e.queuedConversationDocuments(current, request)
+		if err != nil {
+			return err
+		}
+		for _, item := range items {
+			if item.document.Request.RequestID != queuedRequestID {
+				continue
+			}
+			switch item.document.Status {
+			case "queued":
+			case "steering", "uncertain":
+				return queuedChatUncertainError(item.document, errors.New("引导状态尚未确认"))
+			default:
+				return errors.New("排队消息已开始执行，无法编辑")
+			}
+			if err := e.validateChatAttachments(current, item.document.Scope, attachments); err != nil {
+				return err
+			}
+			item.document.Request.Message = message
+			item.document.Request.Attachments = attachments
+			commitScope := scope
+			commitScope.RequestID = "queue-update/" + uuid.NewString()
+			if _, err := e.commit(current, coordination.Commit{Scope: commitScope, Mutations: []coordination.Mutation{{Kind: "checkpoint", ID: item.resource.ID, RoleID: scope.RoleID, ExpectedRevision: item.resource.Revision, Body: body(item.document)}}}); err != nil {
+				return err
+			}
+			response = e.queuedChatResponse(item.document, scope)
+			return nil
+		}
+		return errors.New("排队消息已开始执行或不存在")
+	})
+	if err != nil {
+		return QueuedChatResponse{}, err
+	}
+	return response, nil
 }
 
 func (e *Engine) SteerQueuedChat(ctx context.Context, request Request, queuedRequestID, turnID string) (string, error) {

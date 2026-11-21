@@ -100,10 +100,32 @@ func registerMeshMemoryManagementRouter(mesh *gin.RouterGroup, services *AppServ
 				return
 			}
 			resourceOwner, roleOwner := actor.DeviceID.String(), actor.DeviceID.String()
-			if policy.Coordinated {
+			target := actor.DeviceID.String()
+			if metadata.TargetDeviceID != "" && metadata.TargetDeviceID != target {
+				isConsole, consoleErr := services.DeviceMesh.Coordination.IsCoreConsole(c.Request.Context(), actor.SpaceID.String(), actor.DeviceID.String())
+				if consoleErr != nil {
+					c.JSON(http.StatusServiceUnavailable, gin.H{"message": consoleErr.Error()})
+					return
+				}
+				if !policy.Administrator && !isConsole {
+					c.JSON(http.StatusForbidden, gin.H{"code": "mesh.administrator_required", "message": "跨设备管理历史记忆需要统筹中心管理员授权"})
+					return
+				}
+				expected := metadata.ExpectedScope
+				if expected.RoleOwnerID != metadata.TargetDeviceID || expected.ResourceOwnerID != metadata.TargetDeviceID || expected.TargetDeviceID != metadata.TargetDeviceID {
+					c.JSON(http.StatusConflict, gin.H{"code": "mesh.historical_scope_required", "message": "跨设备写入必须携带该设备原归属的执行范围"})
+					return
+				}
+				if _, targetErr := services.DeviceMesh.Coordination.Get(c.Request.Context(), actor.SpaceID.String(), metadata.TargetDeviceID); targetErr != nil {
+					c.JSON(http.StatusNotFound, gin.H{"code": "mesh.device_not_found", "message": "设备未接入统筹中心"})
+					return
+				}
+				target = metadata.TargetDeviceID
+				resourceOwner, roleOwner = target, target
+			} else if policy.Coordinated {
 				resourceOwner, roleOwner = coreID, coreID
 			}
-			request := business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: actor.DeviceID.String(), ResourceOwnerID: resourceOwner, RoleOwnerID: roleOwner, RoleID: metadata.RoleID, HistoricalRoleID: metadata.HistoricalRoleID, RequestID: metadata.RequestID, ExpectedScope: metadata.ExpectedScope, ConversationOrigin: metadata.ConversationOrigin}
+			request := business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: target, ResourceOwnerID: resourceOwner, RoleOwnerID: roleOwner, RoleID: metadata.RoleID, HistoricalRoleID: metadata.HistoricalRoleID, RequestID: metadata.RequestID, ExpectedScope: metadata.ExpectedScope, ConversationOrigin: metadata.ConversationOrigin}
 			var result business.MemoryManagementResponse
 			if candidates {
 				var input business.MemoryCandidateInput

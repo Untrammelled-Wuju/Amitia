@@ -148,16 +148,20 @@ type TeamTemplate struct {
 }
 
 type TeamMember struct {
-	ID            string    `gorm:"column:id;primaryKey" json:"id"`
-	SpaceID       string    `gorm:"column:space_id;not null;index" json:"spaceId"`
-	TeamID        string    `gorm:"column:team_id;not null;index" json:"teamId"`
-	MemberType    string    `gorm:"column:member_type;not null" json:"memberType"`
-	MemberID      string    `gorm:"column:member_id;not null;index" json:"memberId"`
-	Role          string    `gorm:"column:role;not null;default:'member'" json:"role"`
-	ResponderMode string    `gorm:"column:responder_mode;not null;default:'mention_or_lead'" json:"responderMode"`
-	Capabilities  string    `gorm:"column:capabilities;not null;default:'[]'" json:"capabilities"`
-	CreatedAt     time.Time `gorm:"column:created_at;not null" json:"createdAt"`
-	UpdatedAt     time.Time `gorm:"column:updated_at;not null" json:"updatedAt"`
+	ID             string    `gorm:"column:id;primaryKey" json:"id"`
+	SpaceID        string    `gorm:"column:space_id;not null;index" json:"spaceId"`
+	TeamID         string    `gorm:"column:team_id;not null;index" json:"teamId"`
+	MemberType     string    `gorm:"column:member_type;not null" json:"memberType"`
+	MemberID       string    `gorm:"column:member_id;not null;index" json:"memberId"`
+	OwnerType      string    `gorm:"column:owner_type;not null;default:'center'" json:"ownerType"`
+	OwnerID        string    `gorm:"column:owner_id;not null;default:'';index" json:"ownerId"`
+	InvocationMode string    `gorm:"column:invocation_mode;not null;default:'role'" json:"invocationMode"`
+	RoleRevision   int64     `gorm:"column:role_revision;not null;default:0" json:"roleRevision"`
+	Role           string    `gorm:"column:role;not null;default:'member'" json:"role"`
+	ResponderMode  string    `gorm:"column:responder_mode;not null;default:'mention_or_lead'" json:"responderMode"`
+	Capabilities   string    `gorm:"column:capabilities;not null;default:'[]'" json:"capabilities"`
+	CreatedAt      time.Time `gorm:"column:created_at;not null" json:"createdAt"`
+	UpdatedAt      time.Time `gorm:"column:updated_at;not null" json:"updatedAt"`
 }
 
 type TeamContext struct {

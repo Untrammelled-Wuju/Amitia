@@ -174,7 +174,7 @@ func TestTrustedDeviceWithOriginalProofCanRotateCredentialAndPreserveAdministrat
 		t.Fatalf("已信任设备无法轮换凭据: %v", err)
 	}
 	device, err := service.devices.GetDevice(t.Context(), "phone-a")
-	if err != nil || device == nil || device.TrustState != host_registry.DeviceTrustTrusted || device.Label != "new-phone" {
+	if err != nil || device == nil || device.TrustState != host_registry.DeviceTrustTrusted || device.Label != "old-phone" || device.PendingName != "new-phone" {
 		t.Fatalf("重新配对破坏了设备信任: device=%+v err=%v", device, err)
 	}
 	var administrator, modeRevision, permissionRevision int64

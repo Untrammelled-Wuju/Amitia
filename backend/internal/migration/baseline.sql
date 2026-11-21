@@ -4216,6 +4216,10 @@ CREATE TABLE IF NOT EXISTS team_members (
     team_id TEXT NOT NULL,
     member_type TEXT NOT NULL,
     member_id TEXT NOT NULL,
+    owner_type TEXT NOT NULL DEFAULT 'center',
+    owner_id TEXT NOT NULL DEFAULT '',
+    invocation_mode TEXT NOT NULL DEFAULT 'role',
+    role_revision INTEGER NOT NULL DEFAULT 0,
     role TEXT NOT NULL DEFAULT 'member',
     responder_mode TEXT NOT NULL DEFAULT 'mention_or_lead',
     capabilities TEXT NOT NULL DEFAULT '[]',
@@ -4225,6 +4229,7 @@ CREATE TABLE IF NOT EXISTS team_members (
 CREATE INDEX IF NOT EXISTS idx_team_members_member_id ON team_members(member_id);
 CREATE INDEX IF NOT EXISTS idx_team_members_team_id ON team_members(team_id);
 CREATE INDEX IF NOT EXISTS idx_team_members_space_id ON team_members(space_id);
+CREATE INDEX IF NOT EXISTS idx_team_members_owner ON team_members(owner_type, owner_id);
 
 CREATE TABLE IF NOT EXISTS team_contexts (
     id TEXT PRIMARY KEY,

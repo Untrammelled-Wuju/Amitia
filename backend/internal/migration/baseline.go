@@ -28,6 +28,9 @@ func ApplyBaseline(db *gorm.DB) error {
 		if err := ensureDesktopPetInstallationOperationColumns(db); err != nil {
 			return err
 		}
+		if err := ensureTeamMemberOwnershipColumns(db); err != nil {
+			return err
+		}
 		return ensureDesktopPetInstallationIndexes(db)
 	}
 	statements := splitSQLStatements(baselineSQL)
@@ -49,7 +52,38 @@ func ApplyBaseline(db *gorm.DB) error {
 	}); err != nil {
 		return err
 	}
-	return ensureDesktopPetInstallationOperationColumns(db)
+	if err := ensureDesktopPetInstallationOperationColumns(db); err != nil {
+		return err
+	}
+	return ensureTeamMemberOwnershipColumns(db)
+}
+
+func ensureTeamMemberOwnershipColumns(db *gorm.DB) error {
+	columns := []struct {
+		table string
+		name  string
+		ddl   string
+	}{
+		{table: "team_members", name: "owner_type", ddl: "ALTER TABLE team_members ADD COLUMN owner_type TEXT NOT NULL DEFAULT 'center'"},
+		{table: "team_members", name: "owner_id", ddl: "ALTER TABLE team_members ADD COLUMN owner_id TEXT NOT NULL DEFAULT ''"},
+		{table: "team_members", name: "invocation_mode", ddl: "ALTER TABLE team_members ADD COLUMN invocation_mode TEXT NOT NULL DEFAULT 'role'"},
+		{table: "team_members", name: "role_revision", ddl: "ALTER TABLE team_members ADD COLUMN role_revision INTEGER NOT NULL DEFAULT 0"},
+	}
+	for _, column := range columns {
+		if !db.Migrator().HasTable(column.table) || db.Migrator().HasColumn(column.table, column.name) {
+			continue
+		}
+		if err := db.Exec(column.ddl).Error; err != nil {
+			return fmt.Errorf("add %s column %s: %w", column.table, column.name, err)
+		}
+	}
+	if !db.Migrator().HasTable("team_members") {
+		return nil
+	}
+	if err := db.Exec(`CREATE INDEX IF NOT EXISTS idx_team_members_owner ON team_members(owner_type, owner_id)`).Error; err != nil {
+		return fmt.Errorf("create team member owner index: %w", err)
+	}
+	return nil
 }
 
 func ensureRolePurgeJobsTable(db *gorm.DB) error {

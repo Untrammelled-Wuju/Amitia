@@ -32,7 +32,7 @@ func TestPairingOfferReturnsCanonicalCodeAndPngWithoutCaching(t *testing.T) {
 	if _, err := db.Exec(meshaudit.Schema); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`CREATE TABLE kernel_devices(device_id TEXT PRIMARY KEY,space_id TEXT NOT NULL,platform TEXT NOT NULL DEFAULT '',label TEXT NOT NULL DEFAULT '',trust_state TEXT NOT NULL DEFAULT 'pending',created_at TEXT NOT NULL,trusted_at TEXT,last_seen_at TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 1)`); err != nil {
+	if _, err := db.Exec(`CREATE TABLE kernel_devices(device_id TEXT PRIMARY KEY,space_id TEXT NOT NULL,platform TEXT NOT NULL DEFAULT '',label TEXT NOT NULL DEFAULT '',reported_name TEXT NOT NULL DEFAULT '',pending_name TEXT NOT NULL DEFAULT '',name_revision INTEGER NOT NULL DEFAULT 0,trust_state TEXT NOT NULL DEFAULT 'pending',created_at TEXT NOT NULL,trusted_at TEXT,last_seen_at TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 1)`); err != nil {
 		t.Fatal(err)
 	}
 	registry := host_registry.NewRegistry(db)

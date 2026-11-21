@@ -452,3 +452,83 @@ func waitQueuedStatus(t *testing.T, engine *Engine, ctx context.Context, scope c
 		time.Sleep(10 * time.Millisecond)
 	}
 }
+
+func TestQueuedChatUpdateKeepsPositionAndRejectsInvalid(t *testing.T) {
+	engine, _, _, model := engineHarness(t)
+	initial, err := engine.Run(t.Context(), Request{SpaceID: "core", DeviceID: "a", CoreID: "core", RoleID: "role", ConversationID: "queue-update", RequestID: "initial-update", Message: "initial"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	actor := &auth.ActorContext{SpaceID: "core", DeviceID: "a", PrincipalType: auth.PrincipalTrustedDevice}
+	ctx := auth.WithActor(context.Background(), actor)
+	unlock := engine.lock("core\x00a\x00queue-update")
+	locked := true
+	defer func() {
+		if locked {
+			unlock()
+		}
+	}()
+	t.Cleanup(func() {
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			active := false
+			activeQueuedChats.Range(func(key, _ any) bool {
+				if key.(queuedChatKey).Engine == engine {
+					active = true
+					return false
+				}
+				return true
+			})
+			if !active {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Error("queued workers did not finish")
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	})
+	for _, item := range []struct{ id, text string }{{"one", "first body"}, {"two", "second body"}} {
+		if _, err := engine.QueueChat(ctx, initial.Scope, Request{ConversationID: "queue-update", RequestID: item.id, Message: item.text}); err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(time.Millisecond)
+	}
+	request := Request{SpaceID: "core", DeviceID: "a", CoreID: "core", TargetDeviceID: "a", RoleID: "role", ConversationID: "queue-update", ExpectedScope: &initial.Scope}
+	before, err := engine.ResumeConversationQueuedChats(ctx, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(before) != 2 || before[0].RequestID != "one" || before[1].RequestID != "two" {
+		t.Fatalf("unexpected queue before update: %+v", before)
+	}
+	updated, err := engine.UpdateQueuedChat(ctx, request, "one", "  修订后的第一条  ", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Message != "修订后的第一条" || updated.RequestID != "one" || updated.Position != before[0].Position || updated.Status != "queued" {
+		t.Fatalf("update changed identity or position: %+v", updated)
+	}
+	after, err := engine.ResumeConversationQueuedChats(ctx, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(after) != 2 || after[0].RequestID != "one" || after[0].Message != "修订后的第一条" || after[0].Position != before[0].Position || after[1].RequestID != "two" || after[1].Message != "second body" {
+		t.Fatalf("queue order or content drifted after update: %+v", after)
+	}
+	if _, err := engine.UpdateQueuedChat(ctx, request, "one", "   ", nil); err == nil {
+		t.Fatal("empty message was accepted")
+	}
+	if _, err := engine.UpdateQueuedChat(ctx, request, "missing", "text", nil); err == nil {
+		t.Fatal("missing queued message was accepted")
+	}
+	if _, err := engine.UpdateQueuedChat(ctx, Request{ConversationID: "queue-update"}, "one", "text", nil); !errors.Is(err, coordination.ErrWrongOwner) {
+		t.Fatalf("expected wrong owner without execution scope, got %v", err)
+	}
+	model.generate = func(_ context.Context, inference Inference) (Generation, error) {
+		return Generation{Text: "reply"}, nil
+	}
+	unlock()
+	locked = false
+}

@@ -17,15 +17,18 @@ const (
 )
 
 type DeviceRecord struct {
-	SpaceID    runtimeidentity.SpaceID
-	DeviceID   runtimeidentity.DeviceID
-	Platform   runtimeidentity.Platform
-	Label      string
-	TrustState DeviceTrustState
-	CreatedAt  time.Time
-	TrustedAt  *time.Time
-	LastSeenAt time.Time
-	Revision   int64
+	SpaceID      runtimeidentity.SpaceID
+	DeviceID     runtimeidentity.DeviceID
+	Platform     runtimeidentity.Platform
+	Label        string
+	ReportedName string
+	PendingName  string
+	NameRevision int64
+	TrustState   DeviceTrustState
+	CreatedAt    time.Time
+	TrustedAt    *time.Time
+	LastSeenAt   time.Time
+	Revision     int64
 }
 
 func (r *Registry) EnsureDevice(ctx context.Context, record DeviceRecord) (*DeviceRecord, error) {
@@ -38,11 +41,7 @@ func (r *Registry) EnsureDevice(ctx context.Context, record DeviceRecord) (*Devi
 		if existing.SpaceID != record.SpaceID {
 			return nil, ErrDeviceOwnedByOther
 		}
-		changed := false
-		if record.Label != "" && existing.Label != record.Label {
-			existing.Label = record.Label
-			changed = true
-		}
+		changed := ApplyReportedName(existing, record.Label)
 		if existing.Platform == "" && record.Platform != "" {
 			existing.Platform = record.Platform
 			changed = true
@@ -63,6 +62,13 @@ func (r *Registry) EnsureDevice(ctx context.Context, record DeviceRecord) (*Devi
 	record.CreatedAt = now
 	record.LastSeenAt = now
 	record.Revision = 1
+	record.PendingName = ""
+	record.ReportedName = NormalizeDeviceName(record.Label)
+	record.Label = record.ReportedName
+	record.NameRevision = 0
+	if record.Label != "" {
+		record.NameRevision = 1
+	}
 	if record.TrustState == "" {
 		record.TrustState = DeviceTrustPending
 	}

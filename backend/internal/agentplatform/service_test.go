@@ -12,7 +12,6 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/execution"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
-
 )
 
 func newTestPlatform(t *testing.T) (*Service, string, string) {

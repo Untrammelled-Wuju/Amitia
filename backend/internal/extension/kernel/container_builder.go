@@ -1183,6 +1183,18 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		taskRuntimeService.SetEventSink(taskEventPublisher)
 	}
 
+	if b.runtimePolicy.DurableEvents && approvalBroker != nil {
+		approvalEventPublisher := eventbridge.NewApprovalEventPublisher(eventBridgePublisher)
+		approvalBroker.AddObservers(
+			func(request execution.ApprovalRequest) error {
+				return approvalEventPublisher.Requested(context.Background(), request)
+			},
+			func(request execution.ApprovalRequest) error {
+				return approvalEventPublisher.Resolved(context.Background(), request)
+			},
+		)
+	}
+
 	hostAPIGateway := host_api.NewDefaultGateway()
 	host_api.RegisterPermissionDefinitions(permDefRegistry)
 	permIDValidator := permission.NewPermissionIDValidator(permDefRegistry)

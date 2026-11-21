@@ -78,3 +78,45 @@ func makeAdministratorHandler(deps *RouterDeps) gin.HandlerFunc {
 		c.JSON(200, gin.H{"policy": policy})
 	}
 }
+
+func makeRoleDomainHandler(deps *RouterDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		actor := security.GetActor(c)
+		if actor == nil || actor.DeviceID == "" {
+			c.JSON(401, gin.H{"code": "mesh.identity_required", "message": "请先配对当前设备"})
+			return
+		}
+		device := runtimeidentity.ParseDeviceID(c.Param("deviceId"))
+		administrator := actor.HasPermission(auth.PermSystemAdmin)
+		if !administrator && actor.DeviceID != device {
+			c.JSON(403, gin.H{"code": "mesh.administrator_required", "message": "只能修改当前设备的默认角色域"})
+			return
+		}
+		if administrator && actor.DeviceID != device {
+			finish, valid := security.BeginDeviceManagementIntent(c, deps.Coordination)
+			if !valid {
+				return
+			}
+			defer finish()
+		}
+		if err := deps.DeviceReg.RequireTrustedDevice(c.Request.Context(), actor.SpaceID, device); err != nil {
+			c.JSON(403, gin.H{"code": "mesh.device_not_trusted", "message": err.Error()})
+			return
+		}
+		var req struct {
+			Domain           string `json:"domain" binding:"required"`
+			Role             string `json:"role"`
+			ExpectedRevision int64  `json:"expectedRevision" binding:"required"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(400, gin.H{"code": "mesh.invalid_policy", "message": err.Error()})
+			return
+		}
+		policy, err := deps.Coordination.SelectRoleDomain(c.Request.Context(), actor.SpaceID.String(), device.String(), req.ExpectedRevision, req.Domain, req.Role)
+		if err != nil {
+			c.JSON(409, gin.H{"code": "mesh.policy_conflict", "message": err.Error()})
+			return
+		}
+		c.JSON(200, gin.H{"policy": policy})
+	}
+}

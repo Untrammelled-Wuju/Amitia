@@ -206,10 +206,13 @@ func RegisterCloudRoutes(router gin.IRouter, authMW gin.HandlerFunc, webAccessMW
 	authorized.PUT("/pairing/approvals/:requestId", makeApprovalDecisionHandler(deps))
 	authorized.GET("/devices", makeListDevicesHandler(deps))
 	authorized.DELETE("/devices/:deviceId", makeRevokeDeviceHandler(deps))
+	authorized.PUT("/devices/:deviceId/name", makeReportDeviceNameHandler(deps))
+	authorized.POST("/devices/:deviceId/name/confirm", makeConfirmDeviceNameHandler(deps))
 	authorized.POST("/devices/:deviceId/runtimes/:runtimeId/probe", makeProbeHandler(deps))
 	if deps.Coordination != nil {
 		authorized.GET("/coordination/me", makePolicyHandler(deps))
 		authorized.PUT("/devices/:deviceId/administrator", makeAdministratorHandler(deps))
+		authorized.PUT("/devices/:deviceId/role", makeRoleDomainHandler(deps))
 	}
 
 	bootstrapHandlers := []gin.HandlerFunc{}
@@ -551,10 +554,13 @@ func makeListDevicesHandler(deps *RouterDeps) gin.HandlerFunc {
 		response := make([]gin.H, 0, len(devices))
 		for _, d := range devices {
 			dev := gin.H{
-				"deviceId":   d.DeviceID.String(),
-				"platform":   d.Platform.String(),
-				"label":      d.Label,
-				"trustState": string(d.TrustState),
+				"deviceId":     d.DeviceID.String(),
+				"platform":     d.Platform.String(),
+				"label":        d.Label,
+				"reportedName": d.ReportedName,
+				"pendingName":  d.PendingName,
+				"nameRevision": d.NameRevision,
+				"trustState":   string(d.TrustState),
 			}
 			if deps.Coordination != nil {
 				policy, policyErr := deps.Coordination.Get(c.Request.Context(), spaceID.String(), d.DeviceID.String())

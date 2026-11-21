@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"mime"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -66,6 +67,7 @@ func (h *Handler) UploadChatStream(c *gin.Context) {
 		OwnerDeviceID: string(actor.DeviceID),
 		Kind:          kind,
 		Filename:      filename,
+		MIMEType:      chatUploadMIMEType(c.GetHeader("Content-Type"), filename),
 		Source:        SourceChatUpload,
 		Reader:        c.Request.Body,
 		Unbounded:     true,
@@ -75,6 +77,18 @@ func (h *Handler) UploadChatStream(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"artifact": art})
+}
+
+func chatUploadMIMEType(declared, filename string) string {
+	declared = normalizeMIME(strings.ToLower(strings.TrimSpace(declared)))
+	if declared != "" && declared != "application/octet-stream" && declared != "binary/octet-stream" && declared != "application/unknown" && declared != "*/*" {
+		return declared
+	}
+	byExtension := normalizeMIME(strings.ToLower(strings.TrimSpace(mime.TypeByExtension(strings.ToLower(filepath.Ext(filename))))))
+	if byExtension == "" || strings.HasPrefix(byExtension, "application/x-") {
+		return ""
+	}
+	return byExtension
 }
 
 func (h *Handler) RegisterPublicMedia(r *gin.Engine) {

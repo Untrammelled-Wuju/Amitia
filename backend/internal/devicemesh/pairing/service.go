@@ -297,6 +297,20 @@ func (s *Service) Claim(ctx context.Context, req ClaimRequest) (*ClaimResult, er
 	if existing != nil {
 		record.CreatedAt = existing.CreatedAt
 		record.Revision = existing.Revision + 1
+		record.Label = existing.Label
+		record.ReportedName = existing.ReportedName
+		record.PendingName = existing.PendingName
+		record.NameRevision = existing.NameRevision
+		if record.Platform.String() == "" {
+			record.Platform = existing.Platform
+		}
+		host_registry.ApplyReportedName(&record, req.Label)
+	} else {
+		record.ReportedName = host_registry.NormalizeDeviceName(req.Label)
+		record.Label = record.ReportedName
+		if record.Label != "" {
+			record.NameRevision = 1
+		}
 	}
 	if err := s.devices.SaveDeviceTx(ctx, tx, &record); err != nil {
 		return nil, err

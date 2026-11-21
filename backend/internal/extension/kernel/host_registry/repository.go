@@ -304,12 +304,15 @@ func saveDevice(ctx context.Context, executor deviceExecutor, record *DeviceReco
 	}
 	_, err := executor.ExecContext(ctx,
 		`INSERT OR REPLACE INTO kernel_devices (
-			device_id, space_id, platform, label, trust_state, created_at, trusted_at, last_seen_at, revision
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			device_id, space_id, platform, label, reported_name, pending_name, name_revision, trust_state, created_at, trusted_at, last_seen_at, revision
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		record.DeviceID.String(),
 		record.SpaceID.String(),
 		record.Platform.String(),
 		record.Label,
+		record.ReportedName,
+		record.PendingName,
+		record.NameRevision,
 		string(record.TrustState),
 		record.CreatedAt.Format(time.RFC3339Nano),
 		trustedAt,
@@ -324,7 +327,7 @@ func (r *registryRepository) GetDevice(ctx context.Context, deviceID runtimeiden
 		return nil, nil
 	}
 	row := r.db.QueryRowContext(ctx,
-		`SELECT device_id, space_id, platform, label, trust_state, created_at, trusted_at, last_seen_at, revision
+		`SELECT device_id, space_id, platform, label, reported_name, pending_name, name_revision, trust_state, created_at, trusted_at, last_seen_at, revision
 		FROM kernel_devices WHERE device_id = ?`,
 		deviceID.String(),
 	)
@@ -333,7 +336,7 @@ func (r *registryRepository) GetDevice(ctx context.Context, deviceID runtimeiden
 
 func (r *registryRepository) GetDeviceTx(ctx context.Context, tx *sql.Tx, deviceID runtimeidentity.DeviceID) (*DeviceRecord, error) {
 	return scanDevice(tx.QueryRowContext(ctx,
-		`SELECT device_id, space_id, platform, label, trust_state, created_at, trusted_at, last_seen_at, revision
+		`SELECT device_id, space_id, platform, label, reported_name, pending_name, name_revision, trust_state, created_at, trusted_at, last_seen_at, revision
 		FROM kernel_devices WHERE device_id = ?`, deviceID.String()))
 }
 
@@ -342,7 +345,7 @@ func (r *registryRepository) ListDevicesBySpace(ctx context.Context, spaceID run
 		return nil, nil
 	}
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT device_id, space_id, platform, label, trust_state, created_at, trusted_at, last_seen_at, revision
+		`SELECT device_id, space_id, platform, label, reported_name, pending_name, name_revision, trust_state, created_at, trusted_at, last_seen_at, revision
 		FROM kernel_devices WHERE space_id = ?`,
 		spaceID.String(),
 	)
@@ -417,6 +420,9 @@ func scanDevice(s rowScanner) (*DeviceRecord, error) {
 		&spaceID,
 		&platform,
 		&d.Label,
+		&d.ReportedName,
+		&d.PendingName,
+		&d.NameRevision,
 		&trustState,
 		&createdStr,
 		&trustedAt,

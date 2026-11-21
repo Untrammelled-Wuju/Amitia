@@ -66,6 +66,14 @@ func RegisterRouter(group *gin.RouterGroup, _ *app.AppContext, services Services
 	handler := &Handler{services: services}
 	routes := group.Group("/mcp")
 	routes.Use(security.SharedCoreAdminOnly())
+	registerRoutes(routes, handler)
+}
+
+func RegisterConsoleRouter(group *gin.RouterGroup, services Services) {
+	registerRoutes(group.Group("/mcp"), &Handler{services: services})
+}
+
+func registerRoutes(routes gin.IRoutes, handler *Handler) {
 	routes.GET("/servers", handler.listServers)
 	routes.POST("/servers", handler.createServer)
 	routes.GET("/servers/:id", handler.getServer)

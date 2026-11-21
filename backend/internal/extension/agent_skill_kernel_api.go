@@ -20,7 +20,10 @@ import (
 )
 
 func (api *KernelAPI) registerAgentSkillRoutes(group *gin.RouterGroup) {
-	routes := group.Group("/kernel/agent-skills")
+	api.registerAgentSkillHandlers(group.Group("/kernel/agent-skills"))
+}
+
+func (api *KernelAPI) registerAgentSkillHandlers(routes gin.IRoutes) {
 	routes.POST("/import/preview", api.previewAgentSkillImport)
 	routes.POST("/import/install", api.installAgentSkillImport)
 	routes.GET("", api.listAgentSkills)
@@ -36,11 +39,22 @@ func (api *KernelAPI) registerAgentSkillRoutes(group *gin.RouterGroup) {
 	routes.GET("/:id/activations", api.agentSkillActivations)
 }
 
+// RegisterConsoleAgentSkillRoutes mounts the Center console surface for agent
+// skills. Authorization is enforced by the Device Mesh administrator guard on
+// the parent group; skills installed here belong to the Center Core space.
+func RegisterConsoleAgentSkillRoutes(group *gin.RouterGroup, runtimeOf func() *Runtime) {
+	if group == nil || runtimeOf == nil {
+		return
+	}
+	newLateBoundKernelAPI(runtimeOf).registerAgentSkillHandlers(group.Group("/skills"))
+}
+
 func (api *KernelAPI) agentSkillRuntime() (*kernel.AgentSkillRuntime, string, error) {
-	if api.runtime == nil || api.runtime.Kernel == nil || api.runtime.Kernel.Container() == nil {
+	runtime := api.currentRuntime()
+	if runtime == nil || runtime.Kernel == nil || runtime.Kernel.Container() == nil {
 		return nil, "", fmt.Errorf("agent skill service unavailable")
 	}
-	container := api.runtime.Kernel.Container()
+	container := runtime.Kernel.Container()
 	if container.AgentSkillRuntime == nil {
 		return nil, "", fmt.Errorf("agent skill runtime unavailable")
 	}
@@ -84,9 +98,18 @@ func (api *KernelAPI) getAgentSkill(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"definition": definition, "compatibilityReport": definition.CompatibilityReport, "activations": activations})
 }
 
+func (api *KernelAPI) kernelRuntime() (*kernel.Runtime, error) {
+	runtime := api.currentRuntime()
+	if runtime == nil || runtime.Kernel == nil {
+		return nil, fmt.Errorf("agent skill service unavailable")
+	}
+	return runtime.Kernel, nil
+}
+
 func (api *KernelAPI) previewAgentSkillImport(c *gin.Context) {
-	if api.runtime == nil || api.runtime.Kernel == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "agent skill service unavailable"})
+	engine, err := api.kernelRuntime()
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 		return
 	}
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 55<<20)
@@ -104,7 +127,7 @@ func (api *KernelAPI) previewAgentSkillImport(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	preview, err := api.runtime.Kernel.PreviewPackage(c.Request.Context(), kernel.PackagePreviewRequest{
+	preview, err := engine.PreviewPackage(c.Request.Context(), kernel.PackagePreviewRequest{
 		SpaceID: kernelAPIUser(c), ScopeType: "global", FileName: built.FileName,
 		AllowUnsignedLocal: true,
 	}, bytes.NewReader(built.Archive))
@@ -120,8 +143,9 @@ func (api *KernelAPI) previewAgentSkillImport(c *gin.Context) {
 }
 
 func (api *KernelAPI) installAgentSkillImport(c *gin.Context) {
-	if api.runtime == nil || api.runtime.Kernel == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "agent skill service unavailable"})
+	engine, err := api.kernelRuntime()
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 		return
 	}
 	var body struct {
@@ -139,7 +163,7 @@ func (api *KernelAPI) installAgentSkillImport(c *gin.Context) {
 		body.ScopeType = "global"
 	}
 	spaceID := kernelAPIUser(c)
-	session, err := api.runtime.Kernel.Container().PackageRepository.GetPreview(c.Request.Context(), body.PreviewID, spaceID, body.ScopeType, body.ScopeID)
+	session, err := engine.Container().PackageRepository.GetPreview(c.Request.Context(), body.PreviewID, spaceID, body.ScopeType, body.ScopeID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
@@ -153,14 +177,14 @@ func (api *KernelAPI) installAgentSkillImport(c *gin.Context) {
 	for _, item := range required {
 		confirmations[item] = body.Confirmations[item]
 	}
-	confirmation, err := api.runtime.Kernel.ConfirmPackagePreview(c.Request.Context(), kernel.PackagePreviewConfirmationRequest{
+	confirmation, err := engine.ConfirmPackagePreview(c.Request.Context(), kernel.PackagePreviewConfirmationRequest{
 		SessionID: body.PreviewID, SpaceID: spaceID, ScopeType: body.ScopeType, ScopeID: body.ScopeID, Confirmations: confirmations,
 	})
 	if err != nil {
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 		return
 	}
-	result, err := api.runtime.Kernel.ExecutePackageInstall(c.Request.Context(), kernel.PackageInstallRequest{
+	result, err := engine.ExecutePackageInstall(c.Request.Context(), kernel.PackageInstallRequest{
 		SessionID: body.PreviewID, SpaceID: spaceID, ScopeType: body.ScopeType, ScopeID: body.ScopeID,
 		ConfirmationToken: confirmation.ConfirmationToken, IdempotencyKey: "agent-skill-import-" + body.PreviewID,
 	})
@@ -169,7 +193,7 @@ func (api *KernelAPI) installAgentSkillImport(c *gin.Context) {
 		return
 	}
 	if body.Enable {
-		if err := api.runtime.Kernel.Enable(c.Request.Context(), result.ExtensionID); err != nil {
+		if err := engine.Enable(c.Request.Context(), result.ExtensionID); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
@@ -209,6 +233,11 @@ func (api *KernelAPI) setAgentSkillEnabled(c *gin.Context, enabled bool) {
 }
 
 func (api *KernelAPI) removeAgentSkill(c *gin.Context) {
+	engine, err := api.kernelRuntime()
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+		return
+	}
 	service, _, err := api.agentSkillRuntime()
 	if err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
@@ -220,7 +249,7 @@ func (api *KernelAPI) removeAgentSkill(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
-	if err := api.runtime.Kernel.Disable(c.Request.Context(), definition.ExtensionID); err != nil {
+	if err := engine.Disable(c.Request.Context(), definition.ExtensionID); err != nil {
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 		return
 	}
@@ -228,7 +257,7 @@ func (api *KernelAPI) removeAgentSkill(c *gin.Context) {
 	if scopeType == "" {
 		scopeType = "global"
 	}
-	preview, err := api.runtime.Kernel.PreviewPackageUninstall(c.Request.Context(), definition.ExtensionID, spaceID, scopeType, definition.ScopeID)
+	preview, err := engine.PreviewPackageUninstall(c.Request.Context(), definition.ExtensionID, spaceID, scopeType, definition.ScopeID)
 	if err != nil {
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 		return
@@ -237,14 +266,14 @@ func (api *KernelAPI) removeAgentSkill(c *gin.Context) {
 	for _, item := range kernel.RequiredUninstallConfirmations(preview) {
 		confirmations[item] = true
 	}
-	confirmation, err := api.runtime.Kernel.ConfirmPackageUninstall(c.Request.Context(), kernel.ConfirmPackageUninstallRequest{
+	confirmation, err := engine.ConfirmPackageUninstall(c.Request.Context(), kernel.ConfirmPackageUninstallRequest{
 		ExtensionID: definition.ExtensionID, SpaceID: spaceID, ScopeType: scopeType, ScopeID: definition.ScopeID, Confirmations: confirmations,
 	})
 	if err != nil {
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 		return
 	}
-	if _, err := api.runtime.Kernel.ExecutePackageUninstall(c.Request.Context(), kernel.ExecutePackageUninstallRequest{
+	if _, err := engine.ExecutePackageUninstall(c.Request.Context(), kernel.ExecutePackageUninstallRequest{
 		ExtensionID: definition.ExtensionID, SpaceID: spaceID, ScopeType: scopeType, ScopeID: definition.ScopeID,
 		ConfirmationToken: confirmation.Token, IdempotencyKey: "agent-skill-remove-" + preview.PreviewHash,
 	}); err != nil {

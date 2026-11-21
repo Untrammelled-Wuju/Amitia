@@ -34,7 +34,7 @@ type ownedRuntimeRequest struct {
 }
 
 func registerMeshChatRuntimeRouter(mesh *gin.RouterGroup, services *AppServices, coreID string) {
-	for _, operation := range []string{"snapshot", "turns", "events", "interrupt", "steer", "retry", "approval", "queue/status", "queue/list", "queue/enqueue", "queue/reorder", "queue/delete", "queue/steer"} {
+	for _, operation := range []string{"snapshot", "turns", "events", "interrupt", "steer", "retry", "approval", "queue/status", "queue/list", "queue/enqueue", "queue/update", "queue/reorder", "queue/delete", "queue/steer"} {
 		operation := operation
 		mesh.POST("/chat-runtime/"+operation, func(c *gin.Context) {
 			actor := security.GetActor(c)
@@ -44,7 +44,7 @@ func registerMeshChatRuntimeRouter(mesh *gin.RouterGroup, services *AppServices,
 			}
 			var request ownedRuntimeRequest
 			limit := int64(512 << 10)
-			if operation == "queue/enqueue" {
+			if operation == "queue/enqueue" || operation == "queue/update" {
 				limit = 4 << 20
 			}
 			c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, limit)
@@ -124,6 +124,16 @@ func registerMeshChatRuntimeRouter(mesh *gin.RouterGroup, services *AppServices,
 						return err
 					}
 					c.JSON(200, gin.H{"code": 200, "data": queued})
+					return nil
+				case "queue/update":
+					if strings.TrimSpace(request.Message) == "" {
+						return errors.New("排队消息内容为空")
+					}
+					updated, err := services.OwnedBusiness.UpdateQueuedChat(ctx, request.Request, request.QueuedRequestID, request.Message, request.Attachments)
+					if err != nil {
+						return err
+					}
+					c.JSON(200, gin.H{"code": 200, "data": gin.H{"executionScope": view.Scope, "item": updated}})
 					return nil
 				case "queue/reorder":
 					if len(request.QueueOrder) > 128 {

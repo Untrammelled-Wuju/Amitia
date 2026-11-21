@@ -17,11 +17,23 @@ import (
 )
 
 type KernelAPI struct {
-	runtime *Runtime
+	runtime   *Runtime
+	runtimeOf func() *Runtime
 }
 
 func NewKernelAPI(runtime *Runtime) *KernelAPI {
 	return &KernelAPI{runtime: runtime}
+}
+
+func newLateBoundKernelAPI(runtimeOf func() *Runtime) *KernelAPI {
+	return &KernelAPI{runtimeOf: runtimeOf}
+}
+
+func (api *KernelAPI) currentRuntime() *Runtime {
+	if api.runtime != nil || api.runtimeOf == nil {
+		return api.runtime
+	}
+	return api.runtimeOf()
 }
 
 func (api *KernelAPI) RegisterRoutes(group *gin.RouterGroup) {

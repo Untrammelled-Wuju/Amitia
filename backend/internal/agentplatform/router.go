@@ -103,18 +103,12 @@ func (h *HTTPHandler) updateTeam(c *gin.Context) {
 }
 
 func (h *HTTPHandler) addTeamMember(c *gin.Context) {
-	var input struct {
-		MemberType    string   `json:"memberType"`
-		MemberID      string   `json:"memberId"`
-		Role          string   `json:"role"`
-		ResponderMode string   `json:"responderMode"`
-		Capabilities  []string `json:"capabilities"`
-	}
+	var input TeamMemberInput
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
 		return
 	}
-	item, err := h.service.AddTeamMember(c.Request.Context(), h.spaceID, c.Param("id"), input.MemberType, input.MemberID, input.Role, input.ResponderMode, input.Capabilities)
+	item, err := h.service.AddTeamMember(c.Request.Context(), h.spaceID, c.Param("id"), input)
 	h.respondStatus(c, item, err, http.StatusCreated)
 }
 

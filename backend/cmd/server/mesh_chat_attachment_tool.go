@@ -41,7 +41,7 @@ func chatAttachmentToolDefinition() tool.Tool {
 func chatAttachmentExtractToolDefinition() tool.Tool {
 	return tool.Tool{Type: "function", Function: tool.Function{
 		Name:        chatAttachmentExtractTool,
-		Description: "Process a document, image, or text attachment referenced by a saved message. Streams the attachment from its authorized storage owner, extracts DOCX/PDF/text content, or uses the configured vision model for images and scanned PDF pages. Returns unsupported or tool failures as data so the task can continue with another authorized capability.",
+		Description: "Process a document, image, or text attachment referenced by a saved message. Streams the attachment from its authorized storage owner and extracts DOCX, XLSX, PPTX, PDF, CSV, or plain text content, or uses the configured vision model for images and scanned PDF pages. The document format is detected from content signatures, so a presentation uploaded with a generic MIME type is still parsed as PPTX. Returns unsupported or tool failures as data so the task can continue with another authorized capability.",
 		Parameters: tool.Parameters{Type: "object", Properties: map[string]tool.Property{
 			"messageId":  {Type: "string", Description: "ID of the saved conversation message containing the attachment"},
 			"artifactId": {Type: "string", Description: "Attachment artifact ID from that message"},
@@ -121,7 +121,11 @@ func (r *meshOwnedToolRuntime) extractChatAttachment(ctx context.Context, infere
 	if err := r.materializeChatAttachment(ctx, inference, payload.MessageID, reference, path); err != nil {
 		return chat.ToolResult{}, err
 	}
-	if reference.Kind == "image" || strings.HasPrefix(strings.ToLower(reference.MIMEType), "image/") {
+	format, err := chat.ResolveAttachmentFormat(path, reference.MIMEType)
+	if err != nil {
+		return attachmentProcessingResult(reference, "unavailable", "", err, nil, maxChars), nil
+	}
+	if reference.Kind == "image" || format == chat.AttachmentFormatImage {
 		text, visionErr := chat.AnalyzeAttachmentImage(ctx, path, reference.MIMEType)
 		return attachmentProcessingResult(reference, "vision", text, visionErr, nil, maxChars), nil
 	}
@@ -129,7 +133,7 @@ func (r *meshOwnedToolRuntime) extractChatAttachment(ctx context.Context, infere
 	if extractErr == nil {
 		return attachmentProcessingResult(reference, "text", text, nil, nil, maxChars), nil
 	}
-	if strings.EqualFold(reference.MIMEType, "application/pdf") {
+	if format == chat.AttachmentFormatPDF {
 		pagePaths, renderErr := chat.ExtractPDFImages(ctx, path, dir, maxPages)
 		if renderErr != nil {
 			externalPaths, externalErr := chat.RenderPDFPages(ctx, path, dir, maxPages)
@@ -166,7 +170,7 @@ func (r *meshOwnedToolRuntime) extractChatAttachment(ctx context.Context, infere
 		details := map[string]any{"pdfTextError": extractErr.Error(), "pdfRenderError": renderErr.Error(), "requiresVision": true}
 		return attachmentProcessingResult(reference, "unavailable", "", errors.Join(extractErr, renderErr), details, maxChars), nil
 	}
-	return attachmentProcessingResult(reference, "unsupported", "", extractErr, map[string]any{"requiresGenericTool": true}, maxChars), nil
+	return attachmentProcessingResult(reference, "unsupported", "", extractErr, map[string]any{"requiresGenericTool": true, "format": string(format), "mimeType": reference.MIMEType}, maxChars), nil
 }
 
 func (r *meshOwnedToolRuntime) materializeChatAttachment(ctx context.Context, inference business.Inference, messageID string, reference coordination.ChatAttachmentReference, path string) (returnErr error) {

@@ -25,6 +25,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
+	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/agentplatform"
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/devicemesh/agent"
@@ -35,9 +36,13 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh/pairing"
 	meshserver "github.com/u-ai/backend/internal/devicemesh/server"
 	"github.com/u-ai/backend/internal/deviceruntime/protocol"
+	"github.com/u-ai/backend/internal/extension"
 	"github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/host_registry"
+	"github.com/u-ai/backend/internal/extension/mcpruntime"
+	mcpapi "github.com/u-ai/backend/internal/extension/mcpruntime/api"
+	mcpservice "github.com/u-ai/backend/internal/extension/mcpruntime/service"
 	"github.com/u-ai/backend/internal/middleware/security"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/internal/spaceidentity"
@@ -308,6 +313,7 @@ func newThreeCoreFixture(t *testing.T, core string, schemas *threeCoreSchemas, p
 	if err := meshserver.RegisterCloudRoutes(f.router, authMW, nil, nil, deps); err != nil {
 		t.Fatal(err)
 	}
+	services.MCPRuntime = &mcpservice.Runtime{API: mcpapi.Services{Repository: mcp.NewRepository(services.DB)}}
 	registerMeshBusinessRouter(f.router.Group("/api", authMW), services, core)
 	local.RegisterRoutes(f.router, func(c *gin.Context) { c.Next() })
 	addresses, err := lan.PrivateAddresses()
@@ -749,3 +755,198 @@ func TestThreeRealCoreBusinessSwitchKeepsDeviceOwnedConversationWhenCoordination
 		t.Fatalf("原设备对话未连续保存: count=%d error=%v", stored, err)
 	}
 }
+func TestPeerRoleCatalogFollowsDeviceRoleDomainAndAdministrator(t *testing.T) {
+	schemas := newThreeCoreSchemas(t)
+	center, admin, peer := newThreeCoreFixture(t, "role-center", schemas), newThreeCoreFixture(t, "role-admin", schemas), newThreeCoreFixture(t, "role-peer", schemas)
+	pairThreeCoreFixtures(t, admin, center)
+	pairThreeCoreFixtures(t, peer, center)
+	localPath := "/api/device-mesh/v1/business/roles?domain=local&device=" + peer.device.DeviceID.String()
+	centerPath := "/api/device-mesh/v1/business/roles?domain=center&device=" + peer.device.DeviceID.String()
+	var failure struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	}
+	if json.Unmarshal(center.request(t, admin, http.MethodGet, localPath, nil, http.StatusForbidden), &failure) != nil || failure.Code != "mesh.administrator_required" {
+		t.Fatalf("未授权的跨设备角色目录未被拒绝: code=%s message=%s", failure.Code, failure.Message)
+	}
+	policy, err := center.services.DeviceMesh.Coordination.Get(t.Context(), center.core, admin.device.DeviceID.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ensureCoordinatedForTest(t, center, admin, policy.ModeRevision)
+	policy, err = center.services.DeviceMesh.Coordination.Get(t.Context(), center.core, admin.device.DeviceID.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := center.services.DeviceMesh.Coordination.GrantAdministrator(t.Context(), center.core, admin.device.DeviceID.String(), policy.PermissionRevision, true); err != nil {
+		t.Fatal(err)
+	}
+	missingPath := "/api/device-mesh/v1/business/roles?domain=local&device=" + uuid.NewString()
+	if json.Unmarshal(center.request(t, admin, http.MethodGet, missingPath, nil, http.StatusNotFound), &failure) != nil || failure.Code != "mesh.device_not_found" {
+		t.Fatalf("不存在的设备未返回未接入错误: code=%s message=%s", failure.Code, failure.Message)
+	}
+	if json.Unmarshal(center.request(t, admin, http.MethodGet, centerPath, nil, http.StatusConflict), &failure) != nil || failure.Code != "mesh.device_not_coordinated" {
+		t.Fatalf("本机模式设备被当作统筹角色目录: code=%s message=%s", failure.Code, failure.Message)
+	}
+	var local struct {
+		Roles       []coordination.Role `json:"roles"`
+		RoleOwnerID string              `json:"roleOwnerId"`
+		Domain      string              `json:"domain"`
+	}
+	if err := json.Unmarshal(center.request(t, admin, http.MethodGet, localPath, nil, http.StatusOK), &local); err != nil || local.RoleOwnerID != peer.device.DeviceID.String() || local.Domain != coordination.RoleDomainLocal || len(local.Roles) == 0 || local.Roles[0].Name != peer.core+" 的角色" {
+		t.Fatalf("管理员未读取到目标设备本机角色: roleOwner=%q domain=%q roles=%+v error=%v", local.RoleOwnerID, local.Domain, local.Roles, err)
+	}
+	policy, err = center.services.DeviceMesh.Coordination.Get(t.Context(), center.core, peer.device.DeviceID.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ensureCoordinatedForTest(t, center, peer, policy.ModeRevision)
+	var coordinatedLocal struct {
+		Roles       []coordination.Role `json:"roles"`
+		RoleOwnerID string              `json:"roleOwnerId"`
+		Domain      string              `json:"domain"`
+	}
+	if err := json.Unmarshal(center.request(t, admin, http.MethodGet, localPath, nil, http.StatusOK), &coordinatedLocal); err != nil || coordinatedLocal.RoleOwnerID != peer.device.DeviceID.String() || coordinatedLocal.Domain != coordination.RoleDomainLocal || len(coordinatedLocal.Roles) == 0 || coordinatedLocal.Roles[0].Name != peer.core+" 的角色" {
+		t.Fatalf("统筹模式设备的本机角色未对管理员开放: roleOwner=%q domain=%q roles=%+v error=%v", coordinatedLocal.RoleOwnerID, coordinatedLocal.Domain, coordinatedLocal.Roles, err)
+	}
+	var central struct {
+		Roles       []coordination.Role `json:"roles"`
+		RoleOwnerID string              `json:"roleOwnerId"`
+		Domain      string              `json:"domain"`
+	}
+	if err := json.Unmarshal(center.request(t, admin, http.MethodGet, centerPath, nil, http.StatusOK), &central); err != nil || central.RoleOwnerID != center.core || central.Domain != coordination.RoleDomainCenter || len(central.Roles) == 0 || central.Roles[0].Name != center.core+" 的角色" {
+		t.Fatalf("管理员未读取到统筹中心角色: roleOwner=%q domain=%q roles=%+v error=%v", central.RoleOwnerID, central.Domain, central.Roles, err)
+	}
+}
+
+func TestConsoleMCPRequiresAdministratorAndWritesCenterServers(t *testing.T) {
+	schemas := newThreeCoreSchemas(t)
+	center, admin, peer := newThreeCoreFixture(t, "mcp-center", schemas), newThreeCoreFixture(t, "mcp-admin", schemas), newThreeCoreFixture(t, "mcp-peer", schemas)
+	pairThreeCoreFixtures(t, admin, center)
+	pairThreeCoreFixtures(t, peer, center)
+	path := "/api/device-mesh/v1/business/console/mcp/servers"
+	var failure struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	}
+	created := map[string]any{"name": "center-tools", "displayName": "中心工具", "transport": "streamable_http", "endpoint": "https://mcp.example.com/rpc", "authType": "none", "enabled": false}
+	if json.Unmarshal(center.request(t, admin, http.MethodPost, path, created, http.StatusForbidden), &failure) != nil || failure.Code != "mesh.administrator_required" {
+		t.Fatalf("未授权的设备写入了统筹中心 MCP: code=%s message=%s", failure.Code, failure.Message)
+	}
+	policy, err := center.services.DeviceMesh.Coordination.Get(t.Context(), center.core, admin.device.DeviceID.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ensureCoordinatedForTest(t, center, admin, policy.ModeRevision)
+	policy, err = center.services.DeviceMesh.Coordination.Get(t.Context(), center.core, admin.device.DeviceID.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := center.services.DeviceMesh.Coordination.GrantAdministrator(t.Context(), center.core, admin.device.DeviceID.String(), policy.PermissionRevision, true); err != nil {
+		t.Fatal(err)
+	}
+	var added struct {
+		Data struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(center.request(t, admin, http.MethodPost, path, created, http.StatusCreated), &added); err != nil || added.Data.ID == "" || added.Data.Name != "center-tools" {
+		t.Fatalf("管理员未能在统筹中心创建 MCP: id=%q name=%q error=%v", added.Data.ID, added.Data.Name, err)
+	}
+	var listed struct {
+		Data []struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"data"`
+	}
+	if json.Unmarshal(center.request(t, peer, http.MethodGet, path, nil, http.StatusForbidden), &failure) != nil || failure.Code != "mesh.administrator_required" {
+		t.Fatalf("普通设备读取了统筹中心 MCP: code=%s message=%s", failure.Code, failure.Message)
+	}
+	if err := json.Unmarshal(center.request(t, admin, http.MethodGet, path, nil, http.StatusOK), &listed); err != nil || len(listed.Data) != 1 || listed.Data[0].ID != added.Data.ID || listed.Data[0].Name != "center-tools" {
+		t.Fatalf("统筹中心 MCP 列表未包含新建服务: %+v error=%v", listed.Data, err)
+	}
+	isolated := mcp.NewRepository(peer.services.DB)
+	if records, err := isolated.ListServers(t.Context()); err != nil || len(records) != 0 {
+		t.Fatalf("统筹中心 MCP 泄漏到设备本机库: %+v error=%v", records, err)
+	}
+}
+
+func TestConsoleSkillsRequireAdministratorAndListCenterSkills(t *testing.T) {
+	schemas := newThreeCoreSchemas(t)
+	center, admin, peer := newThreeCoreFixture(t, "skill-center", schemas), newThreeCoreFixture(t, "skill-admin", schemas), newThreeCoreFixture(t, "skill-peer", schemas)
+	pairThreeCoreFixtures(t, admin, center)
+	pairThreeCoreFixtures(t, peer, center)
+	root := t.TempDir()
+	container, err := kernel.NewContainerBuilder().WithDBPath(filepath.Join(root, "kernel.db")).WithExtensionRoot(filepath.Join(root, "extensions")).Build(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = container.Close() })
+	kernelRuntime, err := kernel.NewRuntime(filepath.Join(root, "extensions"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	kernelRuntime.SetContainer(container)
+	center.services.Extension = &extension.Runtime{Kernel: kernelRuntime}
+	built, err := kernel.BuildLocalAgentSkillPackage(t.Context(), center.core, "center-skill", map[string][]byte{
+		"SKILL.md": []byte("---\nname: center-skill\ndescription: Center console skill\nmetadata:\n  version: 1.0.0\nactivation:\n  mode: explicit\n---\n\nCenter console skill.\n"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	preview, err := kernelRuntime.PreviewPackage(t.Context(), kernel.PackagePreviewRequest{SpaceID: center.core, ScopeType: "global", FileName: built.FileName, AllowUnsignedLocal: true}, bytes.NewReader(built.Archive))
+	if err != nil {
+		t.Fatal(err)
+	}
+	confirmations := map[string]bool{}
+	for _, item := range preview.RequiredConfirmations {
+		confirmations[item] = true
+	}
+	confirmation, err := kernelRuntime.ConfirmPackagePreview(t.Context(), kernel.PackagePreviewConfirmationRequest{SessionID: preview.SessionID, SpaceID: center.core, ScopeType: "global", Confirmations: confirmations})
+	if err != nil {
+		t.Fatal(err)
+	}
+	installed, err := kernelRuntime.ExecutePackageInstall(t.Context(), kernel.PackageInstallRequest{SessionID: preview.SessionID, SpaceID: center.core, ScopeType: "global", ConfirmationToken: confirmation.ConfirmationToken, IdempotencyKey: "console-agent-skill"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := kernelRuntime.Enable(t.Context(), installed.ExtensionID); err != nil {
+		t.Fatal(err)
+	}
+	path := "/api/device-mesh/v1/business/console/skills"
+	var failure struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	}
+	if json.Unmarshal(center.request(t, peer, http.MethodGet, path, nil, http.StatusForbidden), &failure) != nil || failure.Code != "mesh.administrator_required" {
+		t.Fatalf("普通设备读取了统筹中心 skill: code=%s message=%s", failure.Code, failure.Message)
+	}
+	if json.Unmarshal(center.request(t, peer, http.MethodPost, path+"/import/preview", nil, http.StatusForbidden), &failure) != nil || failure.Code != "mesh.administrator_required" {
+		t.Fatalf("普通设备向统筹中心导入了 skill: code=%s message=%s", failure.Code, failure.Message)
+	}
+	policy, err := center.services.DeviceMesh.Coordination.Get(t.Context(), center.core, admin.device.DeviceID.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ensureCoordinatedForTest(t, center, admin, policy.ModeRevision)
+	policy, err = center.services.DeviceMesh.Coordination.Get(t.Context(), center.core, admin.device.DeviceID.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := center.services.DeviceMesh.Coordination.GrantAdministrator(t.Context(), center.core, admin.device.DeviceID.String(), policy.PermissionRevision, true); err != nil {
+		t.Fatal(err)
+	}
+	var listed struct {
+		Items []struct {
+			ID           string `json:"id"`
+			Name         string `json:"name"`
+			OwnerSpaceID string `json:"ownerSpaceId"`
+		} `json:"items"`
+		Total int `json:"total"`
+	}
+	if err := json.Unmarshal(center.request(t, admin, http.MethodGet, path, nil, http.StatusOK), &listed); err != nil || listed.Total != 1 || len(listed.Items) != 1 || listed.Items[0].Name != "center-skill" || listed.Items[0].OwnerSpaceID != center.core {
+		t.Fatalf("管理员未读取到统筹中心 skill: %+v error=%v", listed, err)
+	}
+}
+
