@@ -7,7 +7,7 @@ import { notifyDesktopPetChatState } from "@/runtime/desktop-pet-chat-state";
 import { useConversationWorkspace } from "./useConversationWorkspace";
 import { useChatAppearancePreference } from "./useChatAppearancePreference";
 import { useDeviceOwnedConversation } from "./useDeviceOwnedConversation";
-import { uploadOwnedAttachment, ownedAttachmentBlock, type OwnedAttachment, type OwnedAttachmentInput } from "@/runtime/device-owned-attachments";
+import { uploadOwnedAttachment, ownedAttachmentBlock, ownedAttachmentKindOf, type OwnedAttachment, type OwnedAttachmentInput } from "@/runtime/device-owned-attachments";
 import { sameOwnedAuthority } from "@/runtime/owned-speech-result";
 import { parseConversationReference } from "@/runtime/device-owned-conversation-reference";
 import { parseOwnedProjectReference } from "@/runtime/owned-project-reference";
@@ -123,16 +123,22 @@ export function useWebChatSend(
   }
 
   async function handleImageSend(text: string, imageBase64: string) {
-    if (await owned.refresh()) {
-      const file = currentImageFile.value;
-      if (!file) throw new Error("图片原始文件不可用，请重新选择图片");
-      currentImageBase64.value = null;
-      currentImageFile.value = null;
-      pendingImageBase64.value = imageBase64;
-      await doActualSend(text.trim() || "[图片]", undefined, undefined, undefined, [{ file, kind: "image", name: file.name || "image.png" }]);
-      return;
-    }
-    throw new Error(owned.notice.value || "设备对话服务尚未就绪");
+    if (!(await owned.refresh())) throw new Error(owned.notice.value || "设备对话服务尚未就绪");
+    const input = await imageAttachmentInput(imageBase64);
+    currentImageBase64.value = null;
+    currentImageFile.value = null;
+    pendingImageBase64.value = imageBase64;
+    await doActualSend(text.trim() || "[图片]", undefined, undefined, undefined, [input]);
+  }
+
+  async function imageAttachmentInput(source: string): Promise<OwnedAttachmentInput> {
+    const file = currentImageFile.value;
+    if (file) return { file, kind: "image", name: file.name || "image.png" };
+    const response = await fetch(source);
+    if (!response.ok) throw new Error(`读取图片内容失败: ${response.status} ${response.statusText}`);
+    const blob = await response.blob();
+    if (!blob.size) throw new Error("图片内容为空，无法发送");
+    return { file: blob, kind: "image", name: "image.png" };
   }
 
   async function handleSend(text: string, imageBase64?: string, videoBase64?: string) {
@@ -148,6 +154,31 @@ export function useWebChatSend(
       return;
     }
     await doActualSend(text);
+  }
+
+  async function handleSendWithFiles(text: string, files: File[]) {
+    if (!files.length) {
+      await handleSend(text);
+      return;
+    }
+    const inputs = files.map((file) => ({ file, kind: ownedAttachmentKindOf(file), name: file.name || "attachment" }));
+    const kinds = new Set(inputs.map((input) => input.kind));
+    const names = inputs.map((input) => input.name).join("、");
+    const placeholder = kinds.size === 1
+      ? kinds.has("image") ? `[图片] ${names}` : kinds.has("video") ? `[视频] ${names}` : `[文件] ${names}`
+      : `[附件] ${names}`;
+    const content = text.trim() || placeholder;
+    try {
+      if (!(await owned.refresh())) throw new Error(owned.notice.value || "设备对话服务尚未就绪");
+      if ((sending.value || isSubmitting.value) && enqueueWhenBusy) {
+        const uploaded = await Promise.all(inputs.map((input) => uploadOwnedAttachment(input)));
+        await enqueueWhenBusy(content, uploaded);
+        return;
+      }
+      await doActualSend(content, undefined, undefined, undefined, inputs);
+    } catch (err: any) {
+      ElMessage.error(err?.message || "附件发送失败");
+    }
   }
 
   async function doActualSend(text: unknown, audioUrl?: string, voiceMessage?: boolean, videoUrl?: string, attachmentInputs: OwnedAttachmentInput[] = [], uploadedAttachments: OwnedAttachment[] = []) {
@@ -242,7 +273,6 @@ export function useWebChatSend(
         }
 				if (attachmentInputs.some((item) => item.kind === "audio") && imgUrl) throw new Error("语音消息不能同时携带图片");
         const attachments = [...uploadedAttachments, ...(await Promise.all(attachmentInputs.map((item) => uploadOwnedAttachment(item))))];
-        if (attachments.length > 2) throw new Error("单条消息最多携带两个附件");
         const attachmentBlocks = (messageId: string, conversationId: string, roleId = expectedExecutionScope.roleId) => attachments.map((item) => ownedAttachmentBlock(item, {
           messageId,
           conversationId: parseConversationReference(conversationId)?.id || conversationId,
@@ -523,6 +553,8 @@ if (convId.value === response.conversationId && characterId.value === originalRo
     handleFileSend,
     handleImageSend,
     handleSend,
+    handleSendWithFiles,
+    imageAttachmentInput,
     doActualSend,
     handleStop,
     handleRetry,

@@ -27,7 +27,7 @@
         >
           <span class="team-mark">{{ team.name.slice(0, 1) }}</span>
           <span class="team-list-copy">
-            <strong>{{ team.name }}</strong>
+            <strong>{{ coreOwnershipLabel("团队", team.name) }}</strong>
             <small>{{ team.description || "暂无团队说明" }}</small>
           </span>
           <el-tag size="small" type="success">{{ team.status }}</el-tag>
@@ -42,7 +42,7 @@
           <header class="team-detail-head">
             <div>
               <div class="team-title-line">
-                <h2>{{ selectedTeam.team.name }}</h2>
+                <h2>{{ coreOwnershipLabel("团队", selectedTeam.team.name) }}</h2>
                 <el-tag size="small">{{ selectedTeam.team.status }}</el-tag>
                 <span>revision {{ selectedTeam.team.revision }}</span>
               </div>
@@ -57,6 +57,7 @@
             <div class="team-actions">
               <el-button size="small" @click="openEdit">编辑</el-button>
               <el-button size="small" :loading="routing" @click="testRoute">测试路由</el-button>
+              <el-button size="small" :loading="dispatching" @click="dispatchTeam">调度设备角色</el-button>
             </div>
           </header>
 
@@ -66,14 +67,43 @@
               <div v-for="member in selectedTeam.members || []" :key="member.id" class="member-row">
                 <div>
                   <strong>{{ memberName(member.memberId) }}</strong>
-                  <small>{{ member.memberType }} · {{ member.responderMode }}</small>
+                  <small>{{ memberOwnerLabel(member) }} · {{ member.memberType }} · {{ member.responderMode }}</small>
                 </div>
                 <el-tag size="small" :type="member.role === 'lead' ? 'warning' : 'info'">{{ member.role }}</el-tag>
               </div>
               <div class="inline-form">
-                <el-select v-model="memberForm.roleId" placeholder="选择角色">
+                <el-select
+                  v-model="memberForm.source"
+                  style="width: 132px"
+                  aria-label="角色来源"
+                  @change="onMemberSourceChange"
+                >
+                  <el-option label="统筹中心角色" value="center" />
+                  <el-option label="设备角色" value="device" />
+                </el-select>
+                <el-select
+                  v-if="memberForm.source === 'device'"
+                  v-model="memberForm.deviceId"
+                  placeholder="选择设备"
+                  style="width: 148px"
+                  aria-label="目标设备"
+                  :loading="devicesLoading"
+                  @change="loadDeviceRoles"
+                >
                   <el-option
-                    v-for="role in availableRoles"
+                    v-for="device in devices"
+                    :key="device.deviceId"
+                    :label="device.name"
+                    :value="device.deviceId"
+                  />
+                </el-select>
+                <el-select
+                  v-model="memberForm.roleId"
+                  placeholder="选择角色"
+                  :loading="deviceRolesLoading"
+                >
+                  <el-option
+                    v-for="role in memberRoleOptions"
                     :key="role.id"
                     :label="role.name"
                     :value="role.id"
@@ -148,6 +178,44 @@
             <el-option v-for="role in roles" :key="role.id" :label="role.name" :value="role.id" />
           </el-select>
         </el-form-item>
+        <el-form-item label="设备角色成员">
+          <div class="device-member-picker">
+            <el-select
+              v-model="createForm.deviceId"
+              clearable
+              placeholder="选择设备"
+              style="width: 180px"
+              aria-label="设备角色来源设备"
+              :loading="devicesLoading"
+              @change="onCreateDeviceChange"
+            >
+              <el-option
+                v-for="device in devices"
+                :key="device.deviceId"
+                :label="device.name"
+                :value="device.deviceId"
+              />
+            </el-select>
+            <el-select
+              v-model="createForm.deviceMemberIds"
+              multiple
+              filterable
+              collapse-tags
+              placeholder="选择该设备的角色"
+              style="flex: 1"
+              aria-label="设备角色成员"
+              :loading="deviceRolesLoading"
+              :disabled="!createForm.deviceId"
+            >
+              <el-option
+                v-for="role in deviceRoles"
+                :key="role.id"
+                :label="role.name"
+                :value="role.id"
+              />
+            </el-select>
+          </div>
+        </el-form-item>
         <el-checkbox v-model="createForm.sharedMemory">共享团队记忆</el-checkbox>
         <el-checkbox v-model="createForm.sharedWorkspace">共享团队文件</el-checkbox>
       </el-form>
@@ -186,6 +254,7 @@ import { computed, onMounted, reactive, ref } from "vue";
 import { useRoute } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import ExtensionPageHeader from "@/views/extensions/components/ExtensionPageHeader.vue";
+import { coreOwnershipLabel } from "@/runtime/ownership-label";
 import {
   addRoleToTeam,
   createRoleTeam,
@@ -200,6 +269,9 @@ import {
 } from "@/api/role-runtime";
 import type { AgentProfile, Team } from "@/api/role-types";
 import { originalErrorMessage } from "@/runtime/original-error";
+import { apiClient } from "@/composables/useApi";
+import { deviceDisplayName } from "@/runtime/device-display-name";
+import { buildTeamMemberPayload } from "@/runtime/team-member-payload";
 import { useCoreDataAccess } from "@/composables/useCoreDataAccess";
 
 interface TeamDetail {
@@ -229,6 +301,7 @@ const saving = ref(false);
 const addingMember = ref(false);
 const addingContext = ref(false);
 const routing = ref(false);
+const dispatching = ref(false);
 const createVisible = ref(false);
 const editVisible = ref(false);
 
@@ -238,6 +311,8 @@ const createForm = reactive({
   description: "",
   leadAgentId: "",
   memberIds: [] as string[],
+  deviceId: "",
+  deviceMemberIds: [] as string[],
   sharedMemory: true,
   sharedWorkspace: true,
 });
@@ -248,13 +323,115 @@ const editForm = reactive({
   sharedMemory: true,
   sharedWorkspace: true,
 });
-const memberForm = reactive({ roleId: "", role: "member" });
-const contextForm = reactive({ kind: "instruction", content: "" });
-
-const availableRoles = computed(() => {
-  const members = new Set((selectedTeam.value?.members || []).map((member) => String(member.memberId)));
-  return roles.value.filter((role) => !members.has(role.id));
+const memberForm = reactive({
+  source: "center" as "center" | "device",
+  deviceId: "",
+  roleId: "",
+  role: "member",
 });
+const contextForm = reactive({ kind: "instruction", content: "" });
+const devices = ref<Array<{ deviceId: string; name: string }>>([]);
+const devicesLoading = ref(false);
+const deviceRoles = ref<Array<{ id: string; name: string; revision: number }>>([]);
+const deviceRolesLoading = ref(false);
+const deviceRoleNames = ref<Map<string, string>>(new Map());
+
+const memberRoleOptions = computed(() => {
+  const members = selectedTeam.value?.members || [];
+  if (memberForm.source === "device") {
+    if (!memberForm.deviceId) return [];
+    return deviceRoles.value.filter(
+      (role) =>
+        !members.some(
+          (member) =>
+            String(member.ownerType || "") === "device" &&
+            String(member.ownerId || "") === memberForm.deviceId &&
+            String(member.memberId || "") === role.id,
+        ),
+    );
+  }
+  const centerMemberIDs = new Set(
+    members
+      .filter((member) => String(member.ownerType || "center") !== "device")
+      .map((member) => String(member.memberId)),
+  );
+  return roles.value.filter((role) => !centerMemberIDs.has(role.id));
+});
+
+function onMemberSourceChange() {
+  memberForm.roleId = "";
+  deviceRoles.value = [];
+  if (memberForm.source === "device") {
+    void loadDevices();
+    if (memberForm.deviceId) void loadDeviceRoles();
+  }
+}
+
+async function loadDevices() {
+  devicesLoading.value = true;
+  try {
+    const response = await apiClient.get("/api/device-mesh/v1/devices");
+    const payload = (response as any)?.data?.data ?? (response as any)?.data ?? response;
+    const list = Array.isArray(payload?.devices) ? payload.devices : [];
+    devices.value = list.map((device: Record<string, unknown>) => ({
+      deviceId: String(device.deviceId || ""),
+      name: deviceDisplayName(device as any, list as any),
+    }));
+  } catch (cause) {
+    console.error("[original-error]", cause, (cause as { stack?: string })?.stack);
+    ElMessage.error(originalErrorMessage(cause));
+  } finally {
+    devicesLoading.value = false;
+  }
+}
+
+async function fetchDeviceRoles(deviceId: string) {
+  if (!deviceId) return [] as Array<{ id: string; name: string; revision: number }>;
+  const response = await apiClient.get("/api/roles", {
+    params: { device: deviceId, domain: "local" },
+  });
+  const payload = (response as any)?.data?.data ?? (response as any)?.data ?? response;
+  const list = Array.isArray(payload?.roles) ? payload.roles : [];
+  const roles = list.map((role: Record<string, unknown>) => ({
+    id: String(role.id || ""),
+    name: String(role.name || role.id || ""),
+    revision: Number(role.revision) || 0,
+  }));
+  const names = new Map(deviceRoleNames.value);
+  for (const role of roles) names.set(role.id, role.name);
+  deviceRoleNames.value = names;
+  return roles;
+}
+
+async function loadDeviceRoles() {
+  memberForm.roleId = "";
+  deviceRoles.value = [];
+  if (!memberForm.deviceId) return;
+  deviceRolesLoading.value = true;
+  try {
+    deviceRoles.value = await fetchDeviceRoles(memberForm.deviceId);
+  } catch (cause) {
+    console.error("[original-error]", cause, (cause as { stack?: string })?.stack);
+    ElMessage.error(originalErrorMessage(cause));
+  } finally {
+    deviceRolesLoading.value = false;
+  }
+}
+
+async function onCreateDeviceChange() {
+  createForm.deviceMemberIds = [];
+  deviceRoles.value = [];
+  if (!createForm.deviceId) return;
+  deviceRolesLoading.value = true;
+  try {
+    deviceRoles.value = await fetchDeviceRoles(createForm.deviceId);
+  } catch (cause) {
+    console.error("[original-error]", cause, (cause as { stack?: string })?.stack);
+    ElMessage.error(originalErrorMessage(cause));
+  } finally {
+    deviceRolesLoading.value = false;
+  }
+}
 
 function failure(cause: unknown) {
   console.error("[original-error]", cause);
@@ -304,10 +481,13 @@ function openCreate() {
     description: "",
     leadAgentId: "",
     memberIds: [],
+    deviceId: "",
+    deviceMemberIds: [],
     sharedMemory: true,
     sharedWorkspace: true,
   });
   createVisible.value = true;
+  void loadDevices();
 }
 
 function applyTemplate(templateId: string) {
@@ -325,13 +505,31 @@ async function createTeam() {
   creating.value = true;
   try {
     await coreData.requireWrite();
-    const payload = {
-      ...createForm,
+    const deviceMembers = createForm.deviceMemberIds.map((roleId) =>
+      buildTeamMemberPayload({
+        source: "device",
+        deviceId: createForm.deviceId,
+        roleId,
+        role: "member",
+        roleRevision: deviceRoles.value.find((role) => role.id === roleId)?.revision,
+      }),
+    );
+    const payload: Record<string, unknown> = {
+      templateId: createForm.templateId,
+      name: createForm.name,
+      description: createForm.description,
+      leadAgentId: createForm.leadAgentId,
       memberIds: createForm.memberIds.filter((id) => id !== createForm.leadAgentId),
+      sharedMemory: createForm.sharedMemory,
+      sharedWorkspace: createForm.sharedWorkspace,
     };
+    if (deviceMembers.length) payload.members = deviceMembers;
     const team = createForm.templateId
       ? await createRoleTeamFromTemplate(payload)
       : await createRoleTeam(payload);
+    if (createForm.templateId && deviceMembers.length) {
+      for (const member of deviceMembers) await addRoleToTeam(team.id, member);
+    }
     createVisible.value = false;
     await load();
     await selectTeam(team.id);
@@ -381,17 +579,23 @@ async function saveTeam() {
 async function addMember() {
   if (!requireWrite()) return;
   if (!memberForm.roleId) { ElMessage.warning("请先选择角色"); return; }
+  if (memberForm.source === "device" && !memberForm.deviceId) {
+    ElMessage.warning("请先选择设备");
+    return;
+  }
   if (!selectedTeam.value || !memberForm.roleId) return;
   addingMember.value = true;
   try {
     await coreData.requireWrite();
-    await addRoleToTeam(selectedTeam.value.team.id, {
-      memberType: "agent",
-      memberId: memberForm.roleId,
-      role: memberForm.role,
-      responderMode: memberForm.role === "lead" ? "lead" : "mention_or_lead",
-      capabilities: memberForm.role === "lead" ? ["*"] : [],
+    const role = deviceRoles.value.find((item) => item.id === memberForm.roleId);
+    const payload = buildTeamMemberPayload({
+      source: memberForm.source,
+      deviceId: memberForm.deviceId,
+      roleId: memberForm.roleId,
+      role: memberForm.role === "lead" ? "lead" : "member",
+      roleRevision: role?.revision,
     });
+    await addRoleToTeam(selectedTeam.value.team.id, payload);
     await selectTeam(selectedTeam.value.team.id);
     ElMessage.success("角色已加入团队");
   } catch (cause) {
@@ -446,11 +650,48 @@ async function testRoute() {
   }
 }
 
-function memberName(id: string) {
-  return roles.value.find((role) => role.id === id)?.name || id || "系统";
+async function dispatchTeam() {
+  if (!requireWrite()) return;
+  if (!selectedTeam.value) return;
+  const result = await ElMessageBox.prompt("输入要调度给设备角色的消息", "调度设备角色").catch((cause) => {
+    if (cause === "cancel" || cause === "close") return null;
+    throw cause;
+  });
+  if (!result) return;
+  dispatching.value = true;
+  try {
+    await coreData.requireWrite();
+    const response = await apiClient.post(`/api/device-mesh/v1/business/teams/${encodeURIComponent(selectedTeam.value.team.id)}/dispatch`, { message: result.value });
+    const payload = (response as any)?.data?.data ?? (response as any)?.data ?? response;
+    const lines = (payload?.targets || []).map((item: Record<string, any>) => `${memberOwnerLabel({ ownerType: item.ownerId ? "device" : "center", ownerId: item.ownerId })} · ${memberName(String(item.roleId || ""))} · ${item.status}${item.message ? ` · ${item.message}` : ""}${item.text ? `\n${item.text}` : ""}`);
+    await ElMessageBox.alert(lines.join("\n\n") || "没有可调度的目标", "调度结果");
+  } catch (cause) {
+    failure(cause);
+  } finally {
+    dispatching.value = false;
+  }
 }
 
-onMounted(load);
+function memberName(id: string) {
+  return (
+    roles.value.find((role) => role.id === id)?.name ||
+    deviceRoleNames.value.get(id) ||
+    id ||
+    "系统"
+  );
+}
+
+function memberOwnerLabel(member: Record<string, any>) {
+  if (String(member.ownerType || "") !== "device") return "统筹中心";
+  const ownerID = String(member.ownerId || "");
+  const device = devices.value.find((item) => item.deviceId === ownerID);
+  return `设备${device?.name || ownerID}`;
+}
+
+onMounted(async () => {
+  await load();
+  void loadDevices();
+});
 </script>
 
 <style scoped>
@@ -485,7 +726,10 @@ onMounted(load);
 .member-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 0; border-top: 1px solid var(--surface-border); }
 .member-row > div { min-width: 0; }
 .member-row strong, .member-row small { display: block; overflow-wrap: anywhere; }
-.inline-form { display: grid; grid-template-columns: minmax(0, 1fr) 108px auto; margin-top: 10px; }
+.inline-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+.inline-form > .el-select { flex: 1 1 140px; min-width: 0; }
+.inline-form > .el-button { flex: 0 0 auto; }
+.device-member-picker { display: flex; flex-wrap: wrap; gap: 8px; width: 100%; }
 .context-row { padding: 9px 0; border-top: 1px solid var(--surface-border); }
 .context-row p { margin: 7px 0 0; white-space: pre-wrap; line-height: 1.55; }
 .context-editor { display: grid; gap: 8px; margin-top: 10px; }

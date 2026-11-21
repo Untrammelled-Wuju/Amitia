@@ -1,6 +1,5 @@
 import { BrowserWindow } from "electron";
 import { IPC_CHANNELS } from "../../shared/ipc";
-import { getDesktopInstanceID } from "../desktop-identity";
 import {
   getMeshIdentity,
   getMeshStatus,
@@ -9,7 +8,8 @@ import {
   deleteMeshCredential,
   claimPinnedMeshPairing,
 } from "./local-agent-client";
-import { claimPairing } from "./remote-bootstrap-client";
+import { claimPairing, reportDeviceName } from "./remote-bootstrap-client";
+import { getSystemDeviceName } from "../system-name";
 import {
   type DeviceMeshAgentState,
   type DeviceMeshStatusResponse,
@@ -38,6 +38,7 @@ export class DeviceMeshCoordinator {
   private lastStatus: DeviceMeshStatusResponse | null = null;
   private lastDeviceId: string | null = null;
   private lastRuntimeId: string | null = null;
+  private reportedNameKey: string | null = null;
 
   constructor(options: MeshCoordinatorOptions) {
     this.getMainWindow = options.getMainWindow;
@@ -81,7 +82,7 @@ export class DeviceMeshCoordinator {
       deviceId: identity.deviceId,
       runtimeId: identity.runtimeId,
       platform: this.platform,
-      label: `Desktop ${getDesktopInstanceID()}`,
+      label: getSystemDeviceName(),
     };
 
     const ticket = pairing?.fingerprint ? await claimPinnedMeshPairing(cloudBaseUrl, pairing) : await claimPairing(cloudBaseUrl, {
@@ -116,11 +117,32 @@ export class DeviceMeshCoordinator {
         if (!this.lastRuntimeId && status.runtimeId) this.lastRuntimeId = status.runtimeId;
         this.emitStatus(status);
         this.emitState(status.state);
+        if (status.state !== "unprovisioned") void this.reportCurrentName(status);
       }
       return status;
     } catch (error) {
   console.error("[original-error]", error);
 return null;
+    }
+  }
+
+  private async reportCurrentName(status: DeviceMeshStatusResponse): Promise<void> {
+    if (!status.cloudBaseUrl || !status.deviceId) return;
+    let name: string;
+    try {
+      name = getSystemDeviceName();
+    } catch (error) {
+      console.error("[original-error]", error);
+      return;
+    }
+    const key = `${status.cloudBaseUrl}|${status.deviceId}|${name}`;
+    if (this.reportedNameKey === key) return;
+    this.reportedNameKey = key;
+    try {
+      await reportDeviceName(status.cloudBaseUrl, status.deviceId, name);
+    } catch (error) {
+      this.reportedNameKey = null;
+      console.error("[original-error]", error);
     }
   }
 

@@ -12,7 +12,10 @@
         </div>
         <p class="approval-request-hint">以下子设备正在请求加入当前统筹中心，请逐台确认。</p>
         <div v-for="request in approvals" :key="request.requestId" class="approval-request-row">
-          <span>{{ request.label || request.deviceId }} · {{ request.platform }}</span>
+          <span>
+            <strong>{{ request.label || '未命名设备' }}</strong>
+            <small>{{ request.platform }} · {{ request.deviceId }}</small>
+          </span>
           <div>
             <el-button :loading="busy === request.requestId" @click="decidePairing(request, false)">拒绝</el-button>
             <el-button type="primary" :loading="busy === request.requestId" @click="decidePairing(request, true)">批准配对</el-button>
@@ -20,6 +23,33 @@
         </div>
       </div>
     </el-dialog>
+    <el-dialog v-if="roleDomainOpen" v-model="roleDomainOpen" title="默认角色" width="min(520px, 92vw)" append-to-body>
+      <div class="role-domain-body">
+        <p class="role-domain-hint">数据归属跟随角色来源：使用统筹中心角色时数据保存在统筹中心，使用本机角色时数据保存在本机，历史数据不会迁移。</p>
+        <el-radio-group v-model="roleDomainDraft" :disabled="roleDomainSaving" @change="switchRoleDomain(roleDomainDraft)">
+          <el-radio value="local">本机角色</el-radio>
+          <el-radio value="center">统筹中心角色</el-radio>
+        </el-radio-group>
+        <p v-if="roleDomainDraft === 'local'" class="role-domain-warning">切换为本机角色会同时关闭这台设备的中心管理员授权。</p>
+        <el-select v-model="roleDomainRole" :loading="roleDomainLoading" :disabled="roleDomainSaving" clearable placeholder="不指定（调用时再选择）" style="width: 100%">
+          <el-option v-for="role in roleDomainRoles" :key="role.id" :label="role.name || role.id" :value="role.id" />
+        </el-select>
+        <el-alert v-if="roleDomainError" :title="roleDomainError" type="error" show-icon :closable="false" />
+      </div>
+      <template #footer>
+        <el-button @click="roleDomainOpen = false">取消</el-button>
+        <el-button type="primary" :loading="roleDomainSaving" @click="saveRoleDomain">保存</el-button>
+      </template>
+    </el-dialog>
+    <section v-if="currentPolicy" class="current-device-panel">
+      <div class="panel-heading">
+        <div>
+          <h3>当前设备</h3>
+          <p>{{ currentRoleDomain() === "center" ? "使用统筹中心角色" : "使用本机角色" }} · 默认角色 {{ roleDomainLabel() }}</p>
+        </div>
+        <el-button size="small" @click="openRoleDomain">更改默认角色</el-button>
+      </div>
+    </section>
     <section id="bound-devices" class="bound-devices-panel">
       <div class="panel-heading">
         <div>
@@ -33,8 +63,12 @@
         <el-card v-for="device in boundDevices" :key="device.deviceId" shadow="never" class="device-card">
           <div class="device-head">
             <div class="device-title">
-              <strong>{{ device.label || device.deviceId }}</strong>
+              <strong>{{ displayName(device) }}</strong>
               <div class="muted">{{ device.platform }} · {{ formatTime(device.lastHeartbeat) }}</div>
+              <div v-if="device.pendingName" class="device-rename-hint">
+                此设备已更名为：{{ device.pendingName }}
+                <el-button size="small" type="primary" link :loading="busy === device.deviceId" @click="confirmDeviceName(device)">变更</el-button>
+              </div>
             </div>
             <el-tag size="small" :type="device.trustState === 'revoked' ? 'danger' : isDeviceOnline(device) ? 'success' : 'info'" effect="plain">{{ device.trustState === 'revoked' ? "已撤销" : isDeviceOnline(device) ? "在线" : "离线" }}</el-tag>
           </div>
@@ -74,19 +108,34 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { ElMessage } from "element-plus";
 import DeviceCapabilityGrants from "@/components/DeviceCapabilityGrants.vue";
 import { useDeviceManagement } from "@/composables/useDeviceManagement";
 import { canProbeRuntime, isDeviceOnline } from "@/runtime/device-presence";
+import { resolveDeviceDisplayNames } from "@/runtime/device-display-name";
 
 const {
   loading, busy, error, localError, boundDevices, grantDevice, grantsOpen,
   approvals, localIdentity, currentPolicy, canAdminister,
   coreConsoleDeviceId, coordinationAvailable, onlineDeviceCount, refresh,
   refreshAll, decidePairing, loadSync, syncLabel, probe, revoke, formatTime,
-  changeAdministrator,
+  changeAdministrator, confirmDeviceName,
+  roleDomainOpen, roleDomainDraft, roleDomainRole, roleDomainRoles,
+  roleDomainLoading, roleDomainSaving, roleDomainError,
+  currentRoleDomain, currentRoleDomainRole, openRoleDomain, switchRoleDomain, saveRoleDomain,
 } = useDeviceManagement();
+
+function roleDomainLabel() {
+  const roleId = currentRoleDomainRole();
+  if (!roleId) return "未指定";
+  return roleDomainRoles.value.find((role) => role.id === roleId)?.name || roleId;
+}
+
+const displayNames = computed(() => resolveDeviceDisplayNames(boundDevices.value));
+function displayName(device: { deviceId: string }) {
+  return displayNames.value.get(device.deviceId) || "未命名设备";
+}
 
 const approvalDialogVisible = ref(false);
 
@@ -106,6 +155,7 @@ watch(
 .bound-device-management :deep(.el-card__header) { border-bottom: 0; }
 .device-head, .detail-row, .runtime-row, .card-actions, .head-actions, .device-head-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .device-card, .current-device-card { min-width: 0; }
+.device-rename-hint { margin-top: 6px; display: flex; align-items: center; gap: 4px; font-size: var(--ac-font-size-xs); color: var(--el-color-primary); }
 .muted, small { color: var(--el-text-color-secondary); font-size: var(--ac-font-size-xs); margin-top: 4px; }
 .detail-row { padding: 7px 0; font-size: var(--ac-font-size-sm); }
 .detail-row > span:first-child { flex-shrink: 0; color: var(--el-text-color-secondary); }
@@ -119,6 +169,10 @@ code { min-width: 0; overflow-wrap: anywhere; max-width: 65%; text-align: right;
 .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
 .panel-heading h3 { margin: 0; font-size: 16px; font-weight: 600; }
 .panel-heading p { margin: 6px 0 0; font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+.role-domain-body { display: grid; gap: 12px; }
+.role-domain-hint, .role-domain-warning { margin: 0; font-size: var(--ac-font-size-xs); line-height: 1.6; color: var(--el-text-color-secondary); }
+.role-domain-warning { color: var(--el-color-warning); }
+.current-device-panel { margin-bottom: 6px; }
 .device-detail-toggle { margin-top: 14px; }
 .device-detail-toggle > summary { padding: 14px 0 2px; cursor: pointer; color: var(--text-secondary); font-size: 13px; }
 .device-detail-body { padding-top: 14px; }
@@ -137,6 +191,6 @@ code { min-width: 0; overflow-wrap: anywhere; max-width: 65%; text-align: right;
 .approval-request-header span { color: var(--text-secondary); font-size: 12px; }
 .approval-request-hint { margin: 0 0 4px; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
 .approval-request-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 0; border-top: 1px solid var(--el-border-color-lighter); }
-.approval-request-row > span { min-width: 0; overflow-wrap: anywhere; }
+.approval-request-row > span { min-width: 0; overflow-wrap: anywhere; display: grid; gap: 2px; }
 .approval-request-row > div { display: flex; flex-shrink: 0; gap: 8px; }
 </style>

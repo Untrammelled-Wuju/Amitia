@@ -42,7 +42,7 @@
 </template>
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
-import { Browser as BrowserIcon, Close, CollectionTag, Cpu, Files, GitBranch, List, Minus, Plus, Terminal as TerminalIcon } from '@/components/icons/element-plus-icons';
+import { Browser as BrowserIcon, ChatDotRound, Close, CollectionTag, Cpu, Files, GitBranch, List, Minus, Plus, Terminal as TerminalIcon } from '@/components/icons/element-plus-icons';
 import { useWorkbenchStore } from '@/stores/workbench';
 import type { WorkbenchViewKind } from '@/stores/workbench';
 import WorkbenchResourceView from './WorkbenchResourceView.vue';
@@ -58,6 +58,7 @@ const tabIcons: Record<WorkbenchViewKind, object> = {
   terminal: TerminalIcon,
   tasks: List,
   agents: Cpu,
+  chat: ChatDotRound,
 };
 const contextMenu = ref<{ x: number; y: number; tabId: string } | null>(null);
 const contextMenuElement = ref<HTMLElement>();

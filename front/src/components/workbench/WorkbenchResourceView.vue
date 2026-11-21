@@ -1,5 +1,6 @@
 <template>
   <div class="resource-view">
+    <div v-if="tab.kind === 'chat'" class="workbench-chat-host"><WorkbenchChatView :tab-id="tab.id" /></div>
     <div v-if="tab.kind === 'tasks'"><WorkbenchTasksView :conversation-id="store.conversationId" :character-id="store.characterId" /></div>
     <div v-else-if="tab.kind === 'agents'"><WorkbenchAgentRunsView /></div>
     <div v-else-if="tab.targetDeviceId && (tab.kind !== 'browser' || !tab.browserRef)" class="muted" role="alert">目标设备资源不支持远程访问，已阻止向本机错误发起请求。</div>
@@ -113,6 +114,7 @@ import { useWorkbenchStore, type WorkbenchTab } from '@/stores/workbench';
 import WorkbenchBrowserView from './WorkbenchBrowserView.vue';
 import WorkbenchTerminalView from './WorkbenchTerminalView.vue';
 import WorkbenchTasksView from './WorkbenchTasksView.vue';
+import WorkbenchChatView from './WorkbenchChatView.vue';
 import WorkbenchAgentRunsView from './WorkbenchAgentRunsView.vue';
 import ExtensionSlot from '@/components/extension/ExtensionSlot.vue';
 import { parseWorkbenchDocumentChunk, type WorkbenchDocumentContent } from './workbench-document-chunks';
@@ -513,6 +515,8 @@ onBeforeUnmount(() => { sequence++; });
 void initialize();
 </script>
 <style scoped>
+.resource-view:has(> .workbench-chat-host) {padding:0;gap:0;overflow:hidden}
+.workbench-chat-host {display:flex;flex:1 1 auto;min-height:0;height:100%}
 .resource-view {display:flex;flex-direction:column;gap:8px;min-height:0;height:100%;overflow:auto;padding:12px;box-sizing:border-box;color:var(--el-text-color-primary)}.toolbar {display:flex;align-items:center;gap:6px;min-width:0}.toolbar input,.toolbar select {flex:1;min-width:0;border:1px solid var(--surface-border);padding:8px;border-radius:7px;background:var(--workbench-bg);color:inherit}.toolbar button,.external,.load-more {border:1px solid var(--surface-border);border-radius:7px;background:transparent;color:inherit;padding:7px 10px;cursor:pointer}.toolbar button:disabled {opacity:.4;cursor:not-allowed}.path {font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--el-text-color-secondary)}.entry-row {display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--surface-border)}.entry {padding:10px 6px;display:flex;gap:10px;align-items:center;width:100%;text-align:left;border:0;border-bottom:1px solid var(--surface-border);background:transparent;color:inherit;cursor:pointer;overflow-wrap:anywhere}.entry-row .entry {flex:1;border-bottom:0}.entry span:nth-child(2){flex:1}.entry small{flex-shrink:0;color:var(--el-text-color-secondary)}.entry:hover{background:var(--el-fill-color-light)}.muted{font-size:12px;color:var(--el-text-color-secondary);padding:12px 0}.status{font-size:12px;color:var(--el-text-color-secondary)}.error,.conflict{color:var(--el-color-danger)}.code{flex:1;min-height:0;background:var(--el-fill-color-light);padding:12px;white-space:pre;overflow:auto;font-size:12px;line-height:1.5;border-radius:8px}.summary,.section-title{font-size:13px;font-weight:600;padding:8px 0}.summary small{font-weight:400}.section-title{border-bottom:1px solid var(--surface-border)}.commit{padding:10px 0;display:flex;flex-direction:column;gap:3px;border-bottom:1px solid var(--surface-border);font-size:12px}.commit small{color:var(--el-text-color-secondary)}.commit-button{border:0;width:100%;background:transparent;text-align:left;color:inherit;cursor:pointer}.commit-button:hover{background:var(--el-fill-color-light)}.commit-detail{padding:12px;border:1px solid var(--surface-border);border-radius:7px;display:flex;flex-direction:column;gap:6px}.commit-detail .code{flex:none;max-height:340px}.added{color:var(--el-color-success)}.removed{color:var(--el-color-danger)}.hunk{color:var(--el-color-primary)}iframe{width:100%;flex:1;min-height:220px;border:1px solid var(--surface-border);border-radius:8px}.external{align-self:flex-start}
 </style>
 

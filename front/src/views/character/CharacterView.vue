@@ -20,6 +20,16 @@ SPDX-License-Identifier: AGPL-3.0-only
           <el-button size="small" @click="showImportDialog = true">导入</el-button>
           <el-button size="small" type="primary" @click="openCreate">+</el-button>
         </div>
+        <el-radio-group
+          v-if="roleScopeVisible"
+          v-model="roleScope"
+          size="small"
+          class="role-scope-switch"
+          @change="onRoleScopeChange"
+        >
+          <el-radio-button value="local">本机</el-radio-button>
+          <el-radio-button value="center">统筹中心</el-radio-button>
+        </el-radio-group>
       </div>
       <div class="char-list">
         <div
@@ -36,7 +46,7 @@ SPDX-License-Identifier: AGPL-3.0-only
             >{{ c.name?.charAt(0) }}</el-avatar
           >
           <div style="flex: 1; min-width: 0">
-            <span class="char-name">{{ c.name }}</span>
+            <span class="char-name">{{ coreOwnershipLabel("角色", c.name) }}</span>
           </div>
         </div>
         <el-empty
@@ -124,6 +134,19 @@ SPDX-License-Identifier: AGPL-3.0-only
       width="640px"
     >
       <el-form :model="form" label-width="80px">
+        <el-form-item v-if="!editingId" label="创建位置">
+          <el-radio-group v-model="createTarget">
+            <el-radio value="local">在本机创建角色</el-radio>
+            <el-radio value="center">在统筹中心创建角色</el-radio>
+          </el-radio-group>
+          <div class="role-scope-hint">
+            {{
+              createTarget === "local"
+                ? "角色与聊天数据只保存在本机，其他设备无法管理"
+                : "角色与聊天数据保存在统筹中心，其他设备登录后可继续管理"
+            }}
+          </div>
+        </el-form-item>
         <el-form-item label="头像">
           <div class="avatar-upload-row">
             <div
@@ -356,6 +379,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
+import { coreOwnershipLabel } from "@/runtime/ownership-label";
 import { ref, reactive, computed, onMounted, watch, provide } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
@@ -373,6 +397,12 @@ import ExtensionPageHeader from "@/views/extensions/components/ExtensionPageHead
 import type { TemplateItem } from "@/views/character-config/composables/types";
 import { normalizeVoicePitchRatio } from "@/utils/voicePitch";
 import { roleAuthorityConfig } from "@/runtime/role-authority";
+import { getDeploymentConfig } from "@/runtime/runtime-adapter";
+import {
+  roleManagementTarget,
+  withRoleTarget,
+  type RoleManagementTarget,
+} from "@/runtime/role-management-target";
 import { useOwnedSpeech } from "@/composables/useOwnedSpeech";
 import { useCharacterImportExport } from "@/views/character-config/composables/useCharacterImportExport";
 import { useCharacterExtensionTabs } from "./composables/useCharacterExtensionTabs";
@@ -425,6 +455,9 @@ async function confirmImportAndReload() {
 }
 
 const characters = ref<any[]>([]);
+const createTarget = ref<RoleManagementTarget>("local");
+const roleScope = ref<RoleManagementTarget>("center");
+const roleScopeVisible = ref(false);
 const templates = ref<TemplateItem[]>([]);
 const showTemplateDialog = ref(false);
 const templateLoading = ref(false);
@@ -517,7 +550,29 @@ const characterExtensionContext = computed(() => ({
 }));
 const { tabs: characterExtensionTabs } = useCharacterExtensionTabs(characterExtensionContext);
 
+async function authorityFor(target: RoleManagementTarget): Promise<string> {
+  const response = await apiClient.get("/api/characters/authority", {
+    headers: withRoleTarget(undefined, target),
+  });
+  const value = String(response.data?.roleAuthority || "");
+  roleAuthorityConfig(value);
+  return value;
+}
+
+async function onRoleScopeChange(value: string | number | boolean | undefined) {
+  const target = (value === "center" ? "center" : "local") as RoleManagementTarget;
+  roleManagementTarget.value = target;
+  roleScope.value = target;
+  await loadCharacters();
+}
+
 onMounted(async () => {
+  try {
+    roleScopeVisible.value = (await getDeploymentConfig()).mode === "cloud";
+  } catch (error) {
+    console.error("[original-error]", error);
+  }
+  roleScope.value = roleManagementTarget.value || (roleScopeVisible.value ? "center" : "local");
   const settled = await Promise.allSettled([loadPackHistory(), loadTemplates()]);
   for (const result of settled) {
     if (result.status === "rejected") console.error("[original-error]", result.reason);
@@ -637,6 +692,7 @@ function openCreate() {
   if (saving.value) return;
   editorAuthority.value = collectionAuthority.value;
   editingId.value = null;
+  createTarget.value = "local";
   form.name = "";
   form.description = "";
   form.personality = "";
@@ -851,7 +907,13 @@ async function saveCharacter() {
     if (editingId.value) {
       await apiClient.put(`/api/characters/${editingId.value}`, payload, roleAuthorityConfig(editorAuthority.value));
     } else {
-      const r = await apiClient.post("/api/characters", payload, roleAuthorityConfig(editorAuthority.value));
+      const target = createTarget.value;
+      roleManagementTarget.value = target;
+      roleScope.value = target;
+      const authority = await authorityFor(target);
+      const r = await apiClient.post("/api/characters", payload, {
+        headers: withRoleTarget(roleAuthorityConfig(authority).headers, target),
+      });
       const created = r.data?.data || r.data;
       if (created) {
         selectedId.value = String(created.id);
@@ -971,6 +1033,16 @@ async function deleteCurrent() {
   flex-wrap: wrap;
   gap: 6px;
   width: 100%;
+}
+.role-scope-switch { width: 100%; }
+.role-scope-switch :deep(.el-radio-button) { flex: 1; }
+.role-scope-switch :deep(.el-radio-button__inner) { width: 100%; }
+.role-scope-hint {
+  width: 100%;
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--el-text-color-secondary);
 }
 .sidebar-actions :deep(.el-button + .el-button) {
   margin-left: 0;

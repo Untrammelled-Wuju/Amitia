@@ -56,6 +56,18 @@ return new Error(`${fallback} (status=${res.status}): ${error instanceof Error ?
   }
 }
 
+export async function reportDeviceName(cloudBaseURL: string, deviceId: string, name: string): Promise<{ label: string; reportedName: string; pendingName: string; nameRevision: number }> {
+  const res = await cloudFetch(cloudBaseURL, `/api/device-mesh/v1/devices/${encodeURIComponent(deviceId)}/name`, "PUT", { name });
+  if (!res.ok) throw await responseError(res, "device name report failed");
+  const body = await res.json() as { device?: { label?: string; reportedName?: string; pendingName?: string; nameRevision?: number } };
+  return {
+    label: body.device?.label || "",
+    reportedName: body.device?.reportedName || "",
+    pendingName: body.device?.pendingName || "",
+    nameRevision: body.device?.nameRevision || 0,
+  };
+}
+
 export async function getPairingStatus(cloudBaseURL: string): Promise<CloudPairingStatusResponse> {
   const res = await cloudFetch(cloudBaseURL, "/api/public/device-mesh/v1/pairing/status", "GET");
   if (!res.ok) throw await responseError(res, "pairing status failed");

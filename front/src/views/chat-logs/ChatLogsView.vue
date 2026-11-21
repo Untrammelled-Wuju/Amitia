@@ -152,6 +152,8 @@ interface ArchivedConversation {
   archivedAt?: string;
   projectId?: string;
   characterId?: string;
+  ownerId?: string;
+  revision?: number;
 }
 
 interface ArchivedMessage {
@@ -278,7 +280,7 @@ async function batchAction(action: "restore" | "delete") {
       const row = conversations.value.find((item) => item.id === id);
       if (!row) continue;
       try {
-        await owned.edit("conversation", id, action === "restore" ? { archived: false } : {}, { deleted: action === "delete", characterId: row.characterId });
+        await owned.edit("conversation", id, action === "restore" ? { archived: false } : {}, { deleted: action === "delete", characterId: row.characterId, expectedOwnerId: row.ownerId, expectedRevision: row.revision });
         success.push(id);
       } catch (error) { failures.push(`${conversationTitle(row)}: ${batchErrorText(error)}`); }
     }

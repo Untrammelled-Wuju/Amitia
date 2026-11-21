@@ -13,8 +13,10 @@ import { consumeSSEBody } from "@/runtime/sse-stream";
 import { isDeviceBound, isDeviceOnline } from "@/runtime/device-presence";
 
 type Runtime = { runtimeId: string; presence: string; runtimeSessionId?: string };
-type Policy = { deviceId: string; coordinated: boolean; administrator: boolean; modeRevision: number; permissionRevision: number; providerEpoch: number; selectedRole: string };
-type Device = { deviceId: string; platform: string; label: string; trustState: string; presence: string; lastHeartbeat?: string; runtimes?: Runtime[]; coordination?: Policy };
+type Policy = { deviceId: string; coordinated: boolean; administrator: boolean; modeRevision: number; permissionRevision: number; providerEpoch: number; selectedRole: string; centerRole?: string; localRole?: string };
+type RoleDomain = "center" | "local";
+type RoleRow = { id: string; name: string; revision?: number };
+type Device = { deviceId: string; platform: string; label: string; reportedName?: string; pendingName?: string; nameRevision?: number; trustState: string; presence: string; lastHeartbeat?: string; runtimes?: Runtime[]; coordination?: Policy };
 type LocalIdentity = { deviceId?: string; runtimeId?: string; platform?: string; [key: string]: any };
 
 export function useDeviceManagement() {
@@ -88,6 +90,7 @@ export function useDeviceManagement() {
       canAdminister.value = state.canAdminister;
       coreConsoleDeviceId.value = state.coreConsoleDeviceId || "";
       coordinationAvailable.value = state.coordinationAvailable === true;
+      if (coordinationAvailable.value) void loadRoleDomainRoles(currentRoleDomain());
       await refreshPairingApprovals();
       if (canAdminister.value) void startApprovalStream();
       else stopApprovalStream();
@@ -352,6 +355,87 @@ return; }
     finally { busy.value = ''; }
   }
 
+  async function confirmDeviceName(device: Device) {
+    if (!device.pendingName || !canAdminister.value) return;
+    busy.value = device.deviceId;
+    const pendingName = device.pendingName;
+    try {
+      const intent = await originalManagement(undefined, true);
+      await api.post(`/api/device-mesh/v1/devices/${encodeURIComponent(device.deviceId)}/name/confirm`, {}, deviceManagementRequestConfig(intent));
+      if (device.deviceId !== intent.state.policy.deviceId) await management.validate(intent);
+      await refresh();
+      ElMessage.success(`设备名已更新为「${pendingName}」`);
+    } catch (err: any) {
+      ElMessage.error(err?.message || "设备改名确认失败");
+    } finally {
+      busy.value = "";
+    }
+  }
+
+  const roleDomainOpen = ref(false);
+  const roleDomainDraft = ref<RoleDomain>("local");
+  const roleDomainRole = ref("");
+  const roleDomainRoles = ref<RoleRow[]>([]);
+  const roleDomainLoading = ref(false);
+  const roleDomainSaving = ref(false);
+  const roleDomainError = ref("");
+
+  function currentRoleDomain(): RoleDomain {
+    return currentPolicy.value?.coordinated ? "center" : "local";
+  }
+
+  function currentRoleDomainRole(): string {
+    const policy = currentPolicy.value;
+    if (!policy) return "";
+    return String((policy.coordinated ? policy.centerRole : policy.localRole) || "");
+  }
+
+  async function loadRoleDomainRoles(domain: RoleDomain) {
+    roleDomainLoading.value = true;
+    roleDomainError.value = "";
+    try {
+      const result = await api.get<{ roles?: RoleRow[] }>("/api/device-mesh/v1/business/roles", { domain });
+      roleDomainRoles.value = result?.roles ?? [];
+    } catch (err: any) {
+      roleDomainRoles.value = [];
+      roleDomainError.value = err?.message || "角色列表读取失败";
+    } finally {
+      roleDomainLoading.value = false;
+    }
+  }
+
+  async function openRoleDomain() {
+    const policy = currentPolicy.value;
+    if (!policy) return;
+    roleDomainDraft.value = currentRoleDomain();
+    roleDomainRole.value = currentRoleDomainRole();
+    roleDomainOpen.value = true;
+    await loadRoleDomainRoles(roleDomainDraft.value);
+  }
+
+  async function switchRoleDomain(domain: RoleDomain) {
+    roleDomainDraft.value = domain;
+    roleDomainRole.value = "";
+    await loadRoleDomainRoles(domain);
+  }
+
+  async function saveRoleDomain() {
+    const policy = currentPolicy.value;
+    if (!policy || roleDomainSaving.value) return;
+    roleDomainSaving.value = true;
+    roleDomainError.value = "";
+    try {
+      await api.put(`/api/device-mesh/v1/devices/${encodeURIComponent(policy.deviceId)}/role`, { domain: roleDomainDraft.value, role: roleDomainRole.value, expectedRevision: policy.modeRevision });
+      await refresh();
+      roleDomainOpen.value = false;
+      ElMessage.success("默认角色已保存");
+    } catch (err: any) {
+      roleDomainError.value = err?.message || "默认角色保存失败";
+    } finally {
+      roleDomainSaving.value = false;
+    }
+  }
+
   onMounted(async () => {
     await refreshAll();
     if (!disposed && canAdminister.value) {
@@ -386,10 +470,22 @@ return; }
     refreshPairingApprovals,
     decidePairing,
     loadSync,
-    syncLabel,
+    syncLabel, confirmDeviceName,
     probe,
     revoke,
     formatTime,
     changeAdministrator,
+    roleDomainOpen,
+    roleDomainDraft,
+    roleDomainRole,
+    roleDomainRoles,
+    roleDomainLoading,
+    roleDomainSaving,
+    roleDomainError,
+    currentRoleDomain,
+    currentRoleDomainRole,
+    openRoleDomain,
+    switchRoleDomain,
+    saveRoleDomain,
   };
 }

@@ -87,10 +87,43 @@ export async function getApiBaseURLForPath(path: string): Promise<string> {
   return getApiBaseURL();
 }
 
+export const CENTER_CONSOLE_MCP_PREFIX = "/api/device-mesh/v1/business/console/mcp";
+
+export function isDeviceMCPPath(path: string): boolean {
+  const normalized = String(path || "").split("?", 1)[0];
+  return normalized === "/api/mcp" || normalized.startsWith("/api/mcp/");
+}
+
+export function centerConsoleMCPPath(path: string): string {
+  if (!isDeviceMCPPath(path)) return path;
+  return path.replace("/api/mcp", CENTER_CONSOLE_MCP_PREFIX);
+}
+
+export const CENTER_CONSOLE_SKILL_PREFIX = "/api/device-mesh/v1/business/console/skills";
+
+export const DEVICE_SKILL_PREFIX = "/api/extensions/kernel/agent-skills";
+
+export function isDeviceSkillPath(path: string): boolean {
+  const normalized = String(path || "").split("?", 1)[0];
+  return normalized === DEVICE_SKILL_PREFIX || normalized.startsWith(`${DEVICE_SKILL_PREFIX}/`);
+}
+
+export const DEVICE_REMINDER_PREFIX = "/api/reminders";
+
+export function isDeviceReminderPath(path: string): boolean {
+  const normalized = String(path || "").split("?", 1)[0];
+  return normalized === DEVICE_REMINDER_PREFIX || normalized.startsWith(`${DEVICE_REMINDER_PREFIX}/`);
+}
+
+export function centerConsoleSkillPath(path: string): string {
+  if (!isDeviceSkillPath(path)) return path;
+  return path.replace(DEVICE_SKILL_PREFIX, CENTER_CONSOLE_SKILL_PREFIX);
+}
+
 export function isDeviceRoleManagementPath(path: string): boolean {
   const normalized = path.split("?", 1)[0];
   if (normalized === "/api/characters/generate-card" || normalized.endsWith("/test")) return false;
-  return ["/api/characters", "/api/character-templates", "/api/companion/role-profile"].some((prefix) => normalized === prefix || normalized.startsWith(prefix+"/"));
+  return ["/api/characters", "/api/character-templates", "/api/companion/role-profile", "/api/roles"].some((prefix) => normalized === prefix || normalized.startsWith(prefix+"/"));
 }
 
 function normalizeHTTPBaseURL(raw: string): string {

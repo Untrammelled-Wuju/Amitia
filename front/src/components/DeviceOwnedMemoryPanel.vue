@@ -185,6 +185,26 @@ import { ownedMemoryTitle, ownedMemoryFields, ownedMemoryEditableText, ownedMemo
 import { transferMemoryScope } from "@/composables/useMemoryScopeTransfer";
 import { ownedMemoryViewOptions } from "@/runtime/owned-memory-view-options";
 import { useCoreDataAccess } from "@/composables/useCoreDataAccess";
+import { apiClient } from "@/composables/useApi";
+
+const historicalScopes = new Map<string, OwnedExecutionScope>();
+
+async function historicalScopeFor(ownerId: string, roleId: string): Promise<OwnedExecutionScope | null> {
+  const key = `${ownerId}/${roleId}`;
+  const cached = historicalScopes.get(key);
+  if (cached) return cached;
+  try {
+    const response = await apiClient.get("/api/device-mesh/v1/business/historical-scope", { params: { targetDeviceId: ownerId, characterId: roleId } });
+    const payload = (response as any)?.data?.data ?? (response as any)?.data ?? response;
+    const scope = payload?.executionScope as OwnedExecutionScope | undefined;
+    if (!scope) return null;
+    historicalScopes.set(key, scope);
+    return scope;
+  } catch (cause) {
+    console.error("[original-error]", cause, (cause as { stack?: string })?.stack);
+    return null;
+  }
+}
 
 const props = defineProps<{ visible: boolean; characterId: string; conversationId: string; embedded?: boolean; initialKind?: string; fixedKind?: boolean; requestedMemoryView?: string; mode?: string; kinds?: string[]; source?: string; search?: string }>();
 defineEmits<{ "update:visible": [value: boolean] }>();
@@ -397,7 +417,9 @@ async function loadAggregate() {
       for (const row of snapshot.resources.filter((item: any) => item.kind === currentKind)) {
         if (row.ownerId !== snapshot.ownerId || !row.roleId) continue;
         if (!result.executionScope.memoryViewAll && row.roleId !== (historical ? source.value.slice(8) : memoryStorageRole(result.executionScope, currentKind))) continue;
-        const recordScope = result.executionScope.memoryViewAll ? memoryRecordScope(result.executionScope, row.roleId) : result.executionScope;
+        const recordScope = result.executionScope.coordinated && row.ownerId !== result.executionScope.resourceOwnerId
+          ? (await historicalScopeFor(row.ownerId, row.roleId)) || result.executionScope
+          : result.executionScope.memoryViewAll ? memoryRecordScope(result.executionScope, row.roleId) : result.executionScope;
         collected.push({ ...row, executionScope: recordScope });
       }
       owner.value = snapshot.ownerId;
@@ -451,7 +473,9 @@ async function load(older = false) {
     const merged = new Map((older ? rows.value : []).map((row: any) => [`${row.ownerId}/${row.kind}/${row.id}`, row]));
     for (const row of snapshot.resources.filter((row: any) => row.kind === currentKind)) {
       if (row.ownerId !== snapshot.ownerId || !row.roleId || !result.executionScope.memoryViewAll && row.roleId !== (historical ? source.value.slice(8) : memoryStorageRole(result.executionScope, currentKind))) throw new Error("记忆所属设备或角色无效，请重新加载");
-      const recordScope = result.executionScope.memoryViewAll ? memoryRecordScope(result.executionScope, row.roleId) : result.executionScope;
+      const recordScope = result.executionScope.coordinated && row.ownerId !== result.executionScope.resourceOwnerId
+        ? (await historicalScopeFor(row.ownerId, row.roleId)) || result.executionScope
+        : result.executionScope.memoryViewAll ? memoryRecordScope(result.executionScope, row.roleId) : result.executionScope;
       merged.set(`${row.ownerId}/${row.kind}/${row.id}`, { ...row, executionScope: recordScope });
     }
     rows.value = Array.from(merged.values());
@@ -519,7 +543,7 @@ async function setProactiveMention(row: any) {
 async function editContent(row: any) {
   const original = JSON.parse(JSON.stringify(row));
   try {
-    const result = await ElMessageBox.prompt("修改当前数据所有者保存的内容会记录为用户更正，并将该记忆标记为已验证；原设备历史记录需在原设备管理。", row.kind === "summary" ? "编辑摘要" : "更正记忆", { inputType: "textarea", inputValue: content(original), inputValidator: (value) => Boolean(String(value || "").trim()) && new TextEncoder().encode(value).length <= 131072 || "内容不能为空或超出128 KiB", confirmButtonText: "保存更正", cancelButtonText: "取消" });
+    const result = await ElMessageBox.prompt("修改会记录为用户更正，并将该记忆标记为已验证；原设备历史记录会写回该设备原库。", row.kind === "summary" ? "编辑摘要" : "更正记忆", { inputType: "textarea", inputValue: content(original), inputValidator: (value) => Boolean(String(value || "").trim()) && new TextEncoder().encode(value).length <= 131072 || "内容不能为空或超出128 KiB", confirmButtonText: "保存更正", cancelButtonText: "取消" });
     const text = result.value.trim();
     const current = original.body.content;
     const updated = typeof current === "object" && current !== null ? { ...current, [original.kind === "summary" ? Object.hasOwn(current, "text") && !Object.hasOwn(current, "summary") ? "text" : "summary" : Object.hasOwn(current, "text") && !Object.hasOwn(current, "value") ? "text" : "value"]: text } : text;

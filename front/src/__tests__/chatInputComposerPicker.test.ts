@@ -228,19 +228,42 @@ describe("ChatInput command palette", () => {
     wrapper.unmount();
   });
 
-  it("routes a generic file through the unified file input", async () => {
+  it("keeps picked files pending until the user sends them", async () => {
     const wrapper = await mountInput();
     await flushPromises();
     const input = wrapper.get('input[type="file"]');
-    const file = new File(["report"], "report.pdf", {
+    expect(input.attributes("multiple")).toBeDefined();
+    const report = new File(["report"], "report.pdf", {
       type: "application/pdf",
+    });
+    const deck = new File(["deck"], "deck.pptx", {
+      type: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     });
     Object.defineProperty(input.element, "files", {
       configurable: true,
-      value: [file],
+      value: [report, deck],
     });
     await input.trigger("change");
-    expect(wrapper.emitted("file")?.[0]).toEqual([file]);
+    await flushPromises();
+
+    expect(wrapper.emitted("file")).toBeUndefined();
+    expect(wrapper.emitted("sendFiles")).toBeUndefined();
+    const cards = wrapper.findAll(".attachment-card");
+    expect(cards).toHaveLength(2);
+    expect(cards[0].text()).toContain("report.pdf");
+    expect(cards[1].text()).toContain("deck.pptx");
+
+    await wrapper.get(".context-remove").trigger("click");
+    await flushPromises();
+    expect(wrapper.findAll(".attachment-card")).toHaveLength(1);
+
+    await wrapper.get("textarea").setValue("看下这份材料");
+    await wrapper.get('[data-amitia-ui="chat.composer.send"]').trigger("click");
+    await flushPromises();
+
+    expect(wrapper.emitted("sendFiles")?.[0]).toEqual(["看下这份材料", [deck]]);
+    expect(wrapper.findAll(".attachment-card")).toHaveLength(0);
+    expect(wrapper.get("textarea").element.value).toBe("");
     wrapper.unmount();
   });
 });

@@ -210,7 +210,7 @@ export const useChatStore = defineStore("chat", () => {
   async function updateProject(projectId: string, input: Partial<Pick<ProjectItem, "name" | "workspaces" | "primaryWorkspaceId">> & { pinned?: boolean; hidden?: boolean }, intent?: ProjectItem) {
     if (owned.enabled.value) {
       const project = intent || sidebar.value.projects.find((row) => row.id === projectId);
-      if (project?.readOnly) throw new Error("旧项目为只读，请在原设备管理");
+      if (project?.readOnly && !owned.policy.value?.coordinated) throw new Error("旧项目为只读，请在原设备管理");
       if (!project?.executionScope || !project.ownerId || !project.revision || !project.resourceId) throw new Error("请重新加载项目后修改");
       await owned.edit("project", project.resourceId, { ...(input.name !== undefined ? { title: input.name } : {}), ...(input.pinned !== undefined ? { pinned: input.pinned } : {}), ...(input.hidden !== undefined ? { hidden: input.hidden } : {}), ...(input.workspaces !== undefined ? { workspaces: input.workspaces } : {}), ...(input.primaryWorkspaceId !== undefined ? { primaryWorkspaceId: input.primaryWorkspaceId } : {}) }, { characterId: project.executionScope.roleId, expectedExecutionScope: project.executionScope, expectedOwnerId: project.ownerId, expectedRevision: project.revision });
       await fetchSidebar();

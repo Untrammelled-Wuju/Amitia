@@ -33,7 +33,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       bare
       render-fallback-while-scope-pending
     >
-    <section ref="chatSurfaceRef" class="chat-surface" :class="{ 'chat-surface--sidebar': conversationSidebarVisible }" data-amitia-ui="chat.surface">
+    <section ref="chatSurfaceRef" class="chat-surface" :class="{ 'chat-surface--sidebar': conversationSidebarVisible, 'chat-surface--embedded': props.embedded }" data-amitia-ui="chat.surface">
     <AutomationStatusIndicator :status="automationStatus" />
 
     <Teleport v-if="titlebarTeleportReady" :to="titlebarTeleportTarget" :disabled="!useTitlebarChrome">
@@ -227,9 +227,12 @@ SPDX-License-Identifier: AGPL-3.0-only
     >
     <div ref="composerRegionRef" class="composer-region" data-amitia-ui="chat.composer">
       <QueuedMessages :items="queuedMessages" :busy="queueBusy" :can-steer="sending || isSubmitting" :error="queueError"
+        :editing-id="editingQueue?.requestId || ''"
         @reorder="ids => runQueueAction(() => queue.reorder(ids))"
         @remove="id => runQueueAction(() => queue.remove(id))"
-        @steer="id => runQueueAction(() => queue.steer(id))" />
+        @steer="id => runQueueAction(() => queue.steer(id))"
+        @edit="beginQueueEdit"
+        @open-side="openQueueInSideWorkspace" />
       <div v-if="group" class="group-composer-members" aria-label="群成员点名">
         <button v-for="member in activeGroupMembers" :key="member.memberId" type="button" @click="insertGroupMention(member)">@{{ member.characterName }}</button>
         <button type="button" class="mention-all" @click="insertAllGroupMentions">@所有成员</button>
@@ -242,6 +245,14 @@ SPDX-License-Identifier: AGPL-3.0-only
           :title="!group.groupSettings.allowCharacterMentions ? '请先在群成员设置中开启角色互相 @' : '让多个角色按顺序进行多轮讨论'"
           @click="groupDiscussion = !groupDiscussion"
         >{{ groupDiscussion ? "讨论模式已开启" : "多角色讨论" }}</button>
+      </div>
+      <div v-if="editingQueue" class="queue-edit-bar" role="status" data-amitia-ui="chat.queue.edit">
+        <span class="queue-edit-label">正在编辑排队消息</span>
+        <span v-for="(attachment, index) in editingAttachments" :key="`${attachment.artifactId}-${index}`" class="queue-edit-chip">
+          <span class="queue-edit-chip-name">{{ attachment.name }}</span>
+          <button type="button" :aria-label="`移除附件 ${attachment.name}`" title="移除附件" @click="removeEditingAttachment(index)">×</button>
+        </span>
+        <button type="button" class="queue-edit-cancel" @click="cancelQueueEdit()">取消编辑</button>
       </div>
       <UIProviderHost
       capability="conversation.composer"
@@ -272,14 +283,10 @@ SPDX-License-Identifier: AGPL-3.0-only
       :role-model-preview-change="handleRoleModelSettingPreviewChange"
       :role-model-commit-change="handleRoleModelSettingChange"
       @send="handleQueuedOrSend"
-      @image="onImageAttached"
-      @removeImage="onImageRemoved"
+      @sendFiles="handleSendFiles"
       @stop="handleStop"
       @voiceAudio="handleVoiceAudio"
       @voiceText="handleVoiceText"
-      @video="onVideoAttached"
-      @removeVideo="onVideoRemoved"
-      @file="handleFileSend"
       @cancel-reply="replyTarget = null"
       @update:permission="handlePermissionModeChange"
     /></div>
@@ -329,9 +336,9 @@ import { useConversationRuntime } from "../../composables/useConversationRuntime
 import AutomationStatusIndicator from "../../components/AutomationStatusIndicator.vue";
 import { useWebChatScroll } from "../../composables/useWebChatScroll";
 import { ownedQuoteReferenceForMessage, useWebChatSend } from "../../composables/useWebChatSend";
-import { useConversationQueue } from "../../composables/useConversationQueue";
+import { useConversationQueue, type QueuedMessage } from "../../composables/useConversationQueue";
 import { resolveGroupMentions } from "../../composables/groupMentions";
-import { uploadOwnedAttachment, type OwnedAttachment } from "@/runtime/device-owned-attachments";
+import { uploadOwnedAttachment, ownedAttachmentKindOf, type OwnedAttachment } from "@/runtime/device-owned-attachments";
 import QueuedMessages from "../../components/QueuedMessages.vue";
 import { useWebChatConversation } from "../../composables/useWebChatConversation";
 import { useDeviceOwnedConversation } from "../../composables/useDeviceOwnedConversation";
@@ -372,6 +379,13 @@ import type { OwnedGroupMember, OwnedGroupState } from "@/runtime/device-owned-c
 
 const router = useRouter();
 const route = useRoute();
+const props = withDefaults(defineProps<{
+  embedded?: boolean;
+  initialConversationId?: string;
+  initialCharacterId?: string;
+  initialDraftText?: string;
+}>(), { embedded: false, initialConversationId: "", initialCharacterId: "", initialDraftText: "" });
+const emit = defineEmits<{ conversationCreated: [conversationId: string] }>();
 const callActive = ref(false);
 const callMode = ref<"voice" | "video" | "screen">("voice");
 const boundCallScope = ref<OwnedExecutionScope | null>(null);
@@ -440,12 +454,15 @@ const chatStore = useChatStore();
 const workbench = useWorkbenchStore();
 
 const persistedMessages = ref<any[]>([]);
-const convId = ref(String(route.query.conversationId || ""));
+const convId = ref(props.embedded ? props.initialConversationId : String(route.query.conversationId || ""));
 const convTitle = ref("");
-const characterId = ref("");
+const characterId = ref(props.embedded ? props.initialCharacterId : "");
 const showGroupMembers = ref(false);
 const messageContentLoading = ref(false);
-watch([convId, characterId], ([id, role]) => workbench.setConversation(id, role), { immediate: true });
+watch([convId, characterId], ([id, role]) => {
+  if (props.embedded) return;
+  workbench.setConversation(id, role);
+}, { immediate: true });
 const cachedDef = (() => {
   try {
     const v = localStorage.getItem("uai-default-char");
@@ -538,7 +555,7 @@ const hasConversationSidebar = computed(() => hasSidebarExtensions.value || hasE
 const hasConversationOverlay = computed(() => callActive.value || hasStatusExtensions.value || hasExternalOverlayProvider.value);
 const sidebarDrawerOpen = ref(false);
 const isSmallViewport = ref(window.innerWidth < 1024);
-const useTitlebarChrome = ref(window.innerWidth >= 900);
+const useTitlebarChrome = ref(!props.embedded && window.innerWidth >= 900);
 const titlebarTargetElement = ref<HTMLElement | null>(null);
 const titlebarTeleportTarget = computed<string | HTMLElement>(() => titlebarTargetElement.value || "body");
 const titlebarTeleportReady = computed(() => !useTitlebarChrome.value || Boolean(titlebarTargetElement.value));
@@ -564,7 +581,7 @@ function startTitlebarTargetObserver() {
 
 function updateViewport() {
   isSmallViewport.value = window.innerWidth < 1024;
-  useTitlebarChrome.value = window.innerWidth >= 900;
+  useTitlebarChrome.value = !props.embedded && window.innerWidth >= 900;
 }
 
 const chatSurfaceRef = ref<HTMLElement>();
@@ -634,6 +651,15 @@ async function handleNewChat(event?: CustomEvent) {
 
 async function handleFileSend(file: File) {
   if (!file) return;
+  if (editingQueue.value) {
+    try {
+      const uploaded = await uploadOwnedAttachment({ file, kind: "file", name: file.name });
+      editingAttachments.value = [...editingAttachments.value, uploaded];
+    } catch (cause) {
+      await ElMessageBox.alert(queue.reportError(cause), "附件上传失败", { confirmButtonText: "关闭" });
+    }
+    return;
+  }
   if (sending.value || isSubmitting.value) {
     try { await enqueueQueuedMessage(`[文件] ${file.name}`, [await uploadOwnedAttachment({ file, kind: "file", name: file.name })]); }
     catch (cause) { await ElMessageBox.alert(queue.reportError(cause), "文件加入队列失败", { confirmButtonText: "关闭" }); }
@@ -641,6 +667,23 @@ async function handleFileSend(file: File) {
   }
   try { if (await owned.refresh()) { if (!characterId.value) { ElMessage.warning("请先选择调用角色"); return; } await handleOwnedFileSend(file); return; } } catch (error: any) { ElMessage.error(error?.message || "文件发送失败"); return; }
   ElMessage.error(owned.notice.value || "设备对话服务尚未就绪，附件未发送");
+}
+
+async function handleSendFiles(text: string, files: File[]) {
+  if (!files.length) {
+    if (text.trim()) await handleQueuedOrSend(text);
+    return;
+  }
+  if (editingQueue.value) {
+    try {
+      const uploaded = await Promise.all(files.map((file) => uploadOwnedAttachment({ file, kind: ownedAttachmentKindOf(file), name: file.name })));
+      editingAttachments.value = [...editingAttachments.value, ...uploaded];
+    } catch (cause) {
+      await ElMessageBox.alert(queue.reportError(cause), "附件上传失败", { confirmButtonText: "关闭" });
+    }
+    return;
+  }
+  await handleSendWithFiles(text, files);
 }
 
 function findConversationMessage(messageId: string, ownerId?: string) {
@@ -1016,6 +1059,7 @@ function resetConversationScope() {
 }
 
 function handleSidebarDraftCreated() {
+  if (props.embedded) return;
   resetForNewDraft();
   resetConversationScope();
   convId.value = "";
@@ -1025,15 +1069,15 @@ function handleSidebarDraftCreated() {
 }
 
 const {
-  onImageAttached,
   onImageRemoved,
-  onVideoAttached,
   onVideoRemoved,
   handleVoiceAudio,
   handleVoiceText,
   handleFileSend: handleOwnedFileSend,
   handleImageSend,
   handleSend,
+  handleSendWithFiles,
+  imageAttachmentInput,
   handleStop,
   handleRetry,
   handleClear,
@@ -1061,6 +1105,12 @@ const {
   replyTarget,
   async (conversationId) => {
     if (convId.value !== conversationId) return;
+    if (props.embedded) {
+      emit("conversationCreated", conversationId);
+      if (convId.value !== conversationId) return;
+      void connectSSE(false);
+      return;
+    }
     await router.replace({
       path: "/chat",
       query: { conversationId },
@@ -1087,6 +1137,57 @@ const {
 const queue = useConversationQueue(convId, characterId, activeTurnId);
 const { items: queuedMessages, busy: queueBusy, error: queueError } = queue;
 
+const editingQueue = ref<{ requestId: string; message: string } | null>(null);
+const editingAttachments = ref<OwnedAttachment[]>([]);
+
+function toOwnedAttachments(items: QueuedMessage["attachments"]): OwnedAttachment[] {
+  return (items || [])
+    .filter((item) => item.artifactId && item.ownerDeviceId && item.storageDeviceId && item.sha256 && typeof item.sizeBytes === "number")
+    .map((item) => ({
+      artifactId: item.artifactId as string,
+      ownerDeviceId: item.ownerDeviceId as string,
+      storageDeviceId: item.storageDeviceId as string,
+      kind: item.kind as OwnedAttachment["kind"],
+      name: item.name,
+      mimeType: item.mimeType || "application/octet-stream",
+      sha256: item.sha256 as string,
+      sizeBytes: item.sizeBytes as number,
+    }));
+}
+
+function beginQueueEdit(requestId: string) {
+  const item = queuedMessages.value.find((row) => row.requestId === requestId);
+  if (!item) return;
+  if (item.status !== "queued") {
+    ElMessage.warning("该排队消息已开始执行，无法编辑");
+    return;
+  }
+  editingQueue.value = { requestId, message: item.message };
+  editingAttachments.value = toOwnedAttachments(item.attachments);
+  inputRef.value?.setText?.(item.message);
+  inputRef.value?.focus?.();
+}
+
+function cancelQueueEdit(clearComposer = true) {
+  if (clearComposer) inputRef.value?.clear?.();
+  editingQueue.value = null;
+  editingAttachments.value = [];
+}
+
+function removeEditingAttachment(index: number) {
+  editingAttachments.value = editingAttachments.value.filter((_, position) => position !== index);
+}
+
+watch(queuedMessages, (items) => {
+  const editing = editingQueue.value;
+  if (!editing) return;
+  const current = items.find((item) => item.requestId === editing.requestId);
+  if (!current || current.status !== "queued") {
+    cancelQueueEdit(false);
+    ElMessage.info("该排队消息已开始执行，已退出编辑");
+  }
+});
+
 async function runQueueAction(action: () => Promise<void>) {
   try {
     await action();
@@ -1097,17 +1198,13 @@ async function runQueueAction(action: () => Promise<void>) {
 }
 
 async function handleQueuedOrSend(text: string, imageBase64?: string, videoBase64?: string) {
+  if (editingQueue.value) return submitQueueEdit(text, imageBase64, videoBase64);
   if (!sending.value && !isSubmitting.value) return handleSend(text, imageBase64, videoBase64);
   const id = convId.value;
-  const imageName = currentImageFile.value?.name || "image.png";
   const videoFile = getPendingVideoFile();
   try {
     const attachments: OwnedAttachment[] = [];
-    if (imageBase64) {
-      const imageFile = currentImageFile.value;
-      if (!imageFile) throw new Error("图片原始文件不可用，请重新选择图片");
-      attachments.push(await uploadOwnedAttachment({ file: imageFile, kind: "image", name: imageName }));
-    }
+    if (imageBase64) attachments.push(await uploadOwnedAttachment(await imageAttachmentInput(imageBase64)));
     if (videoBase64) {
       if (!videoFile) throw new Error("视频文件已变化，请重新选择视频");
       attachments.push(await uploadOwnedAttachment({ file: videoFile, kind: "video", name: videoFile.name }));
@@ -1120,6 +1217,46 @@ async function handleQueuedOrSend(text: string, imageBase64?: string, videoBase6
     const detail = queue.reportError(cause);
     await ElMessageBox.alert(`${detail}\n\n未入队的消息：\n${text}`, "加入队列失败", { confirmButtonText: "关闭" });
   }
+}
+
+async function submitQueueEdit(text: string, imageBase64?: string, videoBase64?: string) {
+  const editing = editingQueue.value;
+  if (!editing) return;
+  const conversationId = convId.value;
+  const attachments = [...editingAttachments.value];
+  try {
+    if (imageBase64) attachments.push(await uploadOwnedAttachment(await imageAttachmentInput(imageBase64)));
+    if (videoBase64) {
+      const videoFile = getPendingVideoFile();
+      if (!videoFile) throw new Error("视频文件已变化，请重新选择视频");
+      attachments.push(await uploadOwnedAttachment({ file: videoFile, kind: "video", name: videoFile.name }));
+    }
+    const content = text.trim() || (attachments.length ? `[${attachments.map((attachment) => attachment.name).join("、")}]` : "");
+    if (!content) throw new Error("消息内容为空");
+    await queue.update(editing.requestId, content, attachments);
+    if (convId.value !== conversationId) return;
+    editingQueue.value = null;
+    editingAttachments.value = [];
+    inputRef.value?.clear?.();
+    if (imageBase64) onImageRemoved();
+    if (videoBase64) onVideoRemoved();
+  } catch (cause) {
+    if (convId.value === conversationId && !inputRef.value?.getText?.()) inputRef.value?.setText?.(text);
+    const detail = queue.reportError(cause);
+    await ElMessageBox.alert(detail, "更新排队消息失败", { confirmButtonText: "关闭" });
+  }
+}
+
+function openQueueInSideWorkspace(requestId: string) {
+  const item = queuedMessages.value.find((row) => row.requestId === requestId);
+  if (!item) return;
+  workbench.openSideChat({
+    queueRequestId: item.requestId,
+    message: item.message,
+    attachments: item.attachments || [],
+    sourceConversationId: convId.value,
+    roleId: characterId.value,
+  });
 }
 
 async function enqueueQueuedMessage(text: string, attachments: OwnedAttachment[] = []) {
@@ -1317,6 +1454,7 @@ watch(
 watch(
   () => [String(route.query.conversationId || ""), String(route.query.characterId || ""), String(route.query.ownerId || "")],
   async ([nextId, nextRole, nextOwner]) => {
+    if (props.embedded) return;
     if (nextOwner) {
       try { await owned.refresh(); } catch (error: any) { modelError.value = error?.message || '无法确认通知执行核心'; return; }
       if (owned.coreId.value !== nextOwner) {
@@ -1353,8 +1491,21 @@ watch(
 watch(
   () => String(route.query.projectId || ""),
   async (projectId) => {
-    if (convId.value) return;
+    if (props.embedded || convId.value) return;
     await loadConversationWorkspace("", projectId);
+  },
+);
+
+watch(
+  () => props.initialConversationId,
+  async (nextId) => {
+    if (!props.embedded || !nextId || nextId === convId.value) return;
+    convId.value = nextId;
+    try {
+      await loadCharacterConversation({ retryOnFailure: true });
+    } catch (error) {
+      if (convId.value === nextId) modelError.value = error instanceof Error ? error.message : "聊天数据加载失败，请重试";
+    }
   },
 );
 
@@ -1435,6 +1586,11 @@ watch(isOffline, (offline) => {
 });
 
 onMounted(async () => {
+  if (props.embedded) {
+    await nextTick();
+    if (!convId.value && props.initialDraftText) inputRef.value?.setText?.(props.initialDraftText);
+    inputRef.value?.focus?.();
+  }
   startTitlebarTargetObserver();
   startChatLayoutObserver();
   window.addEventListener("resize", updateViewport);
@@ -1652,6 +1808,12 @@ function handleScopeChanged() {
 .chat-header-region.is-titlebar :deep(.header-actions *) { -webkit-app-region: no-drag; }
 .chat-status-region { position: absolute; top: var(--chat-header-h, 44px); left: 0; right: 0; z-index: 2; display: flex; flex-direction: column; gap: 6px; padding: 0 14px; }
 .composer-region { position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; }
+.queue-edit-bar { display: flex; align-items: center; gap: 6px; width: min(760px, calc(100% - 48px)); margin: 0 auto 6px; padding: 4px 10px; border-radius: 10px; background: color-mix(in srgb, var(--ac-color-primary, var(--el-color-primary)) 12%, transparent); font-size: 11px; color: var(--el-text-color-secondary); }
+.queue-edit-label { flex: none; font-weight: 600; color: var(--ac-color-primary, var(--el-color-primary)); }
+.queue-edit-chip { display: inline-flex; align-items: center; gap: 2px; max-width: 180px; padding: 1px 4px 1px 7px; border-radius: 999px; background: var(--el-fill-color-light); color: var(--el-text-color-regular); }
+.queue-edit-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.queue-edit-chip button { border: 0; padding: 0 2px; background: transparent; color: var(--el-text-color-secondary); font-size: 12px; line-height: 1; cursor: pointer; }
+.queue-edit-bar .queue-edit-cancel { margin-left: auto; border: 0; padding: 0 2px; background: transparent; color: var(--ac-color-primary, var(--el-color-primary)); font-size: 11px; cursor: pointer; }
 .group-composer-members { display: flex; gap: 6px; width: min(760px, calc(100% - 48px)); margin: 0 auto; padding-bottom: 6px; overflow-x: auto; scrollbar-width: none; }
 .group-composer-members::-webkit-scrollbar { display: none; }
 .group-composer-members button { flex: 0 0 auto; min-height: 26px; padding: 2px 9px; border: 1px solid var(--surface-border); border-radius: 999px; background: var(--bg-surface, var(--chat-surface-bg)); color: var(--text-secondary); cursor: pointer; font-size: 11px; }
@@ -1665,6 +1827,11 @@ function handleScopeChanged() {
 .chat-scroll-fade--top { top: 0; height: var(--chat-header-h, 44px); background: linear-gradient(to bottom, color-mix(in srgb, var(--chat-surface-bg) 96%, transparent), color-mix(in srgb, var(--chat-surface-bg) 0%, transparent)); }
 .chat-scroll-fade--bottom { bottom: 0; height: var(--chat-composer-h, 120px); background: linear-gradient(to top, color-mix(in srgb, var(--chat-surface-bg) 96%, transparent), color-mix(in srgb, var(--chat-surface-bg) 0%, transparent)); }
 .chat-surface--sidebar .chat-scroll-fade { right: min(320px, 32%); }
+.chat-surface--embedded .chat-header-region,
+.chat-surface--embedded .chat-sidebar-region,
+.chat-surface--embedded .chat-status-region,
+.chat-surface--embedded .chat-scroll-fade--top { display: none; }
+.chat-surface--embedded .chat-scroll-fade--bottom { height: 84px; }
 @media (max-width: 768px) {
   .group-composer-members { width: calc(100% - 16px); }
   .webchat-page {

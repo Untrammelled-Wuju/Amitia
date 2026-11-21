@@ -52,12 +52,49 @@ describe("owned conversation history", () => {
     await expect(owned.editConversationSummary("meshconv1:a:chat", "again")).rejects.toThrow("请先加载");
   });
 
-  it("keeps a historical summary readable without allowing writes", async () => {
+  it("resolves the device scope for archive edits without a supplied scope", async () => {
     const owned = useDeviceOwnedConversation();
-    mocks.get.mockResolvedValue({ data: { executionScope: scope, snapshot: { ownerId: "a", resources: [] }, historicalSnapshot: { ownerId: "old", resources: [{ kind: "summary", id: "chat/summary", ownerId: "old", revision: 1, body: { content: { summary: "history" } } }] } } });
-    expect((await owned.conversationSummary("chat", "role"))?.editable).toBe(false);
-    await expect(owned.editConversationSummary("chat", undefined, true)).rejects.toThrow("历史摘要");
-    expect(mocks.post).not.toHaveBeenCalled();
+    owned.enabled.value = true;
+    owned.policy.value = { coordinated: true, providerEpoch: 1, modeRevision: 1, permissionRevision: 1, selectedRole: "role" } as any;
+    const base = { spaceId: "space", initiatorDeviceId: "a", authorizationRealm: "mesh", providerEpoch: 1, targetProviderEpoch: 1, modeRevision: 1, permissionRevision: 1, targetPermissionRevision: 1, roleId: "role", roleRevision: 1, requestId: "r", turnId: "t", executionId: "e" };
+    const deviceScope = { ...base, coordinated: true, coreId: "core", resourceOwnerId: "old", roleOwnerId: "old", targetDeviceId: "old" };
+    mocks.get.mockResolvedValue({ data: { executionScope: deviceScope } });
+    mocks.post.mockResolvedValue({ data: { ownerId: "old", versions: { "conversation/meshconv1:old:chat": 4 } } });
+    await owned.edit("conversation", "meshconv1:old:chat", { archived: false }, { characterId: "role", expectedOwnerId: "old", expectedRevision: 3 });
+    expect(mocks.get.mock.calls[0][0]).toBe("/api/device-mesh/v1/business/historical-scope");
+    expect(mocks.get.mock.calls[0][1].params).toEqual({ targetDeviceId: "old", characterId: "role" });
+    expect(mocks.post.mock.calls[0][1]).toMatchObject({ id: "meshconv1:old:chat", expectedRevision: 3, expectedExecutionScope: deviceScope, changes: { archived: false } });
+  });
+
+  it("edits a historical message through the device original scope", async () => {
+    const owned = useDeviceOwnedConversation();
+    owned.enabled.value = true;
+    const base = { spaceId: "space", initiatorDeviceId: "a", authorizationRealm: "mesh", providerEpoch: 1, targetProviderEpoch: 1, modeRevision: 1, permissionRevision: 1, targetPermissionRevision: 1, roleId: "role", roleRevision: 1, requestId: "r", turnId: "t", executionId: "e" };
+    const currentScope = { ...base, coordinated: true, coreId: "core", resourceOwnerId: "core", roleOwnerId: "core", targetDeviceId: "a" };
+    const deviceScope = { ...base, coordinated: true, coreId: "core", resourceOwnerId: "old", roleOwnerId: "old", targetDeviceId: "old", initiatorDeviceId: "a" };
+    mocks.get.mockResolvedValue({ data: { executionScope: deviceScope } });
+    mocks.post.mockResolvedValue({ data: { ownerId: "old", versions: { "message/m1": 4 } } });
+    await owned.edit("message", "m1", { content: "corrected" }, { characterId: "role", expectedExecutionScope: currentScope, expectedOwnerId: "old", expectedRevision: 3 });
+    expect(mocks.get.mock.calls[0][0]).toBe("/api/device-mesh/v1/business/historical-scope");
+    expect(mocks.get.mock.calls[0][1].params).toEqual({ targetDeviceId: "old", characterId: "role" });
+    expect(mocks.post.mock.calls[0][1]).toMatchObject({ id: "m1", expectedRevision: 3, expectedExecutionScope: deviceScope, changes: { content: "corrected" } });
+  });
+
+  it("edits a historical summary through the device original scope", async () => {
+    const owned = useDeviceOwnedConversation();
+    owned.enabled.value = true;
+    const base = { spaceId: "space", initiatorDeviceId: "a", authorizationRealm: "mesh", providerEpoch: 1, targetProviderEpoch: 1, modeRevision: 1, permissionRevision: 1, targetPermissionRevision: 1, roleId: "role", roleRevision: 1, requestId: "r", turnId: "t", executionId: "e" };
+    const currentScope = { ...base, coordinated: true, coreId: "core", resourceOwnerId: "core", roleOwnerId: "core", targetDeviceId: "a" };
+    const deviceScope = { ...base, coordinated: true, coreId: "core", resourceOwnerId: "old", roleOwnerId: "old", targetDeviceId: "old" };
+    mocks.get.mockResolvedValueOnce({ data: { executionScope: currentScope, snapshot: { ownerId: "core", resources: [] }, historicalSnapshot: { ownerId: "old", resources: [{ kind: "summary", id: "chat/summary", ownerId: "old", revision: 1, body: { content: { summary: "history" } } }] } } });
+    const displayed = await owned.conversationSummary("chat", "role");
+    expect(displayed?.editable).toBe(true);
+    expect(displayed?.sourceOwnerId).toBe("old");
+    mocks.get.mockResolvedValueOnce({ data: { executionScope: deviceScope } });
+    mocks.post.mockResolvedValue({ data: { ownerId: "old", versions: { "summary/chat/summary": 2 } } });
+    await owned.editConversationSummary("chat", "edited", false, displayed?.summaryViewId);
+    expect(mocks.get.mock.calls[1][0]).toBe("/api/device-mesh/v1/business/historical-scope");
+    expect(mocks.post.mock.calls[0][1]).toMatchObject({ id: "chat/summary", expectedRevision: 1, expectedExecutionScope: deviceScope, changes: { content: { summary: "edited" } } });
   });
 
   it("generates through Core with the prepared owner version and requires its acknowledgement", async () => {

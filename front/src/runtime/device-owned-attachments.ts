@@ -49,6 +49,14 @@ function validAttachmentName(name: string): boolean {
   return !!name && new TextEncoder().encode(name).length <= 256 && !/[\x00\r\n]/.test(name);
 }
 
+export function ownedAttachmentKindOf(file: { type?: string; name?: string }): OwnedAttachment["kind"] {
+  const type = String(file?.type || "").toLowerCase();
+  const name = String(file?.name || "");
+  if (type.startsWith("image/") || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(name)) return "image";
+  if (type.startsWith("video/") || /\.(mp4|m4v|mov|webm|avi|mkv)$/i.test(name)) return "video";
+  return "file";
+}
+
 export async function uploadOwnedAttachment(input: OwnedAttachmentInput): Promise<OwnedAttachment> {
   const name = String(input.name || (input.file as File).name || "attachment").trim();
   if (!(input.file.size > 0) || !validAttachmentName(name)) {

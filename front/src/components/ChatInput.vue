@@ -7,6 +7,7 @@ SPDX-License-Identifier: AGPL-3.0-only
     <input
       ref="genericFileInputRef"
       type="file"
+      multiple
       class="hidden-input"
       @change="handleGenericFileInput"
     />
@@ -88,49 +89,36 @@ SPDX-License-Identifier: AGPL-3.0-only
             render-fallback-while-scope-pending
           >
           <div class="composer-context">
-            <div v-if="attachedImage" class="attachment-card image-attachment">
+            <div
+              v-for="attachment in pendingAttachments"
+              :key="attachment.id"
+              class="attachment-card"
+              :class="`${attachment.kind}-attachment`"
+              :data-amitia-ui="`chat.composer.attachment.${attachment.kind}`"
+            >
               <span
+                v-if="attachment.kind === 'image'"
                 class="attachment-thumb"
                 :style="{
-                  backgroundImage: attachedImagePreview
-                    ? `url(${attachedImagePreview})`
+                  backgroundImage: attachment.previewUrl
+                    ? `url(${attachment.previewUrl})`
                     : undefined,
                 }"
               ></span>
-              <span class="attachment-copy">
-                <strong>{{ attachedImage?.name || "图片" }}</strong>
-                <small v-if="processingImage">图片处理中...</small>
-                <small v-else>图片</small>
-              </span>
-              <button
-                type="button"
-                class="context-remove"
-                aria-label="移除图片"
-                @click="clearImage"
-              >
-                <el-icon><CloseBold /></el-icon>
-              </button>
-            </div>
-
-            <div v-if="attachedVideo" class="attachment-card video-attachment">
-              <span class="attachment-icon"
-                ><el-icon><VideoCamera /></el-icon
+              <span v-else class="attachment-icon"
+                ><el-icon
+                  ><VideoCamera v-if="attachment.kind === 'video'" /><Document
+                    v-else /></el-icon
               ></span>
               <span class="attachment-copy">
-                <strong>{{ attachedVideo.name }}</strong>
-                <small v-if="uploadingVideo">上传中...</small>
-                <small v-else-if="attachedVideoUrl" class="is-ready"
-                  >视频已就绪</small
-                >
-                <small v-else-if="videoUploadError" class="is-error">{{ videoUploadError }}</small>
-                <small v-else>等待上传</small>
+                <strong>{{ attachment.name }}</strong>
+                <small>{{ attachmentSizeLabel(attachment.size) }}</small>
               </span>
               <button
                 type="button"
                 class="context-remove"
-                aria-label="移除视频"
-                :disabled="uploadingVideo"
-                @click="clearVideo"
+                :aria-label="`移除附件 ${attachment.name}`"
+                @click="removePendingAttachment(attachment.id)"
               >
                 <el-icon><CloseBold /></el-icon>
               </button>
@@ -622,9 +610,6 @@ SPDX-License-Identifier: AGPL-3.0-only
               :aria-disabled="
                 !(generating && !hasSendableContent) &&
                 (isInputDisabled ||
-                  uploadingVideo ||
-                  !!videoUploadError ||
-                  processingImage ||
                   !hasSendableContent ||
                   (isSubmitting && !generating))
               "
@@ -668,6 +653,7 @@ import {
   ArrowRight,
   Check,
   CloseBold,
+  Document,
   MagicStick,
   Keyboard,
   Microphone,
@@ -680,7 +666,8 @@ import {
 } from "@element-plus/icons-vue";
 import { useTextInput } from "../composables/useTextInput";
 import { useChatInputPreference, shouldEnterSend } from "../composables/useChatInputPreference";
-import { useMediaUpload } from "../composables/useMediaUpload";
+import { convertImageToPng, isVisionImageTypeSupported } from "../composables/useMediaUpload";
+import { ownedAttachmentKindOf } from "@/runtime/device-owned-attachments";
 import { useVoiceInput } from "../composables/useVoiceInput";
 import { fetchAgentSkills } from "../views/extensions/api";
 import type { AgentSkillDefinition } from "../views/extensions/types";
@@ -768,12 +755,8 @@ const emit = defineEmits<{
   toggleCall: [];
   voiceText: [text: string];
   voiceAudio: [blob: Blob, transcript?: string, duration?: number];
-  image: [file: File, base64: string];
-  removeImage: [];
-  video: [file: File, videoUrl: string];
-  removeVideo: [];
+  sendFiles: [text: string, files: File[]];
   cancelReply: [];
-  file: [file: File];
   "preview-model": [
     modelId: number,
     reasoningEffort: string,
@@ -806,26 +789,55 @@ function guardUnavailableInput(event: Event, reason = "") {
   if (reason) ElMessage.warning(reason);
   else showInputUnavailable();
 }
-const mediaUpload = useMediaUpload(
-  (file: File, base64: string) => emit("image", file, base64),
-  (file: File, videoUrl: string) => emit("video", file, videoUrl),
-  () => emit("removeImage"),
-  () => emit("removeVideo"),
-);
+interface PendingAttachment {
+  id: string;
+  file: File;
+  kind: "image" | "video" | "file";
+  name: string;
+  size: number;
+  previewUrl?: string;
+}
 
-const {
-  attachedImage,
-  attachedImagePreview,
-  attachedVideo,
-  attachedVideoUrl,
-  uploadingVideo,
-  videoUploadError,
-  processingImage,
-  handleImageSelect,
-  clearImage,
-  handleVideoSelect,
-  clearVideo,
-} = mediaUpload;
+const pendingAttachments = ref<PendingAttachment[]>([]);
+let pendingAttachmentSequence = 0;
+
+function attachmentSizeLabel(size: number) {
+  if (!Number.isFinite(size) || size <= 0) return "0 B";
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function releasePendingAttachment(item?: PendingAttachment) {
+  if (item?.previewUrl?.startsWith("blob:")) URL.revokeObjectURL(item.previewUrl);
+}
+
+function removePendingAttachment(id: string) {
+  const index = pendingAttachments.value.findIndex((item) => item.id === id);
+  if (index < 0) return;
+  releasePendingAttachment(pendingAttachments.value[index]);
+  pendingAttachments.value.splice(index, 1);
+}
+
+function clearPendingAttachments() {
+  pendingAttachments.value.forEach(releasePendingAttachment);
+  pendingAttachments.value = [];
+}
+
+async function addPendingAttachment(file: File) {
+  const kind = ownedAttachmentKindOf(file) as PendingAttachment["kind"];
+  const normalized = kind === "image" && !isVisionImageTypeSupported(file.type)
+    ? await convertImageToPng(file)
+    : file;
+  pendingAttachments.value.push({
+    id: `pending-attachment-${++pendingAttachmentSequence}`,
+    file: normalized,
+    kind,
+    name: normalized.name || file.name || "附件",
+    size: normalized.size,
+    previewUrl: kind === "image" ? URL.createObjectURL(normalized) : undefined,
+  });
+}
 
 const genericFileInputRef = ref<HTMLInputElement | null>(null);
 const inputWrapperRef = ref<HTMLElement>();
@@ -1143,8 +1155,6 @@ const textInput = useTextInput(emit as any, isDisabled, draftKey);
 const {
   text,
   inputRef,
-  sendWithImage,
-  sendWithVideo,
   autoResize,
   focus,
   setText,
@@ -1209,12 +1219,9 @@ const composerInputActions = Object.freeze({
     return false;
   },
   removeAttachment(id: string) {
-    if (String(id) === "image" && attachedImage.value) {
-      clearImage();
-      return;
-    }
-    if (String(id) === "video" && attachedVideo.value) {
-      clearVideo();
+    const value = String(id);
+    if (pendingAttachments.value.some((item) => item.id === value)) {
+      removePendingAttachment(value);
       return;
     }
     throw new Error(`DSH draft attachment ${id} is not owned by the Amitia composer`);
@@ -1225,12 +1232,9 @@ const composerInputActions = Object.freeze({
   },
 });
 
-const composerAttachmentIds = computed(() => {
-  const ids: string[] = [];
-  if (attachedImage.value) ids.push("image");
-  if (attachedVideo.value) ids.push("video");
-  return ids;
-});
+const composerAttachmentIds = computed(() =>
+  pendingAttachments.value.map((item) => item.id),
+);
 
 const composerSlotContext = computed(() => ({
   characterId: props.characterId,
@@ -1296,8 +1300,7 @@ const replyTargetExcerpt = computed(() => {
 
 const hasComposerContext = computed(
   () =>
-    !!attachedImage.value ||
-    !!attachedVideo.value ||
+    pendingAttachments.value.length > 0 ||
     selectedSkillNames.value.length > 0,
 );
 const hasSendableContent = computed(
@@ -1480,46 +1483,17 @@ function openGenericFilePicker() {
   genericFileInputRef.value?.click();
 }
 
-function handleGenericFileInput(event: Event) {
+async function handleGenericFileInput(event: Event) {
   const input = event.target as HTMLInputElement;
-  const file = input.files?.[0];
-  const kind = file ? uploadKind(file) : "";
-  if (kind === "image") {
-    void handleImageInput(event);
-    return;
-  }
-  if (kind === "video") {
-    handleVideoInput(event);
-    return;
-  }
+  const files = Array.from(input.files || []);
   input.value = "";
-  if (file) emit("file", file);
-}
-
-function uploadKind(file: File) {
-  if (file.type.startsWith("image/") || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(file.name)) {
-    return "image";
+  for (const file of files) {
+    try {
+      await addPendingAttachment(file);
+    } catch (error) {
+      ElMessage.error(error instanceof Error ? error.message : String(error));
+    }
   }
-  if (file.type.startsWith("video/") || /\.(mp4|m4v|mov|webm|avi|mkv)$/i.test(file.name)) {
-    return "video";
-  }
-  return "file";
-}
-
-async function handleImageInput(event: Event) {
-  if (attachedVideo.value) clearVideo();
-  try {
-    await handleImageSelect(event);
-  } catch (error) {
-    ElMessage.error(
-      error instanceof Error ? error.message : "图片转换为 PNG 失败",
-    );
-  }
-}
-
-function handleVideoInput(event: Event) {
-  if (attachedImage.value) clearImage();
-  handleVideoSelect(event);
 }
 
 function toggleSkill(name: string) {
@@ -1716,35 +1690,19 @@ async function submitComposer(event?: KeyboardEvent) {
     showInputUnavailable();
     return;
   }
-  if ((!props.generating && props.isSubmitting) || processingImage.value || uploadingVideo.value) {
+  if ((!props.generating && props.isSubmitting)) {
     ElMessage.warning("正在处理消息或附件，请稍后重试。");
-    return;
-  }
-  if (videoUploadError.value) {
-    ElMessage.error(videoUploadError.value);
     return;
   }
   const outgoingText = buildOutgoingText(text.value);
 
-  if (attachedVideo.value) {
-    if (!attachedVideoUrl.value) {
-      ElMessage.error(videoUploadError.value || "视频尚未上传完成");
-      return;
-    }
-    sendWithVideo(outgoingText || "[视频]", attachedVideoUrl.value);
-    clearVideo();
+  if (pendingAttachments.value.length) {
+    const files = pendingAttachments.value.map((item) => item.file);
+    clearPendingAttachments();
+    emit("sendFiles", outgoingText, files);
+    clearText();
     finishSubmit();
-    return;
-  }
-
-  if (attachedImage.value) {
-    if (!attachedImagePreview.value) {
-      ElMessage.error("图片预览尚未就绪");
-      return;
-    }
-    sendWithImage(outgoingText, attachedImagePreview.value);
-    clearImage();
-    finishSubmit();
+    nextTick(autoResize);
     return;
   }
 
@@ -1776,6 +1734,7 @@ function toggleVoiceMode() {
 watch(
   () => props.conversationId,
   (conversationId) => {
+    clearPendingAttachments();
     loadConversationWorkspace(conversationId || "");
   },
   { immediate: true },
@@ -1801,6 +1760,7 @@ onMounted(() => {
   window.addEventListener("keydown", handleGlobalComposerKey, true);
 });
 onUnmounted(() => {
+  clearPendingAttachments();
   clearTimeout(skillsSearchTimer);
   document.removeEventListener("pointerdown", handleComposerOutsidePointer);
   window.removeEventListener("keydown", handleGlobalChatPaste, true);

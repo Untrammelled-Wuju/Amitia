@@ -351,10 +351,10 @@ export function useDeviceOwnedConversation() {
       }
       for (const snapshot of [result.historicalSnapshot, result.snapshot]) {
         if (!snapshot) continue;
-        for (const value of snapshot.resources.filter((resource) => resource.kind === "conversation").map((resource) => resource.body)) {
-          if (value?.id) {
-            const row = ownedConversationRow(value, snapshot.ownerId);
-            rows.set(row.id, row);
+        for (const value of snapshot.resources.filter((resource) => resource.kind === "conversation").map((resource) => ({ resource, body: resource.body }))) {
+          if (value.body?.id) {
+            const row = ownedConversationRow(value.body, snapshot.ownerId);
+            rows.set(row.id, { ...row, revision: value.resource.revision });
           }
         }
       }
@@ -412,6 +412,23 @@ export function useDeviceOwnedConversation() {
     return createOwnedConversationExport(conversationId, rows, format);
   }
 
+  const historicalScopeCache = new Map<string, OwnedExecutionScope>();
+
+  async function resolveHistoricalScope(ownerId: string, roleId: string): Promise<OwnedExecutionScope | null> {
+    const key = `${ownerId}/${roleId}`;
+    const cached = historicalScopeCache.get(key);
+    if (cached) return cached;
+    try {
+      const result = unwrap<{ executionScope: OwnedExecutionScope }>(await apiClient.get("/api/device-mesh/v1/business/historical-scope", { params: { targetDeviceId: ownerId, characterId: roleId } }));
+      const scope = result?.executionScope || null;
+      if (scope) historicalScopeCache.set(key, scope);
+      return scope;
+    } catch (cause) {
+      console.error("[original-error]", cause, (cause as { stack?: string })?.stack);
+      return null;
+    }
+  }
+
   async function edit(kind: "conversation" | "message" | "memory" | "summary" | "project" | "emotion", id: string, changes: Record<string, unknown> = {}, options: { deleted?: boolean; clear?: boolean; characterId?: string; expectedExecutionScope?: OwnedExecutionScope; expectedOwnerId?: string; expectedRevision?: number } = {}) {
     if (!enabled.value) throw new Error("设备数据服务尚未就绪");
     const captured = revision;
@@ -419,6 +436,33 @@ export function useDeviceOwnedConversation() {
     const origin = kind === "conversation" ? parseConversationReference(id) : undefined;
     const characterId = options.characterId || resource?.roleId || selectInitialRole();
     if (!characterId) throw new Error("请先指定当前数据所属的角色");
+    let scope = options.expectedExecutionScope;
+    const coordinatedNow = scope ? scope.coordinated === true : policy.value?.coordinated === true;
+    if (options.expectedOwnerId && coordinatedNow && (!scope || options.expectedOwnerId !== scope.resourceOwnerId)) {
+      const resolved = await resolveHistoricalScope(options.expectedOwnerId, characterId);
+      if (resolved) scope = resolved;
+    }
+    const historical =
+      !!scope &&
+      !!options.expectedOwnerId &&
+      scope.coordinated &&
+      options.expectedOwnerId === scope.resourceOwnerId &&
+      scope.roleOwnerId === scope.resourceOwnerId &&
+      scope.targetDeviceId === scope.resourceOwnerId &&
+      scope.resourceOwnerId !== scope.coreId;
+    if (historical) {
+      if (!options.expectedRevision) throw new Error("历史数据缺少版本，请重新加载");
+      const response = unwrap<any>(await apiClient.post("/api/device-mesh/v1/business/resources/edit", {
+        requestId: crypto.randomUUID(), kind, id, characterId,
+        expectedRevision: options.expectedRevision,
+        expectedExecutionScope: scope,
+        changes, deleted: options.deleted === true, clear: options.clear === true,
+      }));
+      if (captured !== revision) throw new Error("服务状态已变化，请重新加载确认操作结果");
+      if (response.ownerId !== options.expectedOwnerId || response.versions?.[`${kind}/${id}`] !== options.expectedRevision + 1) throw new Error("数据所有者尚未确认操作结果");
+      resourceCache.clear();
+      return response;
+    }
     if (kind === "conversation") {
       await query(id, characterId);
       resource = resourceCache.get(`${kind}/${id}`);
@@ -454,7 +498,7 @@ export function useDeviceOwnedConversation() {
       const row = snapshot.resources.find((resource) => resource.kind === "summary" && !resource.deleted && resource.body);
       if (row) {
         const content = row.body.content;
-        const value = { summaryViewId: crypto.randomUUID(), summaryText: String(typeof content === "object" && content !== null ? content.summary || content.text || "" : content || ""), sourceOwnerId: snapshot.ownerId, sourceResourceId: row.id, sourceRevision: row.revision, sourceScope: { ...result.executionScope }, editable: snapshot === result.snapshot && row.ownerId === result.executionScope.resourceOwnerId && row.readOnly !== true };
+        const value = { summaryViewId: crypto.randomUUID(), summaryText: String(typeof content === "object" && content !== null ? content.summary || content.text || "" : content || ""), sourceOwnerId: snapshot.ownerId, sourceResourceId: row.id, sourceRevision: row.revision, sourceScope: { ...result.executionScope }, editable: row.readOnly !== true };
         summaryViews.set(conversationId, value);
         if (summaryViews.size > 64) summaryViews.delete(summaryViews.keys().next().value!);
         return { ...value, sourceScope: { ...value.sourceScope } };
@@ -465,7 +509,7 @@ export function useDeviceOwnedConversation() {
 
   async function editConversationSummary(conversationId: string, text?: string, deleted = false, displayedViewId?: string) {
     const displayed = summaryViews.get(conversationId);
-    if (!displayed?.editable || !Number.isSafeInteger(displayed.sourceRevision)) throw new Error("请先加载当前所有者的摘要，历史摘要需在原设备管理");
+    if (!displayed?.editable || !Number.isSafeInteger(displayed.sourceRevision)) throw new Error("请先加载摘要，数据来源可能已变化");
     if (!displayedViewId || displayedViewId !== displayed.summaryViewId) throw new Error("摘要视图已变化，请重新打开编辑");
     await edit("summary", displayed.sourceResourceId, deleted ? {} : { content: { summary: String(text || "").trim() } }, { deleted, characterId: displayed.sourceScope.roleId, expectedOwnerId: displayed.sourceOwnerId, expectedRevision: displayed.sourceRevision, expectedExecutionScope: displayed.sourceScope });
     summaryViews.delete(conversationId);

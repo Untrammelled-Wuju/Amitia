@@ -33,6 +33,7 @@ import {
   createPairingOffer as cloudCreatePairingOffer,
 } from "./device-mesh/remote-bootstrap-client";
 import { clearDesktopClientErrors, getDesktopClientErrors } from "./client-diagnostics";
+import { getSystemDeviceName } from "./system-name";
 
 const EXTENSION_PACKAGE_MAX_BYTES = 512 * 1024 * 1024;
 
@@ -70,6 +71,7 @@ export function registerIpcHandlers(
     arch: process.arch,
     version: app.getVersion(),
     isPackaged: app.isPackaged,
+    deviceName: getSystemDeviceName(),
   }));
 
   ipcMain.handle(IPC_CHANNELS.getDeploymentConfig, async () => {

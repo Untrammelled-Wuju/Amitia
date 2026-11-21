@@ -54,6 +54,7 @@ export interface DesktopEnvironment {
   arch: string;
   version: string;
   isPackaged: boolean;
+  deviceName: string;
 }
 
 export interface DesktopClientError {

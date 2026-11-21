@@ -145,6 +145,20 @@ export function getWebDeviceAuthHeaders(baseURL: string): Record<string, string>
   };
 }
 
+async function resolveSystemDeviceName(): Promise<string> {
+  const desktop = (window as any).amitiaDesktop;
+  if (desktop?.getEnvironment) {
+    try {
+      const environment = await desktop.getEnvironment();
+      const name = typeof environment?.deviceName === "string" ? environment.deviceName.trim() : "";
+      if (name) return name;
+    } catch (error) {
+      console.error("[original-error]", error);
+    }
+  }
+  return `Web ${navigator.platform || navigator.userAgent || "Browser"}`;
+}
+
 export async function getWebPairingStatus(baseURL: string): Promise<PairingStatus> {
   const normalized = normalizeBaseURL(baseURL);
   const response = await fetch(`${normalized}/api/public/device-mesh/v1/pairing/status`, {
@@ -160,7 +174,7 @@ export async function provisionWebDevice(baseURL: string, pairing: PairingInput)
   const status = await getWebPairingStatus(normalized);
   const body = {
     deviceId: identity.deviceId, runtimeId: identity.runtimeId, platform: identity.platform,
-    label: `Web ${navigator.platform || navigator.userAgent || "Browser"}`.slice(0, 96),
+    label: (await resolveSystemDeviceName()).slice(0, 96),
     offerToken: pairing.offerToken?.trim() || "", setupCode: pairing.setupCode?.trim() || "",
   };
   async function claim() {

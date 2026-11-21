@@ -2,13 +2,24 @@ import { onUnmounted, ref, watch, type Ref } from "vue";
 import { ownedChatRuntimeRequest, ownedChatRuntimeScopedRequest } from "@/runtime/owned-chat-management";
 import type { OwnedExecutionScope } from "@/runtime/device-owned-chat";
 
+export interface QueuedAttachmentRef {
+  artifactId?: string;
+  ownerDeviceId?: string;
+  storageDeviceId?: string;
+  kind: string;
+  name: string;
+  mimeType?: string;
+  sha256?: string;
+  sizeBytes?: number;
+}
+
 export interface QueuedMessage {
   requestId: string;
   message: string;
   position: number;
   status: string;
   error?: string;
-  attachments?: Array<{ kind: string; name: string; mimeType: string }>;
+  attachments?: QueuedAttachmentRef[];
   quote?: { ownerId: string; characterId: string; conversationId: string; messageId: string; expectedRevision: number };
 }
 
@@ -96,6 +107,7 @@ export function useConversationQueue(conversationId: Ref<string>, characterId: R
     error,
     busy,
     enqueue: (message: string, options: Record<string, unknown>) => operate("queue/enqueue", { message, ...options }),
+    update: (queuedRequestId: string, message: string, attachments: unknown[] = []) => operate("queue/update", { queuedRequestId, message, attachments }),
     remove: (queuedRequestId: string) => operate("queue/delete", { queuedRequestId }),
     steer: (queuedRequestId: string) => operate("queue/steer", { queuedRequestId, turnId: activeTurnId.value }),
     reorder: (queueOrder: string[]) => operate("queue/reorder", { queueOrder }),

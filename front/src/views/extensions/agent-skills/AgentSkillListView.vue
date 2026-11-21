@@ -6,6 +6,15 @@
     >
       <template #actions
         ><div class="header-actions">
+          <el-radio-group
+            v-if="skillScopeVisible"
+            v-model="skillScope"
+            size="small"
+            @change="onSkillScopeChange"
+          >
+            <el-radio-button value="local">本机</el-radio-button>
+            <el-radio-button value="center">统筹中心</el-radio-button>
+          </el-radio-group>
           <el-button :icon="Refresh" :loading="loading" @click="load"
             >刷新</el-button
           ><el-button type="primary" :icon="Upload" @click="importDialog = true"
@@ -71,7 +80,7 @@
               type="button"
               @click="openDetail(row.id)"
             >
-              <strong>{{ row.displayName || row.name }}</strong
+              <strong>{{ skillLabel(row.displayName || row.name) }}</strong
               ><code>${{ row.name }}</code>
             </button></template
           ></el-table-column
@@ -419,6 +428,13 @@ import { computed, onMounted, reactive, ref } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { Files, FolderOpened, Refresh, Upload } from "@element-plus/icons-vue";
 import ExtensionPageHeader from "../components/ExtensionPageHeader.vue";
+import { coreOwnershipLabel, deviceOwnershipLabel } from "@/runtime/ownership-label";
+import { getDeploymentConfig } from "@/runtime/runtime-adapter";
+import {
+  skillManagementTarget,
+  type RoleManagementTarget,
+} from "@/runtime/role-management-target";
+import { useLocalDeviceName } from "@/composables/useLocalDeviceName";
 import {
   fetchAgentSkill,
   fetchAgentSkills,
@@ -444,6 +460,22 @@ const loading = ref(false),
   detailOpen = ref(false);
 const errorText = ref(""),
   changing = ref("");
+const skillScope = ref<RoleManagementTarget>("local");
+const skillScopeVisible = ref(false);
+const { localDeviceName } = useLocalDeviceName();
+
+function skillLabel(name: string) {
+  return skillScope.value === "center"
+    ? coreOwnershipLabel("skill", name)
+    : deviceOwnershipLabel(localDeviceName.value, "skill", name);
+}
+
+async function onSkillScopeChange(value: string | number | boolean | undefined) {
+  const target = (value === "center" ? "center" : "local") as RoleManagementTarget;
+  skillManagementTarget.value = target;
+  skillScope.value = target;
+  await load();
+}
 const zipInput = ref<HTMLInputElement>(),
   directoryInput = ref<HTMLInputElement>();
 const items = ref<AgentSkillDefinition[]>([]),
@@ -690,7 +722,16 @@ function statusType(status: AgentSkillCompatibilityStatus) {
       ? "danger"
       : "warning";
 }
-onMounted(load);
+onMounted(async () => {
+  try {
+    skillScopeVisible.value = (await getDeploymentConfig()).mode === "cloud";
+  } catch (error) {
+    console.error("[original-error]", error);
+  }
+  skillScope.value = skillManagementTarget.value || "local";
+  skillManagementTarget.value = skillScope.value;
+  await load();
+});
 </script>
 
 <style scoped>

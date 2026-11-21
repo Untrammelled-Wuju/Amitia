@@ -5,6 +5,15 @@
       description="连接外部 MCP Server，并按角色、工具和权限控制 AI 可使用的能力。"
     >
       <template #actions>
+        <el-radio-group
+          v-if="sourceVisible"
+          v-model="sourceTarget"
+          size="small"
+          @change="onSourceChange"
+        >
+          <el-radio-button value="local">本机</el-radio-button>
+          <el-radio-button value="center">统筹中心</el-radio-button>
+        </el-radio-group>
         <el-button :icon="Refresh" :loading="loading" @click="load"
           >刷新</el-button
         >
@@ -74,7 +83,7 @@
         <el-table-column label="服务" min-width="240">
           <template #default="{ row }">
             <button class="server-link" type="button" @click="openDetails(row)">
-              <span>{{ row.displayName || row.name }}</span>
+              <span>{{ serverLabel(row.displayName || row.name) }}</span>
               <code>{{
                 row.transport === "stdio" ? row.command : row.endpoint
               }}</code>
@@ -289,7 +298,7 @@
       <template #header
         ><div class="drawer-title">
           <div>
-            <strong>{{ selected?.displayName || selected?.name }}</strong
+            <strong>{{ serverLabel(selected?.displayName || selected?.name || "") }}</strong
             ><span>{{ selected?.description || "暂无说明" }}</span>
           </div>
           <el-tag :type="statusType(selected?.status || '')">{{
@@ -741,6 +750,10 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
+import { coreOwnershipLabel, deviceOwnershipLabel } from "@/runtime/ownership-label";
+import { getDeploymentConfig } from "@/runtime/runtime-adapter";
+import { mcpManagementTarget, type RoleManagementTarget } from "@/runtime/role-management-target";
+import { useLocalDeviceName } from "@/composables/useLocalDeviceName";
 import {
   ElMessage,
   ElMessageBox,
@@ -796,6 +809,22 @@ const actingId = ref("");
 const query = ref("");
 const statusFilter = ref("");
 const servers = ref<MCPServer[]>([]);
+const sourceTarget = ref<RoleManagementTarget>("local");
+const sourceVisible = ref(false);
+const { localDeviceName } = useLocalDeviceName();
+
+function serverLabel(name: string) {
+  return sourceTarget.value === "center"
+    ? coreOwnershipLabel("mcp", name)
+    : deviceOwnershipLabel(localDeviceName.value, "mcp", name);
+}
+
+async function onSourceChange(value: string | number | boolean | undefined) {
+  const target = (value === "center" ? "center" : "local") as RoleManagementTarget;
+  mcpManagementTarget.value = target;
+  sourceTarget.value = target;
+  await load();
+}
 const formVisible = ref(false);
 const detailsVisible = ref(false);
 const editingId = ref("");
@@ -1512,7 +1541,16 @@ function errorMessage(error: any, fallback: string) {
   return error?.response?.data?.detail || error?.message || fallback;
 }
 
-onMounted(load);
+onMounted(async () => {
+  try {
+    sourceVisible.value = (await getDeploymentConfig()).mode === "cloud";
+  } catch (error) {
+    console.error("[original-error]", error);
+  }
+  sourceTarget.value = mcpManagementTarget.value || "local";
+  mcpManagementTarget.value = sourceTarget.value;
+  await load();
+});
 </script>
 
 <style scoped>

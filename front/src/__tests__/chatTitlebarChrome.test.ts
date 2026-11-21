@@ -49,7 +49,7 @@ describe("聊天窗口标题栏", () => {
     expect(webChatSource).toContain('document.querySelector<HTMLElement>("#window-chat-slot")');
     expect(webChatSource).toContain('v-if="titlebarTeleportReady"');
     expect(webChatSource).toContain("'is-titlebar': useTitlebarChrome");
-    expect(webChatSource).toContain("const useTitlebarChrome = ref(window.innerWidth >= 900)");
+    expect(webChatSource).toContain("const useTitlebarChrome = ref(!props.embedded && window.innerWidth >= 900)");
     expect(webChatSource).toContain("const headerHeight = useTitlebarChrome.value ? 0");
   });
 

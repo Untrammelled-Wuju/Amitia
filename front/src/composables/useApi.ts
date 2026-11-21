@@ -11,8 +11,21 @@ import {
   getBackendAuthHeaders,
   getApiBaseURLForPath,
   isDeviceLocalApiPath,
+  isDeviceMCPPath,
+  isDeviceSkillPath,
+  isDeviceReminderPath,
+  isDeviceRoleManagementPath,
+  centerConsoleMCPPath,
+  centerConsoleSkillPath,
   LOCAL_DEVICE_RUNTIME_BASE_URL,
 } from "@/runtime/runtime-adapter";
+import {
+  ROLE_MANAGEMENT_TARGET_HEADER,
+  mcpManagementTarget,
+  roleManagementTarget,
+  skillManagementTarget,
+  taskManagementTarget,
+} from "@/runtime/role-management-target";
 import { getDeviceTimezone } from "@/utils/requestEnvelope";
 import { resolveUIHostDeviceId } from "@/ui-runtime/deviceIdentity";
 import {
@@ -85,6 +98,41 @@ apiClient.interceptors.request.use(async (config) => {
   let deviceLocal =
     Boolean(window.amitiaDesktop) && (isDeviceLocalApiPath(requestPath) || gamePackageLocal);
 	if (window.amitiaDesktop && !deviceLocal) deviceLocal = await getApiBaseURLForPath(requestPath) === LOCAL_DEVICE_RUNTIME_BASE_URL && deployment.mode === "cloud";
+  const roleTarget = String(
+    (config.headers as any)?.[ROLE_MANAGEMENT_TARGET_HEADER] ??
+      (config.headers as any)?.get?.(ROLE_MANAGEMENT_TARGET_HEADER) ??
+      "",
+  ).toLowerCase();
+  if (window.amitiaDesktop && isDeviceRoleManagementPath(requestPath)) {
+    const target = roleTarget || roleManagementTarget.value;
+    if (target === "local") deviceLocal = true;
+    else if (target === "center") deviceLocal = false;
+  }
+  if (window.amitiaDesktop && isDeviceMCPPath(requestPath)) {
+    if (deployment.mode === "cloud" && mcpManagementTarget.value === "center") {
+      deviceLocal = false;
+      config.url = centerConsoleMCPPath(requestPath);
+    } else if (mcpManagementTarget.value === "local") {
+      deviceLocal = true;
+    }
+  }
+  if (window.amitiaDesktop && isDeviceSkillPath(requestPath)) {
+    if (deployment.mode === "cloud" && skillManagementTarget.value === "center") {
+      deviceLocal = false;
+      config.url = centerConsoleSkillPath(requestPath);
+    } else {
+      deviceLocal = true;
+    }
+  }
+  if (window.amitiaDesktop && isDeviceReminderPath(requestPath)) {
+    if (taskManagementTarget.value === "local") {
+      deviceLocal = true;
+    } else if (deployment.mode === "cloud" && taskManagementTarget.value === "center") {
+      deviceLocal = false;
+    }
+  }
+  delete (config.headers as any)[ROLE_MANAGEMENT_TARGET_HEADER];
+  (config.headers as any)?.delete?.(ROLE_MANAGEMENT_TARGET_HEADER);
   config.baseURL = deviceLocal ? LOCAL_DEVICE_RUNTIME_BASE_URL : runtime.apiBaseURL;
   config.timeout = operationRequestTimeout(config.baseURL || "");
   delete (config.headers as any)["X-Amitia-Management-Target"];

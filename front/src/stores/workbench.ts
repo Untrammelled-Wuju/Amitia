@@ -1,7 +1,7 @@
 import { defineStore } from "pinia";
 import { computed, ref, watch } from "vue";
 
-export type WorkbenchViewKind = "files" | "file" | "git" | "diff" | "browser" | "terminal" | "tasks" | "agents";
+export type WorkbenchViewKind = "files" | "file" | "git" | "diff" | "browser" | "terminal" | "tasks" | "agents" | "chat";
 export type WorkbenchFocusPolicy = "activate" | "background";
 
 export interface WorkbenchTab {
@@ -35,6 +35,26 @@ export interface WorkbenchOpenCommand extends WorkbenchOpenRequest {
   conversationId: string;
 }
 
+export interface SideChatAttachmentSeed {
+  artifactId?: string;
+  ownerDeviceId?: string;
+  storageDeviceId?: string;
+  kind: string;
+  name: string;
+  mimeType?: string;
+  sha256?: string;
+  sizeBytes?: number;
+}
+
+export interface SideChatSeed {
+  queueRequestId: string;
+  message: string;
+  attachments: SideChatAttachmentSeed[];
+  sourceConversationId: string;
+  roleId: string;
+  conversationId?: string;
+}
+
 interface WorkbenchSession {
   tabs: WorkbenchTab[];
   activeTabId: string;
@@ -46,7 +66,8 @@ interface WorkbenchSession {
 const storageKey = "amitia:workbench:layout:v1";
 const defaultWidth = 550;
 const maxTabs = 40;
-const allowedKinds: readonly WorkbenchViewKind[] = ["files", "file", "git", "diff", "browser", "terminal", "tasks", "agents"];
+const sideChatSeeds = new Map<string, SideChatSeed>();
+const allowedKinds: readonly WorkbenchViewKind[] = ["files", "file", "git", "diff", "browser", "terminal", "tasks", "agents", "chat"];
 const emptySession = (): WorkbenchSession => ({ tabs: [], activeTabId: "", visible: false, width: defaultWidth, operations: [] });
 const normalizeConversation = (value: string) => value.trim() || "__draft__";
 const clampWidth = (value: number) => Number.isFinite(value) ? Math.min(1000, Math.max(350, value)) : defaultWidth;
@@ -159,7 +180,7 @@ export const useWorkbenchStore = defineStore("workbench", () => {
         if (value.tabs.length >= maxTabs) throw new Error(`单个对话最多打开 ${maxTabs} 个工作区标签`);
         const tab: WorkbenchTab = {
           id: makeTabId(), kind: request.kind,
-          title: clampText(request.title, 140) || ({ files: "文件", file: "文件预览", git: "Git", diff: "代码变更", browser: "浏览器", terminal: "终端输出", tasks: "任务状态", agents: "子智能体" }[request.kind]),
+          title: clampText(request.title, 140) || ({ files: "文件", file: "文件预览", git: "Git", diff: "代码变更", browser: "浏览器", terminal: "终端输出", tasks: "任务状态", agents: "子智能体", chat: "侧边对话" }[request.kind]),
           resourceUri, workspaceUri, targetDeviceId, browserRef, taskId, createdAt: Date.now(), pinned: false,
         };
         value.tabs.push(tab);
@@ -200,6 +221,25 @@ return null; }
       value.operations = [...value.operations.filter((id) => id !== operationId).slice(-199), operationId];
     });
     return tab;
+  }
+
+  function openSideChat(input: Omit<SideChatSeed, "conversationId">): WorkbenchTab {
+    const conversationKey = normalizeConversation(input.sourceConversationId);
+    const resourceUri = `amitia://side-chat/${conversationKey}/${input.queueRequestId}`;
+    const title = clampText(input.message.replace(/\s+/g, " "), 24) || "侧边对话";
+    const tab = openTab({ kind: "chat", title, resourceUri });
+    sideChatSeeds.set(tab.id, { ...input, attachments: input.attachments || [], conversationId: sideChatSeeds.get(tab.id)?.conversationId });
+    return tab;
+  }
+
+  function sideChatSeed(tabId: string): SideChatSeed | undefined {
+    return sideChatSeeds.get(tabId);
+  }
+
+  function rememberSideChatConversation(tabId: string, conversationId: string) {
+    const seed = sideChatSeeds.get(tabId);
+    if (!seed) return;
+    sideChatSeeds.set(tabId, { ...seed, conversationId: clampText(conversationId, 160) });
   }
 
   function activateTab(id: string) {
@@ -285,5 +325,5 @@ return null; }
   }, { deep: true });
   if (typeof window !== "undefined") window.addEventListener("pagehide", persistSessions);
 
-  return { conversationId, characterId, tabs, activeTab, visible, width, setConversation, openTab, openCommand, activateTab, updateTab, setPinned, moveTab, closeTab, closeAll, toggleVisible, setWidth, persistSessions };
+  return { conversationId, characterId, tabs, activeTab, visible, width, setConversation, openTab, openCommand, openSideChat, sideChatSeed, rememberSideChatConversation, activateTab, updateTab, setPinned, moveTab, closeTab, closeAll, toggleVisible, setWidth, persistSessions };
 });

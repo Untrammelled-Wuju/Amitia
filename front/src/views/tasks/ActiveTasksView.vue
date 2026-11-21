@@ -7,6 +7,15 @@
       parent-path="/tasks"
     >
       <template #actions>
+        <el-radio-group
+          v-if="sourceVisible"
+          v-model="sourceTarget"
+          size="small"
+          @change="onSourceChange"
+        >
+          <el-radio-button value="local">本机</el-radio-button>
+          <el-radio-button value="center">统筹中心</el-radio-button>
+        </el-radio-group>
         <el-select v-model="kind" size="small" style="width: 140px" @change="loadTasks">
           <el-option label="定时提醒" value="user_reminder" />
           <el-option label="主动消息" value="proactive_task" />
@@ -27,7 +36,7 @@
     <div class="task-grid" v-loading="loading">
       <article v-for="task in tasks" :key="task.id" class="task-card">
         <header>
-          <strong>{{ task.title }}</strong>
+          <strong>{{ taskLabel(task.title) }}</strong>
           <el-tag size="small" :type="task.paused ? 'warning' : task.enabled === 1 ? 'success' : 'info'">
             {{ task.state === "expired" ? "已到期" : task.paused ? "已暂停" : task.enabled === 1 ? "已启用" : "已停用" }}
           </el-tag>
@@ -109,6 +118,13 @@ import ExtensionSlot from "@/components/extension/ExtensionSlot.vue";
 import ExtensionPageHeader from "@/views/extensions/components/ExtensionPageHeader.vue";
 import { apiClient } from "@/composables/useApi";
 import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversation";
+import { useLocalDeviceName } from "@/composables/useLocalDeviceName";
+import { coreOwnershipLabel, deviceOwnershipLabel } from "@/runtime/ownership-label";
+import { getDeploymentConfig } from "@/runtime/runtime-adapter";
+import {
+  taskManagementTarget,
+  type RoleManagementTarget,
+} from "@/runtime/role-management-target";
 import { originalErrorText } from "@/runtime/original-error";
 import { conversationReference } from "@/runtime/device-owned-conversation-reference";
 
@@ -143,6 +159,40 @@ interface ReminderHistory {
 }
 
 const kind = ref("user_reminder");
+const sourceTarget = ref<RoleManagementTarget>("center");
+const sourceVisible = ref(false);
+const { localDeviceName } = useLocalDeviceName();
+
+function taskLabel(title: string) {
+  return sourceTarget.value === "center"
+    ? coreOwnershipLabel("任务", title)
+    : deviceOwnershipLabel(localDeviceName.value, "任务", title);
+}
+
+async function resolveSourceTarget() {
+  try {
+    const config = await getDeploymentConfig();
+    if (config.mode !== "cloud") return;
+    sourceVisible.value = true;
+    const me = responseData<{
+      coordinationAvailable?: boolean;
+      policy?: { coordinated?: boolean };
+    }>(await apiClient.get("/api/device-mesh/v1/coordination/me"));
+    const coordinated =
+      me?.coordinationAvailable === true && me?.policy?.coordinated === true;
+    sourceTarget.value = coordinated ? "local" : "center";
+    taskManagementTarget.value = sourceTarget.value;
+  } catch (error) {
+    console.error("[original-error]", error, (error as { stack?: string })?.stack);
+  }
+}
+
+async function onSourceChange(value: string | number | boolean | undefined) {
+  const target = (value === "local" ? "local" : "center") as RoleManagementTarget;
+  taskManagementTarget.value = target;
+  sourceTarget.value = target;
+  await loadTasks();
+}
 const tasks = ref<ReminderTask[]>([]);
 const loading = ref(false);
 const saving = ref(false);
@@ -368,7 +418,10 @@ function formatDate(value?: string) {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
-onMounted(loadTasks);
+onMounted(async () => {
+  await resolveSourceTarget();
+  await loadTasks();
+});
 </script>
 
 <style scoped>

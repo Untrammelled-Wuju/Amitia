@@ -759,11 +759,11 @@ async function batchOperation(action: string, projectId = "") {
   const failures: string[] = [];
   const succeeded: string[] = [];
   for (const id of selectedIds.value) {
-    const row = batchRows.value.find((item) => item.id === id);
+    const row = batchRows.value.find((item) => item.id === id) as ((typeof batchRows.value)[number] & { ownerId?: string; revision?: number }) | undefined;
     if (!row) { failures.push(`${id}: 对话不存在`); continue; }
     try {
       const changes = action === "archive" ? { archived: true } : action === "pin" ? { pinned: true } : action === "read" ? { lastReadTurnSequence: Number(row.lastTerminalTurnSequence || 0) } : action === "move" ? { projectId } : {};
-      await owned.edit("conversation", id, changes, { deleted: action === "delete", characterId: row.characterId });
+      await owned.edit("conversation", id, changes, { deleted: action === "delete", characterId: row.characterId, expectedOwnerId: row.ownerId, expectedRevision: row.revision });
       succeeded.push(id);
     } catch (error) { failures.push(`${row.title || id}: ${error instanceof Error ? error.stack || error.message : String(error)}`); }
   }
@@ -982,7 +982,7 @@ async function handleCreateProject() {
 }
 
 async function handleProjectCommand(project: ProjectItem, command: string | number | object) {
-  if (project.readOnly) {
+  if (project.readOnly && !owned.policy.value?.coordinated) {
     ElMessage.warning("旧项目为只读，请在原设备管理");
     return;
   }
