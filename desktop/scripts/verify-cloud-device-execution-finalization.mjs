@@ -182,7 +182,7 @@ assert(
     devicePackageRoutes.includes("registerExtensionPackageRoutes(group, runtime)") &&
     devicePackageRoutes.includes('kernel.POST("/extensions/uninstall"') &&
     deviceAgentRouter.includes('r.Group("/api/extensions")') &&
-    deviceAgentRouter.includes("RequireAuthMethod(security.AuthMethodDesktopSession)") &&
+    /deviceExtensions\.Use\(security\.RequireAuthMethod\([\s\S]{0,160}security\.AuthMethodDesktopSession/.test(deviceAgentRouter) &&
     deviceAgentRouter.includes("RegisterDeviceExecutionPackageRoutes(deviceExtensions, services.Extension)") &&
     !deviceAgentRouter.includes('r.Group("/api/game-center")'),
   "Device Agent must expose only authenticated device-local package lifecycle HTTP, not a public/full Game Center API",

@@ -166,7 +166,9 @@ assert(
 
 // Device-local authority and authentication must be explicit.
 assert(
-  deviceAgentRouter.includes("RequireAuthMethod(security.AuthMethodDesktopSession)") &&
+  /deviceCenter\.Use\(\s*security\.RequireAuthMethod\(\s*security\.AuthMethodDesktopSession,/.test(
+    deviceAgentRouter,
+  ) &&
     frontendRuntimeAdapter.includes('"/api/desktop-pet"') &&
     frontendRuntimeAdapter.includes('"/api/desktop-pets"'),
   "desktop-pet device-local routes must use Desktop Session auth and include singular/plural namespaces",
