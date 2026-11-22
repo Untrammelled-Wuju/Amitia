@@ -95,6 +95,11 @@ app.whenReady().then(async () => {
   const responses = {
     "amitia:deployment:get": { mode: "local" },
     "amitia:runtime:endpoint": { httpBaseURL: `http://127.0.0.1:${apiAddress.port}` },
+    "amitia:runtime:status": {
+      state: "ready",
+      mode: "local",
+      updatedAt: new Date().toISOString(),
+    },
     "amitia:environment:get": { platform: process.platform, arch: process.arch, version: "smoke" },
     "amitia:backend-auth:get-headers": {},
     "amitia:mesh:identity:get": { deviceId: "renderer-smoke" },
