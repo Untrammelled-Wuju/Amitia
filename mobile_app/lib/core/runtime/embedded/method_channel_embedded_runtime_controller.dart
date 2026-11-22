@@ -18,6 +18,8 @@ class MethodChannelEmbeddedRuntimeController
   );
 
   BackendEndpoint? _lastEndpoint;
+  int? _lastEndpointGeneration;
+  String? _lastEndpointProfile;
   int _startGeneration = 0;
 
   @override
@@ -38,7 +40,7 @@ class MethodChannelEmbeddedRuntimeController
 
       if (currentStatus == EmbeddedRuntimeStatus.ready &&
           currentProfile == requestedProfile) {
-        _lastEndpoint = await getEndpoint();
+        await _rememberEndpoint(snapshot);
         return EmbeddedRuntimeStatus.ready;
       }
 
@@ -69,7 +71,7 @@ class MethodChannelEmbeddedRuntimeController
       if (currentStatus == EmbeddedRuntimeStatus.ready) {
         // READY without a profile is invalid for a profile-specific request.
         if (_activeProfile(snapshot) == requestedProfile) {
-          _lastEndpoint = await getEndpoint();
+          await _rememberEndpoint(snapshot);
           return EmbeddedRuntimeStatus.ready;
         }
         return EmbeddedRuntimeStatus.failed;
@@ -103,7 +105,7 @@ class MethodChannelEmbeddedRuntimeController
         if (_activeProfile(resultSnapshot) != requestedProfile) {
           return EmbeddedRuntimeStatus.failed;
         }
-        _lastEndpoint = await getEndpoint();
+        await _rememberEndpoint(resultSnapshot);
       }
 
       // STARTING is an asynchronous accepted lifecycle even when a duplicate
@@ -129,7 +131,7 @@ class MethodChannelEmbeddedRuntimeController
         final status = _mapSnapshotStatus(snapshot);
         if (status == EmbeddedRuntimeStatus.ready &&
             _activeProfile(snapshot) == requestedProfile) {
-          _lastEndpoint = await getEndpoint();
+          await _rememberEndpoint(snapshot);
           return EmbeddedRuntimeStatus.ready;
         }
         return EmbeddedRuntimeStatus.starting;
@@ -144,7 +146,7 @@ class MethodChannelEmbeddedRuntimeController
   @override
   Future<void> stop() async {
     _startGeneration++;
-    _lastEndpoint = null;
+    _clearEndpointCache();
     try {
       await _requestStop();
     } on PlatformException {
@@ -205,11 +207,45 @@ class MethodChannelEmbeddedRuntimeController
 
   @override
   Future<BackendEndpoint> getEndpoint() async {
-    if (_lastEndpoint != null) return _lastEndpoint!;
+    Map<String, dynamic> snapshot;
+    try {
+      snapshot = await _readSnapshot();
+    } catch (error, stackTrace) {
+      print("[original-error] $error\n$stackTrace");
+      throw StateError('embedded runtime endpoint unavailable: $error');
+    }
+    final generation = _snapshotGeneration(snapshot);
+    final profile = _activeProfile(snapshot);
+    final cached = _lastEndpoint;
+    if (cached != null &&
+        _mapSnapshotStatus(snapshot) == EmbeddedRuntimeStatus.ready &&
+        _lastEndpointGeneration == generation &&
+        _lastEndpointProfile == profile) {
+      return cached;
+    }
+    return _fetchEndpoint(generation: generation, profile: profile);
+  }
+
+  Future<void> _rememberEndpoint(Map<String, dynamic> snapshot) async {
+    try {
+      await _fetchEndpoint(
+        generation: _snapshotGeneration(snapshot),
+        profile: _activeProfile(snapshot),
+      );
+    } catch (error, stackTrace) {
+      print("[original-error] $error\n$stackTrace");
+      _clearEndpointCache();
+    }
+  }
+
+  Future<BackendEndpoint> _fetchEndpoint({
+    required int? generation,
+    required String? profile,
+  }) async {
     try {
       final result = await _channel.invokeMethod<Map<Object?, Object?>>(
         'runtime.getBackendConnection',
-        <String, Object?>{'expectedRuntimeGeneration': null},
+        <String, Object?>{'expectedRuntimeGeneration': generation},
       );
       final payload = result == null
           ? <String, dynamic>{}
@@ -228,14 +264,38 @@ class MethodChannelEmbeddedRuntimeController
             isRemote: false,
           );
           _lastEndpoint = endpointValue;
+          _lastEndpointGeneration = generation;
+          _lastEndpointProfile = profile;
           return endpointValue;
         }
       }
+      final nativeError = _stringKeyMap(payload['error']);
+      final nativeMessage = (nativeError['message'] as String? ?? '').trim();
+      throw StateError(
+        nativeMessage.isEmpty
+            ? 'embedded runtime endpoint is unavailable'
+            : 'embedded runtime endpoint is unavailable: $nativeMessage',
+      );
+    } on StateError {
+      rethrow;
     } catch (error, stackTrace) {
       print("[original-error] $error\n$stackTrace");
       throw StateError('embedded runtime endpoint unavailable: $error');
     }
-    throw StateError('embedded runtime endpoint is unavailable');
+  }
+
+  void _clearEndpointCache() {
+    _lastEndpoint = null;
+    _lastEndpointGeneration = null;
+    _lastEndpointProfile = null;
+  }
+
+  int? _snapshotGeneration(Map<String, dynamic> snapshot) {
+    final value = snapshot['generation'];
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value.trim());
+    return null;
   }
 
   String? _activeProfile(Map<String, dynamic> snapshot) {
