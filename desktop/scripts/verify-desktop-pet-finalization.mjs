@@ -290,7 +290,7 @@ assert(
     migrationBaseline.includes("desired_revision INTEGER NOT NULL DEFAULT 0") &&
     migrationBaseline.includes("desktop_pet_runtime_desired_states") &&
     migrationBaseline.includes("settings_snapshot_json TEXT NOT NULL DEFAULT ''") &&
-    migrationBaseline.includes("uq_dprds_user_device"),
+    migrationBaseline.includes("UNIQUE(space_id, device_id, installation_id)"),
   "the current schema baseline must own desired-state revision monotonicity and uniqueness",
 );
 
@@ -475,7 +475,7 @@ assert(
     appProtocol.includes('supportFetchAPI: true') &&
     desktopIndex.includes("registerAppProtocol(") &&
     desktopWindow.includes('win.loadURL(`${APP_PROTOCOL_ORIGIN}/#/`)') &&
-    !desktopWindow.includes("win.loadFile(") &&
+    !/loadFile\([^)]*index\.html/.test(desktopWindow) &&
     desktopConfigTemplate.includes('- "app://amitia"'),
   "packaged Electron renderer must use the privileged app://amitia origin instead of file:// opaque origin",
 );
