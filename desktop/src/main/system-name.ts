@@ -1,12 +1,21 @@
+import { spawnSync } from "node:child_process";
 import { hostname } from "node:os";
-import { systemPreferences } from "electron";
 
 const MAX_DEVICE_NAME_LENGTH = 64;
+
+function readMacComputerName(): string {
+  const result = spawnSync("/usr/sbin/scutil", ["--get", "ComputerName"], {
+    encoding: "utf8",
+    timeout: 3000,
+  });
+  if (result.error || result.status !== 0) return "";
+  return result.stdout.trim();
+}
 
 export function getSystemDeviceName(): string {
   const candidates: string[] = [];
   if (process.platform === "darwin") {
-    candidates.push(systemPreferences.getComputerName());
+    candidates.push(readMacComputerName());
     candidates.push(hostname());
   } else if (process.platform === "win32") {
     candidates.push(process.env.COMPUTERNAME || "");
