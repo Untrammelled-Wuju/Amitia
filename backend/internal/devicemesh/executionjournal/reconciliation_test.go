@@ -314,6 +314,7 @@ func TestReconcileConcurrentDispatchSendsOnce(t *testing.T) {
 	var dispatches int64
 	leaders := int64(0)
 	blocked := int64(0)
+	delivered := int64(0)
 	var wait sync.WaitGroup
 	for worker := 0; worker < 8; worker++ {
 		wait.Add(1)
@@ -321,7 +322,7 @@ func TestReconcileConcurrentDispatchSendsOnce(t *testing.T) {
 			defer wait.Done()
 			_, err := ledger.DispatchIrreversible(ctx, request, func() error {
 				atomic.AddInt64(&dispatches, 1)
-				time.Sleep(5 * time.Millisecond)
+				time.Sleep(20 * time.Millisecond)
 				return nil
 			})
 			if err == nil {
@@ -330,14 +331,20 @@ func TestReconcileConcurrentDispatchSendsOnce(t *testing.T) {
 			}
 			if errors.Is(err, executionjournal.ErrReconciliationPending) {
 				atomic.AddInt64(&blocked, 1)
+				return
 			}
+			if errors.Is(err, executionjournal.ErrReconciliationDelivered) {
+				atomic.AddInt64(&delivered, 1)
+				return
+			}
+			fmt.Printf("m04-s05 reconcile concurrent unexpected worker error: %v\n", err)
 		}()
 	}
 	wait.Wait()
-	if dispatches != 1 || leaders != 1 || blocked != 7 {
-		t.Fatalf("同一操作并发只允许一次真正发送: dispatches=%d leaders=%d blocked=%d", dispatches, leaders, blocked)
+	if dispatches != 1 || leaders != 1 || blocked+delivered != 7 {
+		t.Fatalf("同一操作并发只允许一次真正发送: dispatches=%d leaders=%d blocked=%d delivered=%d", dispatches, leaders, blocked, delivered)
 	}
-	fmt.Printf("m04-s05 reconcile concurrent workers=8 dispatches=%d leaders=%d blocked=%d\n", dispatches, leaders, blocked)
+	fmt.Printf("m04-s05 reconcile concurrent workers=8 dispatches=%d leaders=%d blocked=%d delivered=%d\n", dispatches, leaders, blocked, delivered)
 }
 
 func TestReconcileDoesNotTouchKeyedLedger(t *testing.T) {

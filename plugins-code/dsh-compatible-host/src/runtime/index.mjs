@@ -18,6 +18,7 @@ import {
 import { assertDshHostPluginActive, createDshHostContext, invokeDshTool, loadDshHostPlugin } from "./host-abi.mjs";
 import { mapDshTool } from "./tool-mapping.mjs";
 import { createDshScheduleDefinition, mapDshScheduleCatalog, updateDshScheduleDefinition } from "./schedule-adapter.mjs";
+import { normalizeConversationRequest } from "./conversation-id.mjs";
 import {
   createAmitiaDshHostServices,
   createAmitiaDshPromptState,
@@ -450,7 +451,7 @@ async function mutateWorkspaceIndex(host, mutate) {
 }
 
 export async function command(host, input) {
-  const request = input && typeof input === "object" ? input : {};
+  const request = normalizeConversationRequest(input);
   const action = String(request.action || "").trim();
   switch (action) {
     case "status": {

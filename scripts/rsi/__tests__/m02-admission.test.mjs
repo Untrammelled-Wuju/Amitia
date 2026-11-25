@@ -23,6 +23,19 @@ import {
   FAULT_MATRIX_SYMBOLS,
   faultMatrixWiringProblems,
   scanFaultMatrixSymbols,
+  E2E_INTEGRATION_PATH,
+  E2E_INTEGRATION_REQUIRED_GATES,
+  E2E_INTEGRATION_CASES,
+  RECONCILING_STATE_SYMBOLS,
+  reconcilingStateWiringProblems,
+  scanReconcilingStateSymbols,
+  LEDGER_IDENTITY_SYMBOLS,
+  ledgerIdentityWiringProblems,
+  scanLedgerIdentitySymbols,
+  EFFECT_PROOF_SYMBOLS,
+  effectProofWiringProblems,
+  scanEffectProofSymbols,
+  readIntegrationPackage,
   ledgerWiringProblems,
   effectTokenWiringProblems,
   scanEffectTokenSymbols,
@@ -226,7 +239,12 @@ test('S01 的 InvocationID 传播链只在已冻结的桥接点被引用且门�
     'backend/internal/devicemesh/executionjournal/reconciliation.go',
     'backend/internal/devicemesh/executionjournal/reconciliation_test.go',
     'backend/internal/devicemesh/executionjournal/run_guard.go',
-    'backend/internal/devicemesh/executionjournal/fault_matrix_test.go'
+    'backend/internal/devicemesh/executionjournal/fault_matrix_test.go',
+    'backend/internal/devicemesh/executionjournal/e2e_sink_test.go',
+    'backend/internal/devicemesh/executionjournal/reconciling_state_test.go',
+    'backend/internal/devicemesh/executionjournal/ledger_identity_test.go',
+    'backend/internal/devicemesh/executionjournal/proof_test.go',
+  'backend/internal/devicemesh/executionjournal/recovery_test.go'
   ])
   const gate = GATES.find((entry) => entry.id === 'INVOCATION_CONTRACT')
   assert.ok(gate, 'missing INVOCATION_CONTRACT gate')
@@ -409,6 +427,173 @@ test('S07 的冻结扫描只认包限定引用并且不吞掉同后缀符号', (
   assert.deepEqual(hits, [{ path: 'backend/internal/extension/kernel/supervisor/guard.go', symbol: 'RunPanicError' }])
   assert.deepEqual(faultMatrixWiringProblems(dir), [
     'fault matrix guard reached a site before its wiring step: backend/internal/extension/kernel/supervisor/guard.go -> RunPanicError'
+  ])
+})
+
+test('S08 的 E2E 矩阵门禁已登记且接入包口径钉死', () => {
+  const gate = GATES.find((entry) => entry.id === 'E2E_MATRIX')
+  assert.ok(gate, 'missing E2E_MATRIX gate')
+  assert.deepEqual(gate.args, ['scripts/rsi/m04-e2e-matrix.mjs'])
+  assert.equal(gate.command, 'node')
+  assert.equal(gate.file, 'm04-s08-e2e-matrix.log')
+  assert.equal(E2E_INTEGRATION_PATH, 'artifacts/rsi/m04-s08/INTEGRATION.json')
+  assert.deepEqual(E2E_INTEGRATION_REQUIRED_GATES, ['LEDGER', 'EFFECT_TOKEN', 'RECONCILIATION', 'FAULT_MATRIX', 'E2E_MATRIX'])
+  assert.deepEqual(E2E_INTEGRATION_CASES, ['no-duplicate', 'concurrent', 'irreversible', 'default-core', 'restart', 'cancelled'])
+})
+
+function integrationFixture(root, overrides = {}) {
+  const dir = join(root, 'artifacts', 'rsi', 'm04-s08')
+  mkdirSync(dir, { recursive: true })
+  const manifest = {
+    schemaVersion: 1,
+    step: 'M04-S08',
+    files: Array.from({ length: 14 }, (_, index) => ({ path: `file-${index}.go`, bytes: 1, sha256: 'a'.repeat(64) })),
+    gates: E2E_INTEGRATION_REQUIRED_GATES.map((id, index) => ({ id, script: `gate-${index}.mjs`, exit: 42 + index })),
+    cases: [...E2E_INTEGRATION_CASES],
+    verdict: 'READY_FOR_APPROVAL',
+    ...overrides
+  }
+  writeFileSync(join(dir, 'INTEGRATION.json'), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8')
+}
+
+test('S08 的接入包校验只接受完整清单', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'm02-admission-e2e-'))
+  assert.equal(readIntegrationPackage(dir).ok, false)
+  assert.equal(readIntegrationPackage(dir).detail, `missing=${E2E_INTEGRATION_PATH}`)
+  integrationFixture(dir)
+  const clean = readIntegrationPackage(dir)
+  assert.equal(clean.ok, true)
+  assert.equal(clean.manifest.step, 'M04-S08')
+  assert.match(clean.detail, /files=14 gates=5 cases=6/)
+  integrationFixture(dir, { verdict: 'PENDING_APPROVAL' })
+  assert.equal(readIntegrationPackage(dir).ok, false)
+  integrationFixture(dir, { step: 'M04-S07' })
+  assert.equal(readIntegrationPackage(dir).ok, false)
+  integrationFixture(dir, { files: Array.from({ length: 13 }, (_, index) => ({ path: `file-${index}.go`, bytes: 1, sha256: 'a'.repeat(64) })) })
+  assert.equal(readIntegrationPackage(dir).ok, false)
+  integrationFixture(dir, { gates: E2E_INTEGRATION_REQUIRED_GATES.slice(0, 4).map((id) => ({ id })) })
+  assert.match(readIntegrationPackage(dir).detail, /missingGates=E2E_MATRIX/)
+  integrationFixture(dir, { cases: E2E_INTEGRATION_CASES.slice(0, 5) })
+  assert.match(readIntegrationPackage(dir).detail, /missingCases=cancelled/)
+  writeFileSync(join(dir, 'artifacts', 'rsi', 'm04-s08', 'INTEGRATION.json'), '{ not json', 'utf8')
+  assert.match(readIntegrationPackage(dir).detail, /^unreadable=/)
+})
+
+test('S09 的补偿入口门禁已登记且只读查询面被冻结', () => {
+  assert.deepEqual(RECONCILING_STATE_SYMBOLS, ['ReconcilingState', 'ReconcileSnapshot', 'ErrReconcileQueryInvalid', 'DescribeReconciliation'])
+  const gate = GATES.find((entry) => entry.id === 'RECONCILING_STATE')
+  assert.ok(gate, 'missing RECONCILING_STATE gate')
+  assert.deepEqual(gate.args, ['scripts/rsi/m04-reconciling-state.mjs'])
+  assert.equal(gate.command, 'node')
+  assert.equal(gate.file, 'm04-s09-reconciling-state.log')
+  assert.equal(GATES.filter((entry) => entry.id === 'RECONCILING_STATE').length, 1)
+})
+
+test('S09 的只读查询面尚未接入生产调用点', () => {
+  assert.deepEqual(scanReconcilingStateSymbols(repoRoot), [])
+  assert.deepEqual(reconcilingStateWiringProblems(repoRoot), [])
+})
+
+test('S09 的冻结扫描只认包限定引用并且跨符号不串味', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'm02-admission-reconciling-'))
+  const supervisor = join(dir, 'backend', 'internal', 'extension', 'kernel', 'supervisor')
+  mkdirSync(supervisor, { recursive: true })
+  writeFileSync(
+    join(supervisor, 'guard.go'),
+    'package supervisor\n\nvar _ executionjournal.ReconcilingState\nvar _ = executionjournal.DescribeReconciliation\nvar _ = executionjournal.ErrReconcileQueryInvalid\nvar _ = ReconcilingState("")\nvar _ = other.DescribeReconciliation\nvar _ = executionjournal.ReconcilingStateSnapshot{}\n',
+    'utf8'
+  )
+  assert.deepEqual(scanReconcilingStateSymbols(dir), [
+    { path: 'backend/internal/extension/kernel/supervisor/guard.go', symbol: 'DescribeReconciliation' },
+    { path: 'backend/internal/extension/kernel/supervisor/guard.go', symbol: 'ErrReconcileQueryInvalid' },
+    { path: 'backend/internal/extension/kernel/supervisor/guard.go', symbol: 'ReconcilingState' }
+  ])
+  assert.deepEqual(reconcilingStateWiringProblems(dir), [
+    'reconciling state query reached a site before its consumption step: backend/internal/extension/kernel/supervisor/guard.go -> DescribeReconciliation',
+    'reconciling state query reached a site before its consumption step: backend/internal/extension/kernel/supervisor/guard.go -> ErrReconcileQueryInvalid',
+    'reconciling state query reached a site before its consumption step: backend/internal/extension/kernel/supervisor/guard.go -> ReconcilingState'
+  ])
+})
+
+test('S10 的账本身份门禁已登记且判定面被冻结', () => {
+  assert.deepEqual(LEDGER_IDENTITY_SYMBOLS, ['ErrLedgerInvocationMismatch', 'LedgerBinding', 'BindingVerdict', 'InspectBinding', 'IsEffectTokenImmutableError'])
+  const gate = GATES.find((entry) => entry.id === 'LEDGER_IDENTITY')
+  assert.ok(gate, 'missing LEDGER_IDENTITY gate')
+  assert.deepEqual(gate.args, ['scripts/rsi/m04-ledger-identity.mjs'])
+  assert.equal(gate.command, 'node')
+  assert.equal(gate.file, 'm04-s10-ledger-identity.log')
+  assert.equal(GATES.filter((entry) => entry.id === 'LEDGER_IDENTITY').length, 1)
+})
+
+test('S10 的账本身份判定尚未接入生产调用点', () => {
+  assert.deepEqual(scanLedgerIdentitySymbols(repoRoot), [])
+  assert.deepEqual(ledgerIdentityWiringProblems(repoRoot), [])
+})
+
+test('S10 的冻结扫描只认包限定引用并且跨符号不串味', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'm02-admission-ledger-identity-'))
+  const supervisor = join(dir, 'backend', 'internal', 'extension', 'kernel', 'supervisor')
+  mkdirSync(supervisor, { recursive: true })
+  writeFileSync(
+    join(supervisor, 'guard.go'),
+    'package supervisor\n\nvar _ executionjournal.ErrLedgerInvocationMismatch\nvar _ = executionjournal.InspectBinding\nvar _ executionjournal.BindingVerdict\nvar _ = executionjournal.IsEffectTokenImmutableError\nvar _ = executionjournal.LedgerBinding{}\nvar _ = other.InspectBinding\nvar _ = executionjournal.LedgerBindingFrozen\nvar _ = executionjournal.InspectBindingReport\n',
+    'utf8'
+  )
+  assert.deepEqual(scanLedgerIdentitySymbols(dir), [
+    { path: 'backend/internal/extension/kernel/supervisor/guard.go', symbol: 'BindingVerdict' },
+    { path: 'backend/internal/extension/kernel/supervisor/guard.go', symbol: 'ErrLedgerInvocationMismatch' },
+    { path: 'backend/internal/extension/kernel/supervisor/guard.go', symbol: 'InspectBinding' },
+    { path: 'backend/internal/extension/kernel/supervisor/guard.go', symbol: 'IsEffectTokenImmutableError' },
+    { path: 'backend/internal/extension/kernel/supervisor/guard.go', symbol: 'LedgerBinding' }
+  ])
+  assert.deepEqual(ledgerIdentityWiringProblems(dir), [
+    'ledger identity surface reached a site before its consumption step: backend/internal/extension/kernel/supervisor/guard.go -> BindingVerdict',
+    'ledger identity surface reached a site before its consumption step: backend/internal/extension/kernel/supervisor/guard.go -> ErrLedgerInvocationMismatch',
+    'ledger identity surface reached a site before its consumption step: backend/internal/extension/kernel/supervisor/guard.go -> InspectBinding',
+    'ledger identity surface reached a site before its consumption step: backend/internal/extension/kernel/supervisor/guard.go -> IsEffectTokenImmutableError',
+    'ledger identity surface reached a site before its consumption step: backend/internal/extension/kernel/supervisor/guard.go -> LedgerBinding'
+  ])
+})
+
+test('S11 的效果证明门禁已登记且三类效果面被冻结', () => {
+  assert.deepEqual(EFFECT_PROOF_SYMBOLS, ['EffectProof', 'EffectProofKind', 'EffectProofRecord', 'RecordEffectProof', 'InspectProofs', 'ExactlyOnceClaim', 'ProofKindForCapability', 'ErrEffectProofIncomplete', 'IsEffectProofImmutableError'])
+  const gate = GATES.find((entry) => entry.id === 'EFFECT_PROOF')
+  assert.ok(gate, 'missing EFFECT_PROOF gate')
+  assert.deepEqual(gate.args, ['scripts/rsi/m04-s11-effect-proof.mjs'])
+  assert.equal(gate.command, 'node')
+  assert.equal(gate.file, 'm04-s11-effect-proof.log')
+  assert.equal(GATES.filter((entry) => entry.id === 'EFFECT_PROOF').length, 1)
+})
+
+test('S11 的效果证明申报尚未接入生产调用点', () => {
+  assert.deepEqual(scanEffectProofSymbols(repoRoot), [])
+  assert.deepEqual(effectProofWiringProblems(repoRoot), [])
+})
+
+test('S11 的冻结扫描只认包限定引用并且跨符号不串味', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'm02-admission-effect-proof-'))
+  const supervisor = join(dir, 'backend', 'internal', 'extension', 'kernel', 'supervisor')
+  mkdirSync(supervisor, { recursive: true })
+  writeFileSync(
+    join(supervisor, 'guard.go'),
+    'package supervisor\n\nvar _ executionjournal.ExactlyOnceClaim\nvar _ = executionjournal.RecordEffectProof\nvar _ executionjournal.EffectProofKind\nvar _ = executionjournal.ProofKindForCapability\nvar _ = executionjournal.ErrEffectProofIncomplete\nvar _ = executionjournal.IsEffectProofImmutableError\nvar _ = other.ExactlyOnceClaim\nvar _ = executionjournal.ExactlyOnceClaimReport\nvar _ = executionjournal.EffectProofs\n',
+    'utf8'
+  )
+  assert.deepEqual(scanEffectProofSymbols(dir), [
+    { path: 'backend/internal/extension/kernel/supervisor/guard.go', symbol: 'EffectProofKind' },
+    { path: 'backend/internal/extension/kernel/supervisor/guard.go', symbol: 'ErrEffectProofIncomplete' },
+    { path: 'backend/internal/extension/kernel/supervisor/guard.go', symbol: 'ExactlyOnceClaim' },
+    { path: 'backend/internal/extension/kernel/supervisor/guard.go', symbol: 'IsEffectProofImmutableError' },
+    { path: 'backend/internal/extension/kernel/supervisor/guard.go', symbol: 'ProofKindForCapability' },
+    { path: 'backend/internal/extension/kernel/supervisor/guard.go', symbol: 'RecordEffectProof' }
+  ])
+  assert.deepEqual(effectProofWiringProblems(dir), [
+    'effect proof surface reached a site before its consumption step: backend/internal/extension/kernel/supervisor/guard.go -> EffectProofKind',
+    'effect proof surface reached a site before its consumption step: backend/internal/extension/kernel/supervisor/guard.go -> ErrEffectProofIncomplete',
+    'effect proof surface reached a site before its consumption step: backend/internal/extension/kernel/supervisor/guard.go -> ExactlyOnceClaim',
+    'effect proof surface reached a site before its consumption step: backend/internal/extension/kernel/supervisor/guard.go -> IsEffectProofImmutableError',
+    'effect proof surface reached a site before its consumption step: backend/internal/extension/kernel/supervisor/guard.go -> ProofKindForCapability',
+    'effect proof surface reached a site before its consumption step: backend/internal/extension/kernel/supervisor/guard.go -> RecordEffectProof'
   ])
 })
 

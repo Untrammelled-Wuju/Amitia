@@ -126,7 +126,12 @@ export const INVOCATION_BRIDGE_SITES = [
   'backend/internal/devicemesh/executionjournal/reconciliation.go',
   'backend/internal/devicemesh/executionjournal/reconciliation_test.go',
   'backend/internal/devicemesh/executionjournal/run_guard.go',
-  'backend/internal/devicemesh/executionjournal/fault_matrix_test.go'
+  'backend/internal/devicemesh/executionjournal/fault_matrix_test.go',
+  'backend/internal/devicemesh/executionjournal/e2e_sink_test.go',
+  'backend/internal/devicemesh/executionjournal/reconciling_state_test.go',
+  'backend/internal/devicemesh/executionjournal/ledger_identity_test.go',
+  'backend/internal/devicemesh/executionjournal/proof_test.go',
+  'backend/internal/devicemesh/executionjournal/recovery_test.go'
 ]
 export const LEDGER_PACKAGE_DIR = 'backend/internal/devicemesh/executionjournal/'
 export const LEDGER_SYMBOLS = [
@@ -201,6 +206,15 @@ export const SCOPED_BREAKER_SYMBOLS = [
 ]
 export const EXECUTIONJOURNAL_PACKAGE_DIR = 'backend/internal/devicemesh/executionjournal/'
 export const FAULT_MATRIX_SYMBOLS = ['RunPanicError']
+export const RECONCILING_STATE_SYMBOLS = ['ReconcilingState', 'ReconcileSnapshot', 'ErrReconcileQueryInvalid', 'DescribeReconciliation']
+export const LEDGER_IDENTITY_SYMBOLS = ['ErrLedgerInvocationMismatch', 'LedgerBinding', 'BindingVerdict', 'InspectBinding', 'IsEffectTokenImmutableError']
+export const EFFECT_PROOF_SYMBOLS = ['EffectProof', 'EffectProofKind', 'EffectProofRecord', 'RecordEffectProof', 'InspectProofs', 'ExactlyOnceClaim', 'ProofKindForCapability', 'ErrEffectProofIncomplete', 'IsEffectProofImmutableError']
+
+export const RECOVERY_SYMBOLS = ['RecoveryRecord', 'RecoveryDecision', 'RecoveryReport', 'RecoverInFlight', 'InspectRecovery', 'IsRecoveryImmutableError', 'ErrRecoveryRequired', 'RecoveryReconcile']
+export const E2E_INTEGRATION_PATH = 'artifacts/rsi/m04-s08/INTEGRATION.json'
+export const E2E_INTEGRATION_MIN_FILES = 14
+export const E2E_INTEGRATION_REQUIRED_GATES = ['LEDGER', 'EFFECT_TOKEN', 'RECONCILIATION', 'FAULT_MATRIX', 'E2E_MATRIX']
+export const E2E_INTEGRATION_CASES = ['no-duplicate', 'concurrent', 'irreversible', 'default-core', 'restart', 'cancelled']
 export const READ_FALLBACK_SYMBOLS = [
   'InvokeReadWithFallback',
   'ReadFallbackRequest',
@@ -276,7 +290,12 @@ export const GATES = [
   { id: 'EFFECT_TOKEN', file: 'm04-s04-effect-token.log', command: 'node', args: ['scripts/rsi/m04-effect-token.mjs'], cwd: '.' },
   { id: 'RECONCILIATION', file: 'm04-s05-reconciliation.log', command: 'node', args: ['scripts/rsi/m04-reconciliation.mjs'], cwd: '.' },
   { id: 'SCOPED_BREAKER', file: 'm04-s06-scoped-breaker.log', command: 'node', args: ['scripts/rsi/m04-scoped-breaker.mjs'], cwd: '.' },
-  { id: 'FAULT_MATRIX', file: 'm04-s07-fault-matrix.log', command: 'node', args: ['scripts/rsi/m04-fault-matrix.mjs'], cwd: '.' }
+  { id: 'FAULT_MATRIX', file: 'm04-s07-fault-matrix.log', command: 'node', args: ['scripts/rsi/m04-fault-matrix.mjs'], cwd: '.' },
+  { id: 'E2E_MATRIX', file: 'm04-s08-e2e-matrix.log', command: 'node', args: ['scripts/rsi/m04-e2e-matrix.mjs'], cwd: '.' },
+  { id: 'RECONCILING_STATE', file: 'm04-s09-reconciling-state.log', command: 'node', args: ['scripts/rsi/m04-reconciling-state.mjs'], cwd: '.' },
+  { id: 'LEDGER_IDENTITY', file: 'm04-s10-ledger-identity.log', command: 'node', args: ['scripts/rsi/m04-ledger-identity.mjs'], cwd: '.' },
+  { id: 'EFFECT_PROOF', file: 'm04-s11-effect-proof.log', command: 'node', args: ['scripts/rsi/m04-s11-effect-proof.mjs'], cwd: '.' },
+  { id: 'RECOVERY', file: 'm04-s12-recovery.log', command: 'node', args: ['scripts/rsi/m04-s12-recovery.mjs'], cwd: '.' }
 ]
 
 export const POST_RESTORE_GATE = { id: 'M01_ADMISSION_VERIFY', file: 'm02-s08-m01-verify.log', command: 'node', args: ['scripts/rsi/m01-audit.mjs', '--verify'], cwd: '.' }
@@ -477,6 +496,109 @@ export function faultMatrixWiringProblems(root) {
   return scanFaultMatrixSymbols(root).map((hit) => `fault matrix guard reached a site before its wiring step: ${hit.path} -> ${hit.symbol}`)
 }
 
+export function scanReconcilingStateSymbols(root, symbols = RECONCILING_STATE_SYMBOLS) {
+  const backend = resolve(root, 'backend')
+  const packagePrefix = resolve(root, EXECUTIONJOURNAL_PACKAGE_DIR) + '/'
+  const hits = []
+  for (const path of relativeFiles(backend, '.go')) {
+    if (path.startsWith(packagePrefix)) continue
+    const source = readFileSync(path, 'utf8')
+    for (const symbol of symbols) {
+      if (!new RegExp(`executionjournal\\.${symbol}\\b`).test(source)) continue
+      hits.push({ path: path.slice(resolve(root).length + 1), symbol })
+    }
+  }
+  return hits.sort((left, right) => (left.path === right.path ? (left.symbol < right.symbol ? -1 : 1) : left.path < right.path ? -1 : 1))
+}
+
+export function reconcilingStateWiringProblems(root) {
+  return scanReconcilingStateSymbols(root).map((hit) => `reconciling state query reached a site before its consumption step: ${hit.path} -> ${hit.symbol}`)
+}
+
+export function scanLedgerIdentitySymbols(root, symbols = LEDGER_IDENTITY_SYMBOLS) {
+  const backend = resolve(root, 'backend')
+  const packagePrefix = resolve(root, EXECUTIONJOURNAL_PACKAGE_DIR) + '/'
+  const hits = []
+  for (const path of relativeFiles(backend, '.go')) {
+    if (path.startsWith(packagePrefix)) continue
+    const source = readFileSync(path, 'utf8')
+    for (const symbol of symbols) {
+      if (!new RegExp(`executionjournal\\.${symbol}\\b`).test(source)) continue
+      hits.push({ path: path.slice(resolve(root).length + 1), symbol })
+    }
+  }
+  return hits.sort((left, right) => (left.path === right.path ? (left.symbol < right.symbol ? -1 : 1) : left.path < right.path ? -1 : 1))
+}
+
+export function ledgerIdentityWiringProblems(root) {
+  return scanLedgerIdentitySymbols(root).map((hit) => `ledger identity surface reached a site before its consumption step: ${hit.path} -> ${hit.symbol}`)
+}
+
+export function scanEffectProofSymbols(root, symbols = EFFECT_PROOF_SYMBOLS) {
+  const backend = resolve(root, 'backend')
+  const packagePrefix = resolve(root, EXECUTIONJOURNAL_PACKAGE_DIR) + '/'
+  const hits = []
+  for (const path of relativeFiles(backend, '.go')) {
+    if (path.startsWith(packagePrefix)) continue
+    const source = readFileSync(path, 'utf8')
+    for (const symbol of symbols) {
+      if (!new RegExp(`executionjournal\\.${symbol}\\b`).test(source)) continue
+      hits.push({ path: path.slice(resolve(root).length + 1), symbol })
+    }
+  }
+  return hits.sort((left, right) => (left.path === right.path ? (left.symbol < right.symbol ? -1 : 1) : left.path < right.path ? -1 : 1))
+}
+
+export function effectProofWiringProblems(root) {
+  return scanEffectProofSymbols(root).map((hit) => `effect proof surface reached a site before its consumption step: ${hit.path} -> ${hit.symbol}`)
+}
+
+export function scanRecoverySymbols(root, symbols = RECOVERY_SYMBOLS) {
+  const backend = resolve(root, 'backend')
+  const packagePrefix = resolve(root, EXECUTIONJOURNAL_PACKAGE_DIR) + '/'
+  const hits = []
+  for (const path of relativeFiles(backend, '.go')) {
+    if (path.startsWith(packagePrefix)) continue
+    const source = readFileSync(path, 'utf8')
+    for (const symbol of symbols) {
+      if (!new RegExp(`executionjournal\.${symbol}\b`).test(source)) continue
+      hits.push({ path: path.slice(resolve(root).length + 1), symbol })
+    }
+  }
+  return hits.sort((left, right) => (left.path === right.path ? (left.symbol < right.symbol ? -1 : 1) : left.path < right.path ? -1 : 1))
+}
+
+export function recoveryWiringProblems(root) {
+  return scanRecoverySymbols(root).map((hit) => `interrupted recovery surface reached a site before its consumption step: ${hit.path} -> ${hit.symbol}`)
+}
+
+export function readIntegrationPackage(root, path = E2E_INTEGRATION_PATH) {
+  const full = resolve(root, path)
+  if (!existsSync(full)) return { ok: false, manifest: null, detail: `missing=${path}` }
+  let manifest
+  try {
+    manifest = JSON.parse(readFileSync(full, 'utf8'))
+  } catch (error) {
+    return { ok: false, manifest: null, detail: `unreadable=${path} error=${error.message}` }
+  }
+  const files = Array.isArray(manifest.files) ? manifest.files.length : 0
+  const gateIds = Array.isArray(manifest.gates) ? manifest.gates.map((gate) => gate.id) : []
+  const caseIds = Array.isArray(manifest.cases) ? manifest.cases : []
+  const missingGates = E2E_INTEGRATION_REQUIRED_GATES.filter((id) => !gateIds.includes(id))
+  const missingCases = E2E_INTEGRATION_CASES.filter((id) => !caseIds.includes(id))
+  const ok =
+    manifest.verdict === 'READY_FOR_APPROVAL' &&
+    manifest.step === 'M04-S08' &&
+    files >= E2E_INTEGRATION_MIN_FILES &&
+    missingGates.length === 0 &&
+    missingCases.length === 0
+  return {
+    ok,
+    manifest,
+    detail: `step=${manifest.step ?? 'none'} verdict=${manifest.verdict ?? 'none'} files=${files} gates=${gateIds.length} cases=${caseIds.length} missingGates=${missingGates.join(',') || 'none'} missingCases=${missingCases.join(',') || 'none'}`
+  }
+}
+
 export function scanWiredSymbols(root, symbols = WIRED_BY_ROUTE_CACHE) {
   const backend = resolve(root, 'backend')
   const cachePrefix = resolve(root, ROUTE_CACHE_PACKAGE_DIR) + '/'
@@ -615,6 +737,11 @@ export function buildAdmission(root) {
   const reconciliationProblems = reconciliationWiringProblems(root)
   const scopedBreakerProblems = scopedBreakerWiringProblems(root)
   const faultMatrixProblems = faultMatrixWiringProblems(root)
+  const reconcilingStateProblems = reconcilingStateWiringProblems(root)
+  const ledgerIdentityProblems = ledgerIdentityWiringProblems(root)
+  const effectProofProblems = effectProofWiringProblems(root)
+  const recoveryProblems = recoveryWiringProblems(root)
+  const integration = readIntegrationPackage(root)
   const checks = [
     { id: 'GO_BUILD', ok: gateById.GO_BUILD.exitCode === 0, detail: `exit=${gateById.GO_BUILD.exitCode}` },
     { id: 'GO_TESTS', ok: gateById.GO_TESTS.exitCode === 0, detail: `exit=${gateById.GO_TESTS.exitCode}` },
@@ -655,7 +782,17 @@ export function buildAdmission(root) {
     { id: 'SCOPED_BREAKER', ok: gateById.SCOPED_BREAKER.exitCode === 0, detail: `exit=${gateById.SCOPED_BREAKER.exitCode}` },
     { id: 'SCOPED_BREAKER_UNWIRED', ok: scopedBreakerProblems.length === 0, detail: `symbols=${SCOPED_BREAKER_SYMBOLS.length} problems=${scopedBreakerProblems.length}` },
     { id: 'FAULT_MATRIX', ok: gateById.FAULT_MATRIX.exitCode === 0, detail: `exit=${gateById.FAULT_MATRIX.exitCode}` },
-    { id: 'FAULT_MATRIX_UNWIRED', ok: faultMatrixProblems.length === 0, detail: `symbols=${FAULT_MATRIX_SYMBOLS.length} problems=${faultMatrixProblems.length}` }
+    { id: 'FAULT_MATRIX_UNWIRED', ok: faultMatrixProblems.length === 0, detail: `symbols=${FAULT_MATRIX_SYMBOLS.length} problems=${faultMatrixProblems.length}` },
+    { id: 'E2E_MATRIX', ok: gateById.E2E_MATRIX.exitCode === 0, detail: `exit=${gateById.E2E_MATRIX.exitCode}` },
+    { id: 'E2E_INTEGRATION_PACKAGE', ok: integration.ok, detail: integration.detail },
+    { id: 'RECONCILING_STATE', ok: gateById.RECONCILING_STATE.exitCode === 0, detail: `exit=${gateById.RECONCILING_STATE.exitCode}` },
+    { id: 'RECONCILING_STATE_UNWIRED', ok: reconcilingStateProblems.length === 0, detail: `symbols=${RECONCILING_STATE_SYMBOLS.length} problems=${reconcilingStateProblems.length}` },
+    { id: 'LEDGER_IDENTITY', ok: gateById.LEDGER_IDENTITY.exitCode === 0, detail: `exit=${gateById.LEDGER_IDENTITY.exitCode}` },
+    { id: 'LEDGER_IDENTITY_UNWIRED', ok: ledgerIdentityProblems.length === 0, detail: `symbols=${LEDGER_IDENTITY_SYMBOLS.length} problems=${ledgerIdentityProblems.length}` },
+    { id: 'EFFECT_PROOF', ok: gateById.EFFECT_PROOF.exitCode === 0, detail: `exit=${gateById.EFFECT_PROOF.exitCode}` },
+    { id: 'RECOVERY', ok: gateById.RECOVERY.exitCode === 0, detail: `exit=${gateById.RECOVERY.exitCode}` },
+    { id: 'EFFECT_PROOF_UNWIRED', ok: effectProofProblems.length === 0, detail: `symbols=${EFFECT_PROOF_SYMBOLS.length} problems=${effectProofProblems.length}` },
+    { id: 'RECOVERY_UNWIRED', ok: recoveryProblems.length === 0, detail: `symbols=${RECOVERY_SYMBOLS.length} problems=${recoveryProblems.length}` },
   ]
   const { verdict, blockers } = computeVerdict(checks)
   const sources = packageSources(root)

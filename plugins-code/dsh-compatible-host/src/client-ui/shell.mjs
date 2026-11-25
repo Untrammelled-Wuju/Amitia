@@ -1,5 +1,8 @@
+import * as DshPrimitives from "@deepseek-ai/dsh-client-ui-primitives";
 import { applyWebIndexInjections, instantiateClient, rawError, setDshActiveSession } from "./index.mjs";
 import { acquireDshClient } from "./client-registry.mjs";
+import { acquireDshIconSprite } from "./icon-sprite.mjs";
+import { conversationIdOf } from "../runtime/conversation-id.mjs";
 
 async function resolveStatusPayload(response) {
   if (response && typeof response === "object" && Array.isArray(response.packages)) return response;
@@ -66,11 +69,13 @@ export default {
     if (!Vue) throw new Error("Amitia Vue runtime is unavailable");
     const disposers = Vue.shallowRef([]);
     let mount = null;
+    let releaseIconSprite = null;
     const commandOf = () => {
       const actions = props.actions && typeof props.actions.command === "function" ? props.actions : props.uiActions;
       return actions && typeof actions.command === "function" ? actions.command : null;
     };
     Vue.onMounted(async () => {
+      releaseIconSprite = acquireDshIconSprite(DshPrimitives.ICON_SYMBOLS);
       const command = commandOf();
       if (!command) throw new Error("DSH shell command is unavailable: host command action is missing");
       const bumpAfterMutation = async (payload) => {
@@ -87,7 +92,7 @@ export default {
         command: bumpAfterMutation,
         uiActions: props.uiActions,
         uiNavigate: props.uiNavigate,
-        conversationId: props.uiContext.conversationId || undefined,
+        conversationId: conversationIdOf(props.uiContext.conversationId) || undefined,
       };
       shellMounts().push(mount);
       setDshActiveSession(mount.conversationId);
@@ -127,6 +132,8 @@ export default {
       const list = disposers.value;
       disposers.value = [];
       for (const dispose of list) await dispose();
+      releaseIconSprite?.();
+      releaseIconSprite = null;
       if (mount) {
         withdrawShell(mount);
         mount = null;

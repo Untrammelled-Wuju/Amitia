@@ -89,7 +89,14 @@ const overflowItems = computed(() => {
 </template>
 
 <style scoped>
-.chat-header-extension-host { display: inline-flex; align-items: center; gap: 4px; }
+.chat-header-extension-host { display: inline-flex; align-items: center; gap: 2px; }
+.chat-header-extension-host :deep(.extension-slot--header) { gap: 2px; }
+.chat-header-extension-host :deep(.extension-slot__contribution--client) { display: inline-flex; align-items: center; gap: 2px; }
+.chat-header-extension-host :deep(.extension-slot__contribution--client button) { display: grid; place-items: center; width: 30px; height: 30px; margin: 0; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--text-muted); cursor: pointer; font-size: 15px; line-height: 1; }
+.chat-header-extension-host :deep(.extension-slot__contribution--client button svg) { width: 15px; height: 15px; }
+.chat-header-extension-host :deep(.extension-slot__contribution--client button:hover),
+.chat-header-extension-host :deep(.extension-slot__contribution--client button:focus-visible) { background: var(--control-hover-bg); color: var(--text-primary); outline: none; }
+.chat-header-extension-host :deep(.extension-slot__contribution--client button:disabled) { opacity: 0.4; cursor: default; }
 .chat-header-extension-host__overflow { display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--text-secondary); cursor: pointer; }
 .chat-header-extension-host__overflow:hover, .chat-header-extension-host__overflow:focus-visible { border-color: var(--surface-border); background: var(--control-hover-bg); outline: none; }
 .chat-header-extension-host__menu { width: 220px; padding: 6px; }

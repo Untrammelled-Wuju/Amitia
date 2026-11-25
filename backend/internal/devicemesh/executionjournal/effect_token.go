@@ -26,6 +26,24 @@ const EffectTokenSchema = `CREATE TABLE IF NOT EXISTS kernel_invocation_effect (
 	redeemed_at TEXT NOT NULL DEFAULT '',
 	PRIMARY KEY(scope_key,idempotency_key,attempt))`
 
+const EffectTokenImmutableIdentitySchema = `CREATE TRIGGER IF NOT EXISTS kernel_invocation_effect_immutable_identity
+BEFORE UPDATE OF scope_key,idempotency_key,attempt,salt,token ON kernel_invocation_effect
+BEGIN
+	SELECT RAISE(ABORT, 'effect token row is immutable');
+END`
+
+const EffectTokenImmutableRemovalSchema = `CREATE TRIGGER IF NOT EXISTS kernel_invocation_effect_immutable_removal
+BEFORE DELETE ON kernel_invocation_effect
+BEGIN
+	SELECT RAISE(ABORT, 'effect token row is immutable');
+END`
+
+const effectTokenImmutableMessage = "effect token row is immutable"
+
+func IsEffectTokenImmutableError(err error) bool {
+	return err != nil && strings.Contains(err.Error(), effectTokenImmutableMessage)
+}
+
 const (
 	effectTokenPrefix      = "v1"
 	effectTokenSaltBytes   = 32

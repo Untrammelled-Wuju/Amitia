@@ -8,7 +8,7 @@
     "description": {
       "default": "在一个普通 Amitia 插件中安装 DSH 插件，并将 DSH 能力映射为 Amitia 通用插件贡献。"
     },
-    "version": "0.2.100",
+    "version": "0.2.103",
     "license": "AGPL-3.0-only",
     "homepage": "https://amitia.untrammelled.top",
     "categories": [

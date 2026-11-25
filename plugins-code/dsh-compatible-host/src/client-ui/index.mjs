@@ -25,6 +25,7 @@ import { createDshFileDragActions } from "../client-abi/file-drag.mjs";
 import { createDshSettingsSchema } from "../client-abi/settings-schema.mjs";
 import { createConversationData, registerConversationData } from "./conversation-data.mjs";
 import { acquireDshClient, invalidateDshClient } from "./client-registry.mjs";
+import { conversationIdOf } from "../runtime/conversation-id.mjs";
 
 Zod.config({ jitless: true });
 
@@ -1082,6 +1083,7 @@ const dshContributionOrigins = new Map();
 const dshSlotListeners = new Map();
 const dshCommonInjects = new Map();
 const dshFactoryContributionIds = new Map();
+const dshPredeclaredChildOwners = new Map();
 
 
 
@@ -1128,6 +1130,7 @@ function createSlotBridge(pluginId, resources) {
     dshAdmittedContributions.set(admissionKey, contributionId);
     dshContributionOrigins.set(contributionId, slotId);
     const vueComponent = createReactVueComponent(pluginId, component, resources, contributionId);
+    const predeclaredClaims = [];
     const children = Object.entries(options?.children ?? {}).flatMap(([name, raw]) => {
       const spec = raw && typeof raw === "object" ? raw : {};
       const childSlotId = tryMapDshChildSlot(name);
@@ -1139,10 +1142,30 @@ function createSlotBridge(pluginId, resources) {
       if (spec.inject && typeof spec.inject === "object") dshCommonInjects.set(childSlotId, spec.inject);
       const childDefinition = runtime.getDefinition(childSlotId);
       if (childDefinition) {
-        console.warn(
+        const claimOwner = dshPredeclaredChildOwners.get(childSlotId);
+        if (claimOwner && claimOwner !== contributionId) {
+          console.warn(
+            `[dsh-ui] child slot ${childSlotId} is already claimed by ${claimOwner}; ${contributionId} keeps no render authority`,
+          );
+          return [];
+        }
+        console.debug(
           `[dsh-ui] child slot ${childSlotId} is predeclared by the host: dsh=${text(spec.kind) || "-"}/${text(spec.scope) || "-"} host=${childDefinition.kind}/${childDefinition.scope ?? "root"}`,
         );
-        return [];
+        const hostScope = childDefinition.scope ?? "root";
+        predeclaredClaims.push(childSlotId);
+        return [{
+          slotId: childSlotId,
+          contractVersion: childDefinition.contractVersion ?? 1,
+          supportedKinds: Array.isArray(childDefinition.supportedKinds) && childDefinition.supportedKinds.length > 0 ? childDefinition.supportedKinds : ["panel"],
+          kind: childDefinition.kind,
+          layout: childDefinition.layout,
+          fallbackPolicy: childDefinition.fallbackPolicy,
+          scope: hostScope,
+          allowRootChild: childDefinition.allowRootChild ?? (hostScope === "root"),
+          description: childDefinition.description,
+          commonInject: spec.inject,
+        }];
       }
       const parentScope = runtime.getDefinition(slotId)?.scope ?? "root";
       const requestedScope = spec.scope ?? parentScope;
@@ -1175,9 +1198,13 @@ function createSlotBridge(pluginId, resources) {
       localeNamespace: typeof options?.locale === "string" ? options.locale : undefined,
     });
     if (options?.store) dshStoreHandles.set(contributionId, options.store);
+    for (const childSlotId of predeclaredClaims) dshPredeclaredChildOwners.set(childSlotId, contributionId);
     notifySlot(slotId);
     const release = async () => {
       await dispose();
+      for (const childSlotId of predeclaredClaims) {
+        if (dshPredeclaredChildOwners.get(childSlotId) === contributionId) dshPredeclaredChildOwners.delete(childSlotId);
+      }
       if (dshAdmittedContributions.get(admissionKey) === contributionId) {
         dshAdmittedContributions.delete(admissionKey);
       }
@@ -2475,7 +2502,7 @@ export default {
     const syncCurrentSession = () => {
       const context = props.uiContext && typeof props.uiContext === "object" ? props.uiContext : {};
       const conversation = context.conversation && typeof context.conversation === "object" ? context.conversation : {};
-      globalThis.__dshCurrentSessionId = text(context.conversationId || conversation.id) || undefined;
+      globalThis.__dshCurrentSessionId = text(conversationIdOf(context.conversationId || conversation.id)) || undefined;
       globalThis.__dshCurrentCharacterId = text(context.characterId || conversation.characterId) || undefined;
     };
     Vue.watch?.(() => props.uiContext, syncCurrentSession, { deep: true, immediate: true });

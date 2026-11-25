@@ -53,6 +53,7 @@ copyFileSync(join(packageRoot, "src", "runtime", "session-projection.mjs"), join
 copyFileSync(join(packageRoot, "src", "runtime", "web-server.mjs"), join(stagingRoot, "modules", "dsh-compatible-runtime", "dist", "web-server.mjs"));
 copyFileSync(join(packageRoot, "src", "runtime", "provider-wiring.mjs"), join(stagingRoot, "modules", "dsh-compatible-runtime", "dist", "provider-wiring.mjs"));
 copyFileSync(join(packageRoot, "src", "runtime", "model-adapter.mjs"), join(stagingRoot, "modules", "dsh-compatible-runtime", "dist", "model-adapter.mjs"));
+copyFileSync(join(packageRoot, "src", "runtime", "conversation-id.mjs"), join(stagingRoot, "modules", "dsh-compatible-runtime", "dist", "conversation-id.mjs"));
 copyFileSync(join(packageRoot, "src", "runtime", "diagnose.mjs"), join(stagingRoot, "modules", "dsh-compatible-runtime", "dist", "diagnose.mjs"));
 copyFileSync(join(packageRoot, "src", "runtime", "approval-bridge.mjs"), join(stagingRoot, "modules", "dsh-compatible-runtime", "dist", "approval-bridge.mjs"));
 cpSync(join(packageRoot, "src", "runtime", "compat"), join(stagingRoot, "modules", "dsh-compatible-runtime", "dist", "compat"), { recursive: true });

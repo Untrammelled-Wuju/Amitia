@@ -145,8 +145,32 @@ func NewLedger(db *sql.DB) (*InvocationLedger, error) {
 	if _, err := db.Exec(EffectTokenSchema); err != nil {
 		return nil, fmt.Errorf("执行账本：创建效果凭据表失败: %w", err)
 	}
+	if _, err := db.Exec(EffectTokenImmutableIdentitySchema); err != nil {
+		return nil, fmt.Errorf("执行账本：创建效果凭据身份不可篡改约束失败: %w", err)
+	}
+	if _, err := db.Exec(EffectTokenImmutableRemovalSchema); err != nil {
+		return nil, fmt.Errorf("执行账本：创建效果凭据不可删除约束失败: %w", err)
+	}
 	if _, err := db.Exec(ReconciliationSchema); err != nil {
 		return nil, fmt.Errorf("执行账本：创建人工核对表失败: %w", err)
+	}
+	if _, err := db.Exec(RecoverySchema); err != nil {
+		return nil, fmt.Errorf("执行账本：创建中断恢复表失败: %w", err)
+	}
+	if _, err := db.Exec(RecoveryImmutableSchema); err != nil {
+		return nil, fmt.Errorf("执行账本：创建中断恢复不可篡改约束失败: %w", err)
+	}
+	if _, err := db.Exec(RecoveryRemovalSchema); err != nil {
+		return nil, fmt.Errorf("执行账本：创建中断恢复不可删除约束失败: %w", err)
+	}
+	if _, err := db.Exec(EffectProofSchema); err != nil {
+		return nil, fmt.Errorf("执行账本：创建效果证明表失败: %w", err)
+	}
+	if _, err := db.Exec(EffectProofImmutableSchema); err != nil {
+		return nil, fmt.Errorf("执行账本：创建效果证明不可篡改约束失败: %w", err)
+	}
+	if _, err := db.Exec(EffectProofRemovalSchema); err != nil {
+		return nil, fmt.Errorf("执行账本：创建效果证明不可删除约束失败: %w", err)
 	}
 	return &InvocationLedger{db: db}, nil
 }
@@ -192,6 +216,9 @@ func (l *InvocationLedger) Commit(ctx context.Context, request LedgerRequest, ru
 	if err != nil {
 		return LedgerEntry{}, false, err
 	}
+	if entry.InvocationID != strings.TrimSpace(contract.Trace.InvocationID) {
+		return LedgerEntry{}, false, fmt.Errorf("%w: %s requestedInvocation=%q", ErrLedgerInvocationMismatch, entry.Binding(), strings.TrimSpace(contract.Trace.InvocationID))
+	}
 	if entry.PayloadHash != strings.TrimSpace(request.PayloadHash) {
 		return LedgerEntry{}, false, fmt.Errorf("%w: scope=%q key=%q recorded=%s requested=%s", ErrLedgerPayloadConflict, scopeKey, key, entry.PayloadHash, request.PayloadHash)
 	}
@@ -200,6 +227,13 @@ func (l *InvocationLedger) Commit(ctx context.Context, request LedgerRequest, ru
 	}
 	if entry.State != EffectPending {
 		return entry, false, ledgerStateError(entry)
+	}
+	recorded, err := recoveryRecorded(ctx, tx, scopeKey, key)
+	if err != nil {
+		return LedgerEntry{}, false, err
+	}
+	if recorded {
+		return LedgerEntry{}, false, fmt.Errorf("%w: %s", ErrRecoveryRequired, entry.Binding())
 	}
 	changed, err := inserted.RowsAffected()
 	if err != nil {

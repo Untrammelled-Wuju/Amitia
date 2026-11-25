@@ -16,6 +16,7 @@ import { createDshClientResourceRegistry } from "../client-abi/resource-registry
 import { createDshClientRuntimeServices } from "../client-abi/runtime-services.mjs";
 import { createDshFileDragActions } from "../client-abi/file-drag.mjs";
 import { DSH_SLOT_ALIASES, mapDshSlot as resolveDshSlot } from "../client-abi/slot-map.mjs";
+import { acquireDshIconSprite } from "../client-ui/icon-sprite.mjs";
 
 const CORDIS_SHIM = Object.freeze({
   Service: class Service {
@@ -1083,6 +1084,7 @@ export async function mount(root, context = {}) {
   }
   const slotId = text(context.slotId);
   if (!slotId) throw new Error("DSH mobile client UI requires slotId");
+  const releaseIconSprite = acquireDshIconSprite(DshPrimitives.ICON_SYMBOLS);
   root.replaceChildren();
   const host = document.createElement("div");
   host.className = "dsh-mobile-slot";
@@ -1096,6 +1098,7 @@ export async function mount(root, context = {}) {
     status = await invokeCommand({ action: "status" });
     clients = await loadMobileClients(status, registry, locale, conversationDefinitions);
   } catch (error) {
+    releaseIconSprite();
     root.replaceChildren();
     const pre = document.createElement("pre");
     pre.className = "dsh-mobile-slot__error";
@@ -1164,6 +1167,7 @@ export async function mount(root, context = {}) {
       await clients.dispose();
       registry.dispose();
       locale.dispose();
+      releaseIconSprite();
       root.replaceChildren();
     },
   };

@@ -372,7 +372,7 @@ const componentProps = computed<Record<string, unknown>>(() => ({
   sessionId: sessionId.value,
   uiContext: uiContext.value,
   useStore,
-  actions: instance.value.actions,
+  ...(props.context && typeof props.context === "object" && "actions" in props.context ? {} : { actions: instance.value.actions }),
   useSession,
   useGlobal,
   SessionProvider,
