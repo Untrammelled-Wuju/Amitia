@@ -476,6 +476,36 @@ Stream<Map<String, dynamic>> decodeOwnedGroupChatStream(
   }
 }
 
+class ConversationListFilter {
+  const ConversationListFilter({
+    this.archive = '',
+    this.projectId = '',
+    this.channel = '',
+  });
+
+  final String archive;
+  final String projectId;
+  final String channel;
+
+  Map<String, String> get parameters => {
+    if (archive.isNotEmpty) 'archive': archive,
+    if (projectId.isNotEmpty) 'projectId': projectId,
+    if (channel.isNotEmpty) 'channel': channel,
+  };
+}
+
+class ConversationListCursor {
+  final String scope;
+  final Map<String, String> parameters;
+
+  const ConversationListCursor(this.scope, this.parameters);
+}
+
+typedef OwnedConversationPage = ({
+  List<ConversationDto> rows,
+  ConversationListCursor? cursor,
+});
+
 class DeviceOwnedChatService {
   DeviceOwnedChatService(
     this._api, {
@@ -706,13 +736,21 @@ class DeviceOwnedChatService {
     String? characterId,
     bool older = false,
     String keyword = '',
+    ConversationListCursor? listPage,
+    ConversationListFilter listFilter = const ConversationListFilter(),
   }) async {
     final role = selectRole(characterId);
     final key = _historyKey(conversationId, role, keyword);
     final cursors = older
-        ? _historyCursors[key] ?? <String, String>{}
+        ? listPage?.parameters ?? _historyCursors[key] ?? <String, String>{}
         : <String, String>{};
-    final flightKey = jsonEncode([key, older, cursors]);
+    final flightKey = jsonEncode([
+      key,
+      older,
+      cursors,
+      listPage?.scope,
+      listFilter.parameters,
+    ]);
     final active = _queryFlights[flightKey];
     if (active != null) return active;
     late final Future<Map<String, dynamic>> pending;
@@ -722,6 +760,8 @@ class DeviceOwnedChatService {
           characterId: characterId,
           older: older,
           keyword: keyword,
+          listPage: listPage,
+          listFilter: listFilter,
         ).whenComplete(() {
           if (identical(_queryFlights[flightKey], pending))
             _queryFlights.remove(flightKey);
@@ -735,19 +775,24 @@ class DeviceOwnedChatService {
     String? characterId,
     bool older = false,
     String keyword = '',
+    ConversationListCursor? listPage,
+    ConversationListFilter listFilter = const ConversationListFilter(),
   }) async {
     final origin = parseConversationReference(conversationId);
     final role = selectRole(characterId);
     final captured = revision;
     final key = _historyKey(conversationId, role, keyword);
     final cursors = older
-        ? _historyCursors[key] ?? <String, String>{}
+        ? listPage?.parameters ?? _historyCursors[key] ?? <String, String>{}
         : <String, String>{};
     final requestKey = jsonEncode([key, older, cursors]);
     final ticket = Object();
-    _historyRequests[requestKey] = ticket;
-    if (_historyRequests.length > 128)
-      _historyRequests.remove(_historyRequests.keys.first);
+    if (listPage == null) {
+      _historyRequests[requestKey] = ticket;
+      if (_historyRequests.length > 128) {
+        _historyRequests.remove(_historyRequests.keys.first);
+      }
+    }
     final kind = conversationId.isEmpty ? 'conversation' : 'message';
     final result = await _api.get<Map<String, dynamic>>(
       '/api/device-mesh/v1/business/conversations${conversationId.isEmpty ? '' : '/${Uri.encodeComponent(origin?['id'] ?? conversationId)}'}',
@@ -755,13 +800,15 @@ class DeviceOwnedChatService {
         'characterId': role,
         if (keyword.isNotEmpty) 'keyword': keyword,
         if (origin != null) 'conversationOwnerId': origin['ownerId'],
-        if (older) 'resourceKind': kind,
+        if (older || listPage != null) 'resourceKind': kind,
+        if (listPage != null) 'limit': 24,
+        ...listFilter.parameters,
         ...cursors,
       },
     );
     if (captured != revision ||
         result == null ||
-        !identical(_historyRequests[requestKey], ticket))
+        (listPage == null && !identical(_historyRequests[requestKey], ticket)))
       throw StateError('服务状态已变化，旧上下文已丢弃');
     final scope = result['executionScope'];
     if (scope is! Map) throw StateError('聊天历史缺少数据归属信息');
@@ -784,7 +831,7 @@ class DeviceOwnedChatService {
         'conversationRoleId',
       ].map((field) => scope[field]).toList(),
     );
-    if (older && _historyScopes[key] != scopeStamp)
+    if (older && (listPage?.scope ?? _historyScopes[key]) != scopeStamp)
       throw StateError('服务或角色已变化，请重新加载当前对话');
     final next = <String, String>{};
     for (final source in [
@@ -800,7 +847,6 @@ class DeviceOwnedChatService {
           (snapshot['nextCursors'] as Map)[source[2]]?.toString() ?? '';
       if (value.isNotEmpty) next[source[0]] = value;
     }
-    _historyCursors[key] = next;
     if (conversationId.isEmpty &&
         (!older || cursors.containsKey('historicalListCursor'))) {
       final historicalCursor =
@@ -808,12 +854,22 @@ class DeviceOwnedChatService {
       if (historicalCursor.isNotEmpty)
         next['historicalListCursor'] = historicalCursor;
     }
-    _historyScopes[key] = scopeStamp;
-    if (_historyScopes.length > 64) {
-      final oldest = _historyScopes.keys.first;
-      _historyScopes.remove(oldest);
-      _historyCursors.remove(oldest);
-      _historyRequests.remove(oldest);
+    if (conversationId.isEmpty &&
+        (!older || cursors.containsKey('coreCursor'))) {
+      final coreCursor = result['nextCoreCursor']?.toString() ?? '';
+      if (coreCursor.isNotEmpty) next['coreCursor'] = coreCursor;
+    }
+    if (listPage == null) {
+      _historyCursors[key] = next;
+      _historyScopes[key] = scopeStamp;
+      if (_historyScopes.length > 64) {
+        final oldest = _historyScopes.keys.first;
+        _historyScopes.remove(oldest);
+        _historyCursors.remove(oldest);
+        _historyRequests.remove(oldest);
+      }
+    } else if (older && jsonEncode(cursors) == jsonEncode(next)) {
+      throw StateError('会话分页游标未推进');
     }
     final snapshot = result['snapshot'];
     if (snapshot is Map) {
@@ -851,6 +907,11 @@ class DeviceOwnedChatService {
     }
     return {
       ...result,
+      if (listPage != null && next.isNotEmpty)
+        'nextListPage': ConversationListCursor(
+          scopeStamp,
+          Map.unmodifiable(next),
+        ),
       if (conversationId.isNotEmpty) 'conversationReference': conversationId,
     };
   }
@@ -990,7 +1051,8 @@ class DeviceOwnedChatService {
         expectedOwnerId != scope['resourceOwnerId']) {
       scope = await _resolveHistoricalScope(expectedOwnerId, role) ?? scope;
     }
-    final historical = scope != null &&
+    final historical =
+        scope != null &&
         expectedOwnerId != null &&
         scope['coordinated'] == true &&
         scope['resourceOwnerId'] == expectedOwnerId &&
@@ -1039,8 +1101,7 @@ class DeviceOwnedChatService {
           'id': origin?['id'] ?? id,
           'characterId': role,
           if (origin != null) 'targetDeviceId': origin['ownerId'],
-          if (scope != null)
-            'memoryView': memoryViewForScope(scope),
+          if (scope != null) 'memoryView': memoryViewForScope(scope),
         },
       );
       if (result?['resource'] is Map && result?['executionScope'] is Map) {
@@ -1696,6 +1757,22 @@ class DeviceOwnedChatService {
   List<MessageDto> messages(Map<String, dynamic> query) {
     final result = <MessageDto>[];
     final seen = <String>{};
+    final quoteSources = <String, Map>{};
+    for (final snapshot in [
+      query['historicalSnapshot'],
+      query['snapshot'],
+    ].whereType<Map>()) {
+      final owner = (snapshot['ownerId'] ?? '').toString();
+      for (final resource
+          in (snapshot['resources'] as List? ?? []).whereType<Map>()) {
+        final body = resource['body'];
+        if (resource['kind'] == 'message' &&
+            body is Map &&
+            body['id'] != null) {
+          quoteSources['$owner:${body['id']}'] = body;
+        }
+      }
+    }
     for (final snapshot in [
       query['historicalSnapshot'],
       query['snapshot'],
@@ -1757,9 +1834,36 @@ class DeviceOwnedChatService {
           conversationOwnerId: owner,
           historicalRoleId: historicalRoleId,
         );
+        final quote = row['quote'] is Map ? row['quote'] as Map : null;
+        final quoteContent = (quote?['content'] ?? '').toString();
+        final source = quote == null
+            ? null
+            : quoteSources['${quote['ownerId']}:${quote['messageId']}'];
+        final names = (source?['fileName'] ?? '').toString().isNotEmpty
+            ? source!['fileName'].toString()
+            : (source?['attachments'] as List? ?? [])
+                  .whereType<Map>()
+                  .map((item) => (item['name'] ?? '').toString())
+                  .where((name) => name.isNotEmpty)
+                  .join('、');
+        final quoteDisplay =
+            names.isNotEmpty &&
+                (quoteContent.isEmpty ||
+                    const [
+                      '[文件]',
+                      '[图片]',
+                      '[视频]',
+                      '[语音]',
+                    ].contains(quoteContent))
+            ? '${quoteContent.isEmpty ? '[附件]' : quoteContent} $names'
+            : quoteContent;
         result.add(
           MessageDto.fromJson({
             ...Map<String, dynamic>.from(row),
+            if (quote != null) ...{
+              'replyToMessageId': quote['messageId'],
+              'replyToExcerpt': quoteDisplay,
+            },
             if (query['conversationReference'] != null)
               'conversationId': query['conversationReference'],
             'imageUrl':
@@ -1906,6 +2010,71 @@ class DeviceOwnedChatService {
     }
   }
 
+  Future<OwnedConversationPage> conversationPage({
+    String? characterId,
+    String keyword = '',
+    ConversationListCursor? cursor,
+    ConversationListFilter filter = const ConversationListFilter(),
+  }) async {
+    final role = selectRole(characterId);
+    final result = await query(
+      '',
+      characterId: role,
+      keyword: keyword.trim().toLowerCase(),
+      older: cursor != null,
+      listPage: cursor ?? const ConversationListCursor('', {}),
+      listFilter: filter,
+    );
+    final rows = <String, ConversationDto>{};
+    _mergeConversationRows(rows, result, role);
+    return (
+      rows: rows.values.toList()
+        ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt)),
+      cursor: result['nextListPage'] as ConversationListCursor?,
+    );
+  }
+
+  void _mergeConversationRows(
+    Map<String, ConversationDto> rows,
+    Map<String, dynamic> result,
+    String role,
+  ) {
+    for (final row
+        in (result['historicalConversations'] as List? ?? [])
+            .whereType<Map>()) {
+      final value = ConversationDto.fromJson(
+        ownedConversationRow(
+          row,
+          (row['ownerId'] ??
+                  (result['executionScope'] as Map)['targetDeviceId'])
+              .toString(),
+          characterId: role,
+        ),
+      );
+      if (value.id.isNotEmpty) rows.putIfAbsent(value.id, () => value);
+    }
+    for (final snapshot in [
+      result['historicalSnapshot'],
+      result['snapshot'],
+    ].whereType<Map>()) {
+      final values = (snapshot['resources'] as List? ?? [])
+          .whereType<Map>()
+          .where((row) => row['kind'] == 'conversation' && row['body'] is Map);
+      for (final resource in values) {
+        final row = resource['body'] as Map;
+        final resourceRole = (resource['roleId'] ?? '').toString().trim();
+        final value = ConversationDto.fromJson(
+          ownedConversationRow(
+            row,
+            snapshot['ownerId'].toString(),
+            characterId: resourceRole.isEmpty ? role : resourceRole,
+          ),
+        );
+        if (value.id.isNotEmpty) rows[value.id] = value;
+      }
+    }
+  }
+
   Future<List<ConversationDto>> _loadConversations(
     String role,
     String keyword,
@@ -1914,42 +2083,7 @@ class DeviceOwnedChatService {
     final rows = <String, ConversationDto>{};
     final visited = <String>{};
     for (;;) {
-      for (final row
-          in (result['historicalConversations'] as List? ?? [])
-              .whereType<Map>()) {
-        final value = ConversationDto.fromJson(
-          ownedConversationRow(
-            row,
-            (row['ownerId'] ??
-                    (result['executionScope'] as Map)['targetDeviceId'])
-                .toString(),
-            characterId: role,
-          ),
-        );
-        if (value.id.isNotEmpty) rows.putIfAbsent(value.id, () => value);
-      }
-      for (final snapshot in [
-        result['historicalSnapshot'],
-        result['snapshot'],
-      ].whereType<Map>()) {
-        final values = (snapshot['resources'] as List? ?? [])
-            .whereType<Map>()
-            .where(
-              (row) => row['kind'] == 'conversation' && row['body'] is Map,
-            );
-        for (final resource in values) {
-          final row = resource['body'] as Map;
-          final resourceRole = (resource['roleId'] ?? '').toString().trim();
-          final value = ConversationDto.fromJson(
-            ownedConversationRow(
-              row,
-              snapshot['ownerId'].toString(),
-              characterId: resourceRole.isEmpty ? role : resourceRole,
-            ),
-          );
-          if (value.id.isNotEmpty) rows[value.id] = value;
-        }
-      }
+      _mergeConversationRows(rows, result, role);
       if (!hasMore('', characterId: role, keyword: keyword)) {
         return rows.values.toList()
           ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));

@@ -18,9 +18,11 @@ import '../../../../core/models/character.dart';
 import '../../../../core/models/conversation.dart';
 import '../../../../core/models/project.dart';
 import '../../../../core/services/chat_service.dart';
+import '../../../../core/services/device_owned_chat_service.dart';
 import '../../../chat/presentation/widgets/group_chat_invite_sheet.dart';
 import '../../../characters/presentation/widgets/team_create_sheet.dart';
 import '../../../chat/runtime/conversation_runtime_controller.dart';
+import '../widgets/conversation_list_scroll.dart';
 import '../widgets/conversation_list_tile.dart';
 import '../widgets/conversation_swipe_tile.dart';
 import '../widgets/project_dialogs.dart';
@@ -42,7 +44,10 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
   bool _selecting = false;
   bool _batchBusy = false;
   final Map<String, ConversationDto> _selected = {};
+  final _conversationScroll = ScrollController();
+  final _projectScroll = ScrollController();
   final Set<String> _expandedProjects = <String>{};
+  final _projectPages = <String, _ProjectConversationPaging>{};
   late final bool Function() _backHandler;
   late final ConversationBackHandler _backRegistry;
   late final ProviderSubscription<ConversationRuntimeRegistry>
@@ -77,6 +82,8 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
   @override
   void dispose() {
     _conversationRetryTimer?.cancel();
+    _conversationScroll.dispose();
+    _projectScroll.dispose();
     _runtimeRegistrySubscription.close();
     if (identical(_backRegistry.onBack, _backHandler))
       _backRegistry.onBack = null;
@@ -145,7 +152,8 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
                   .valueOrNull
                   ?.projects
                   .where((project) => project.hiddenAt.isEmpty)
-                  .expand((project) => project.conversations)
+                  .where((project) => _expandedProjects.contains(project.id))
+                  .expand(_loadedProjectConversations)
                   .toList() ??
               <ConversationDto>[])
         : (ref.read(conversationListProvider).valueOrNull ??
@@ -411,6 +419,12 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
   @override
   Widget build(BuildContext context) {
     final conversationsAsync = ref.watch(conversationListProvider);
+    if (_projectMode) {
+      ref.listen(conversationSidebarProvider, (previous, next) {
+        if (next.isLoading && previous?.isLoading != true)
+          _projectPages.clear();
+      });
+    }
     final sidebarAsync = _projectMode
         ? ref.watch(conversationSidebarProvider)
         : null;
@@ -593,12 +607,53 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
     );
   }
 
+  Widget _pagedList({
+    required Widget child,
+    required ScrollController controller,
+    required bool loading,
+    bool enabled = true,
+  }) {
+    final cache = ref.watch(conversationPageCacheProvider);
+    return Column(
+      children: [
+        Expanded(
+          child: ConversationListScroll(
+            controller: controller,
+            enabled:
+                enabled &&
+                cache.hasMore &&
+                !loading &&
+                cache.error == null &&
+                !_batchBusy,
+            onEnd: () {
+              if (ref.read(conversationListProvider).isLoading) return;
+              ref.read(conversationPageRequestProvider.notifier).state++;
+            },
+            child: child,
+          ),
+        ),
+        if (cache.error != null)
+          Flexible(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.all(AppSpacing.sm),
+              child: SelectableText(
+                '${cache.error}\n${cache.stackTrace ?? ''}',
+              ),
+            ),
+          )
+        else if (loading)
+          const LinearProgressIndicator(),
+      ],
+    );
+  }
+
   Widget _buildConversationList(
     BuildContext context,
     AsyncValue<List<ConversationDto>> conversationsAsync,
     Map<String, CharacterDto> charactersById,
   ) {
     return conversationsAsync.when(
+      skipLoadingOnReload: true,
       loading: () {
         _conversationRetryTimer?.cancel();
         return const Center(child: CircularProgressIndicator());
@@ -617,44 +672,129 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
             )
             .toList();
         filtered.sort(_sortConversations);
-        if (filtered.isEmpty) {
+        if (filtered.isEmpty &&
+            !ref.watch(conversationPageCacheProvider).hasMore) {
           return const AmitiaEmptyState(
             icon: Icons.chat_bubble_outline,
             title: '没有找到对话',
             subtitle: '试试其他关键词，或者新建一个对话',
           );
         }
-        return ListView.builder(
-          padding: EdgeInsets.only(bottom: AppSpacing.lg),
-          itemCount: filtered.length,
-          itemBuilder: (context, index) {
-            final conversation = filtered[index];
-            return ConversationSwipeTile(
-              key: ValueKey('conversation-${conversation.id}'),
-              pinned: conversation.pinnedAt.trim().isNotEmpty,
-              readable: true,
-              enabled: !_selecting,
-              onPin: () => _setConversationPinned(conversation),
-              onArchive: () => _archiveConversation(conversation),
-              onMarkRead: () => _markConversationRead(conversation),
-              child: ConversationListTile(
-                conversation: conversation,
-                selecting: _selecting,
-                selected: _selected.containsKey(conversation.id),
-                character: charactersById[conversation.characterId],
-                timeText: formatConversationTime(conversation.updatedAt),
-                showDivider: index < filtered.length - 1,
-                onTap: () => _selecting
-                    ? _toggleSelection(conversation)
-                    : _openConversation(conversation),
-                onLongPressAt: (position) => _selecting
-                    ? _showBatchMenu(position)
-                    : _showActionsSheet(conversation, position),
-              ),
-            );
-          },
+        return _pagedList(
+          controller: _conversationScroll,
+          loading: conversationsAsync.isLoading,
+          child: ListView.builder(
+            controller: _conversationScroll,
+            padding: EdgeInsets.only(bottom: AppSpacing.lg),
+            itemCount: filtered.length,
+            itemBuilder: (context, index) {
+              final conversation = filtered[index];
+              return ConversationSwipeTile(
+                key: ValueKey('conversation-${conversation.id}'),
+                pinned: conversation.pinnedAt.trim().isNotEmpty,
+                readable: true,
+                enabled: !_selecting,
+                onPin: () => _setConversationPinned(conversation),
+                onArchive: () => _archiveConversation(conversation),
+                onMarkRead: () => _markConversationRead(conversation),
+                child: ConversationListTile(
+                  conversation: conversation,
+                  selecting: _selecting,
+                  selected: _selected.containsKey(conversation.id),
+                  character: charactersById[conversation.characterId],
+                  timeText: formatConversationTime(conversation.updatedAt),
+                  showDivider: index < filtered.length - 1,
+                  onTap: () => _selecting
+                      ? _toggleSelection(conversation)
+                      : _openConversation(conversation),
+                  onLongPressAt: (position) => _selecting
+                      ? _showBatchMenu(position)
+                      : _showActionsSheet(conversation, position),
+                ),
+              );
+            },
+          ),
         );
       },
+    );
+  }
+
+  bool _canLoadProject(ProjectDto project) =>
+      project.id.isNotEmpty &&
+      project.ownerId.isNotEmpty &&
+      project.roleId.isNotEmpty;
+
+  List<ConversationDto> _loadedProjectConversations(ProjectDto project) =>
+      _projectPages[project.id]?.page?.rows ?? project.conversations;
+
+  Future<void> _loadProjectConversations(ProjectDto project) async {
+    if (!_canLoadProject(project)) return;
+    final state = _projectPages.putIfAbsent(
+      project.id,
+      _ProjectConversationPaging.new,
+    );
+    if (state.loading || state.page != null && state.page!.cursor == null)
+      return;
+    setState(() {
+      state.loading = true;
+      state.error = '';
+    });
+    try {
+      final page = await ref
+          .read(chatServiceProvider)
+          .projectConversationPage(project, cursor: state.page?.cursor);
+      if (!mounted || !identical(_projectPages[project.id], state)) return;
+      final rows = {
+        for (final row in state.page?.rows ?? const <ConversationDto>[])
+          row.id: row,
+        for (final row in page.rows) row.id: row,
+      };
+      setState(() {
+        state.page = (rows: rows.values.toList(), cursor: page.cursor);
+        state.loading = false;
+      });
+    } catch (error, stackTrace) {
+      if (!mounted || !identical(_projectPages[project.id], state)) return;
+      setState(() {
+        state.loading = false;
+        state.error = '$error\n$stackTrace';
+      });
+    }
+  }
+
+  Widget? _projectConversationFooter(
+    ProjectDto project,
+    _ProjectConversationPaging? state,
+  ) {
+    if (!_canLoadProject(project)) return null;
+    if (state?.error.isNotEmpty == true) {
+      return Column(
+        children: [
+          SelectableText(state!.error),
+          TextButton(
+            onPressed: () => _loadProjectConversations(project),
+            child: const Text('重试'),
+          ),
+        ],
+      );
+    }
+    if (state?.loading != true &&
+        (state?.page == null || state?.page?.cursor != null)) {
+      return ConversationListEnd(
+        onEnd: () => _loadProjectConversations(project),
+      );
+    }
+    if (state?.loading != true && _loadedProjectConversations(project).isEmpty)
+      return null;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Text(
+        state?.loading == true ? '加载中～' : '到底啦～',
+        textAlign: TextAlign.center,
+        style: AppTypography.caption(
+          context,
+        ).copyWith(color: context.textTertiary),
+      ),
     );
   }
 
@@ -664,6 +804,7 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
     Map<String, CharacterDto> charactersById,
   ) {
     return sidebarAsync.when(
+      skipLoadingOnReload: true,
       loading: () {
         _conversationRetryTimer?.cancel();
         return const Center(child: CircularProgressIndicator());
@@ -691,23 +832,40 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
           );
         }
         return ListView.builder(
+          controller: _projectScroll,
           key: const ValueKey('project-conversation-list'),
           padding: EdgeInsets.only(bottom: AppSpacing.lg),
           itemCount: projects.length,
           itemBuilder: (context, index) {
             final project = projects[index];
+            final expanded = _expandedProjects.contains(project.id);
+            final pageState = _projectPages[project.id];
             return ProjectGroupTile(
               key: ValueKey('project-${project.id}'),
               project: project,
-              expanded: _expandedProjects.contains(project.id),
+              expanded: expanded,
+              loadedConversations: _loadedProjectConversations(project),
+              hasMoreConversations:
+                  _canLoadProject(project) &&
+                  (pageState?.page == null || pageState?.page?.cursor != null),
+              conversationFooter: expanded
+                  ? _projectConversationFooter(project, pageState)
+                  : null,
               busy: _projectBusy,
               selecting: _selecting,
               selectedIds: _selected.keys.toSet(),
-              onToggle: () => setState(() {
-                if (!_expandedProjects.remove(project.id)) {
-                  _expandedProjects.add(project.id);
+              onToggle: () {
+                setState(() {
+                  if (expanded) {
+                    _expandedProjects.remove(project.id);
+                  } else {
+                    _expandedProjects.add(project.id);
+                  }
+                });
+                if (!expanded && pageState?.page == null) {
+                  unawaited(_loadProjectConversations(project));
                 }
-              }),
+              },
               onOpenConversation: (conversation) => _selecting
                   ? _toggleSelection(conversation)
                   : _openConversation(conversation),
@@ -776,10 +934,13 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
 
   void _openConversation(ConversationDto conversation) {
     context.push(
-      Uri(path: AppRoutes.chat, queryParameters: {
-        'conversationId': conversation.id,
-        'characterId': conversation.characterId,
-      }).toString(),
+      Uri(
+        path: AppRoutes.chat,
+        queryParameters: {
+          'conversationId': conversation.id,
+          'characterId': conversation.characterId,
+        },
+      ).toString(),
     );
   }
 
@@ -1355,6 +1516,12 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
       if (mounted) amitiaSnackBar(context, '删除失败：$e');
     }
   }
+}
+
+class _ProjectConversationPaging {
+  OwnedConversationPage? page;
+  bool loading = false;
+  String error = '';
 }
 
 enum _MessageCreateAction { chat, group, project, team }

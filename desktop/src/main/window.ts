@@ -131,6 +131,17 @@ export function createMainWindow(): BrowserWindow {
   return win;
 }
 
+export function showMainWindow(win: BrowserWindow): void {
+  if (win.isDestroyed()) return;
+  if (win.isMinimized()) win.restore();
+  if (process.platform === "darwin") {
+    if (app.isHidden()) app.show();
+    app.focus({ steal: true });
+  }
+  win.show();
+  win.focus();
+}
+
 function withTimeout<T>(
   promise: Promise<T>,
   timeoutMs: number,

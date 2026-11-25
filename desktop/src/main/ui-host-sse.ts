@@ -281,6 +281,8 @@ return false;
   private handleScheduledNotification(envelope: SSEEventEnvelope): void {
     const payload = envelope.payload;
     if (!payload) return;
+    const type = String(payload.type || "");
+    if (type.startsWith("run.") && payload.phase !== "waiting_approval") return;
     const acknowledge = (state: string, error?: string) => {
       if (payload.ackable !== true) return;
       const path = '/api/notifications/scheduled/' + encodeURIComponent(envelope.requestId) + '/ack';

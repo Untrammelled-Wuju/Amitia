@@ -1,10 +1,11 @@
-import { app, BrowserWindow, Menu, nativeTheme, shell, Tray } from "electron";
+import { app, Menu, nativeTheme, shell, Tray, type BrowserWindow } from "electron";
 import { configToLabel } from "../shared/deployment";
 import type { DeploymentModeConfig } from "../shared/types";
 import type { ConfigStore } from "./config-store";
 import { IPC_CHANNELS } from "../shared/ipc";
 import { getInitialBrandImage } from "./branding";
 import { getAmitiaDataDir } from "./path-manager";
+import { showMainWindow } from "./window";
 
 let latestUpdateMenu: (() => Promise<void>) | null = null;
 let latestContextMenu: Menu | null = null;
@@ -38,7 +39,7 @@ export function createAppTray(
       {
         label: "显示 Amitia",
         enabled: !visible,
-        click: () => showWindow(win),
+        click: () => showMainWindow(win),
       },
       { label: "隐藏窗口", enabled: visible, click: () => win.hide() },
       { label: `当前运行模式：${configToLabel(config)}`, enabled: false },
@@ -75,8 +76,8 @@ export function createAppTray(
     }
   };
 
-  tray.on("click", () => showWindow(win));
-  tray.on("double-click", () => showWindow(win));
+  tray.on("click", () => showMainWindow(win));
+  tray.on("double-click", () => showMainWindow(win));
   tray.on("right-click", () => {
     if (process.platform !== "darwin") return;
     void (async () => {
@@ -102,14 +103,4 @@ export function createAppTray(
       await updateMenu();
     },
   };
-}
-
-function showWindow(win: BrowserWindow): void {
-  if (win.isMinimized()) win.restore();
-  if (process.platform === "darwin") {
-    if (app.isHidden()) app.show();
-    app.focus({ steal: true });
-  }
-  win.show();
-  win.focus();
 }

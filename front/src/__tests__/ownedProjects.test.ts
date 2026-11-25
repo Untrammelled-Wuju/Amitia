@@ -52,6 +52,141 @@ describe("按角色和数据所有者保存的逻辑项目", () => {
     });
   });
 
+  it("侧栏只读首屏，触底并发时只追加一页", async () => {
+    const get = mocks.get.getMockImplementation()!;
+    const cursors: Array<string | undefined> = [];
+    mocks.get.mockImplementation(async (path: string, config: any) => {
+      if (!path.endsWith("/conversations")) return get(path, config);
+      expect(config.params.limit).toBe(36);
+      const cursor = config.params.cursor;
+      const ids = cursor ? ["first", "second"] : ["first"];
+      cursors.push(cursor);
+      return {
+        data: {
+          executionScope: structuredClone(scope),
+          snapshot: {
+            ownerId: scope.resourceOwnerId,
+            nextCursors: cursor ? {} : { conversation: "next" },
+            resources: ids.map((id) => ({
+              kind: "conversation",
+              id,
+              ownerId: scope.resourceOwnerId,
+              revision: 1,
+              body: { id, title: id, updatedAt: "2026-10-07T00:00:00Z" },
+            })),
+          },
+        },
+      };
+    });
+    const store = useChatStore();
+    await store.fetchSidebar();
+    expect(cursors).toEqual([undefined]);
+    expect(store.sidebar.recent.map((row) => row.title)).toEqual(["first"]);
+    await Promise.all([store.fetchSidebarPage(true), store.fetchSidebarPage(true)]);
+    expect(cursors).toEqual([undefined, "next"]);
+    expect(store.sidebar.recent.map((row) => row.title)).toEqual(["first", "second"]);
+    expect(store.sidebarHasMore).toBe(false);
+    await store.fetchSidebarPage(true);
+    expect(cursors).toHaveLength(2);
+  });
+
+  it("项目对话按项目独立续页，其他项目的对话不会合并进来", async () => {
+    const get = mocks.get.getMockImplementation()!;
+    let release!: () => void;
+    const first = new Promise<void>((resolve) => { release = resolve; });
+    const projectRequests: Array<{ id: string; cursor?: string }> = [];
+    mocks.get.mockImplementation(async (path: string, config: any) => {
+      if (!path.endsWith("/conversations") || !config.params.projectId) return get(path, config);
+      const { projectId, cursor } = config.params;
+      projectRequests.push({ id: projectId, cursor });
+      if (!cursor) await first;
+      const ids = cursor ? ["first", "next"] : ["first"];
+      return {
+        data: {
+          executionScope: structuredClone(scope),
+          snapshot: {
+            ownerId: scope.resourceOwnerId,
+            nextCursors: cursor ? {} : { conversation: "project-next" },
+            resources: [...ids, "foreign"].map((id) => ({
+              kind: "conversation",
+              id,
+              revision: 1,
+              body: { id, title: id, projectId: id === "foreign" ? "other" : projectId },
+            })),
+          },
+        },
+      };
+    });
+    currentProjects.push({ ...project("source"), id: "other" });
+    const store = useChatStore();
+    await store.fetchSidebar();
+    const projectId = store.sidebar.projects[0].id;
+    const loading = store.fetchProjectConversationPage(projectId);
+    expect(store.projectConversationPages[projectId].loading).toBe(true);
+    await store.fetchProjectConversationPage(projectId);
+    release();
+    await loading;
+    expect(store.sidebar.projects[0].conversations.map((row) => row.title)).toEqual(["first"]);
+    await store.fetchProjectConversationPage(projectId);
+    expect(store.sidebar.projects[0].conversations.map((row) => row.title)).toEqual(["first", "next"]);
+    expect(store.sidebar.projects[1].conversations).toHaveLength(0);
+    expect(store.projectConversationPages[projectId].cursor).toBeUndefined();
+    await store.fetchProjectConversationPage(projectId);
+    expect(projectRequests).toEqual([
+      { id: "same-project", cursor: undefined },
+      { id: "same-project", cursor: "project-next" },
+    ]);
+  });
+
+  it("项目末尾进入视口时续页，并在项目内显示加载与结束状态", async () => {
+    let reach: (() => void) | undefined;
+    vi.stubGlobal("IntersectionObserver", class {
+      constructor(private callback: IntersectionObserverCallback) {}
+      observe(target: HTMLElement) {
+        const rect = target.getBoundingClientRect();
+        const entry: IntersectionObserverEntry = {
+          target,
+          isIntersecting: true,
+          intersectionRatio: 1,
+          boundingClientRect: rect,
+          intersectionRect: rect,
+          rootBounds: null,
+          time: 0,
+        };
+        reach = () => this.callback([entry], this as unknown as IntersectionObserver);
+      }
+      disconnect() {}
+    });
+    const store = useChatStore();
+    await store.fetchSidebar();
+    const wrapper = mount(SidebarProjectBlock, {
+      props: {
+        project: store.sidebar.projects[0],
+        active: false,
+        activeConversationId: "",
+        expanded: true,
+        conversationPage: { loading: true, loaded: false, error: "" },
+      },
+      global: {
+        stubs: { ElIcon: true, ElDropdown: true, ElAvatar: true },
+      },
+    });
+    try {
+      expect(wrapper.get(".project-page-status").text()).toBe("加载中～");
+      expect(reach).toBeUndefined();
+      await wrapper.setProps({ conversationPage: { loading: false, loaded: true, cursor: "next", error: "" } });
+      expect(wrapper.find(".project-page-status").exists()).toBe(false);
+      expect(reach).toBeTypeOf("function");
+      reach?.();
+      expect(wrapper.emitted("loadConversations")).toHaveLength(1);
+      await wrapper.setProps({ conversationPage: { loading: false, loaded: true, error: "" } });
+      expect(wrapper.get(".project-threads .project-page-status").text()).toBe("到底啦～");
+    } finally {
+      wrapper.unmount();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("普通新对话不依赖侧边栏接口", async () => {
     const store = useChatStore();
     const fetchSidebar = vi.spyOn(store, "fetchSidebar").mockRejectedValue(new Error("接口不可用"));

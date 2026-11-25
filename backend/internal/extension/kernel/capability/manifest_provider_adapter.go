@@ -1,14 +1,13 @@
 package capability
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"sort"
 	"strings"
 
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
+	"github.com/u-ai/backend/internal/extension/kernel/provideridentity"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
@@ -27,14 +26,11 @@ func (e ManifestProviderError) Error() string {
 }
 
 func BuildManifestProviderID(extensionID domain.ExtensionID, moduleID domain.ModuleID, providerMeta *domain.ProviderMetadata, capabilityID CapabilityID) ProviderID {
-	var seed string
-	if providerMeta != nil && providerMeta.ID != "" {
-		seed = string(extensionID) + "|" + string(moduleID) + "|" + providerMeta.ID + "|" + string(capabilityID)
-	} else {
-		seed = string(extensionID) + "|" + string(moduleID) + "|" + string(capabilityID)
+	providerKey := ""
+	if providerMeta != nil {
+		providerKey = providerMeta.ID
 	}
-	sum := sha256.Sum256([]byte(seed))
-	return ProviderID("extprov_" + hex.EncodeToString(sum[:]))
+	return ProviderID(provideridentity.ExtensionProviderID(string(extensionID), string(moduleID), providerKey, string(capabilityID)))
 }
 
 func CanonicalGameHostCapabilityID(extensionID, toolID string) CapabilityID {

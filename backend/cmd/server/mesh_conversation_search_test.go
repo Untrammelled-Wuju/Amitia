@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -74,6 +75,61 @@ func TestMeshConversationSearchHTTPUsesMessageContent(t *testing.T) {
 	}
 }
 
+func TestMeshConversationListPagesOwnedAndMemberGroups(t *testing.T) {
+	p := setupMeshLocalDataPort(t)
+	db := p.services.KernelContainer.DeviceRegistry.Database()
+	if _, err := db.Exec(`INSERT INTO kernel_devices(device_id,space_id,trust_state,created_at,last_seen_at) VALUES('device-a','core','trusted','now','now')`); err != nil {
+		t.Fatal(err)
+	}
+	seedOwnedChatManagement(t, p, "conversation", "active", "one", `{"id":"active","title":"普通对话","channel":"web"}`)
+	seedOwnedChatManagement(t, p, "conversation", "shared", "two", `{"id":"shared","title":"群聊","conversationType":"group","channel":"web","members":[{"characterId":"one","status":"active"}]}`)
+	seedOwnedChatManagement(t, p, "conversation", "left", "two", `{"id":"left","title":"已退出群聊","conversationType":"group","channel":"web","members":[{"characterId":"one","status":"left"}]}`)
+	seedOwnedChatManagement(t, p, "conversation", "archived", "one", `{"id":"archived","archived":true,"channel":"web"}`)
+	service := coordination.NewService(db)
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		actor := &auth.ActorContext{SpaceID: "core", DeviceID: "device-a", PrincipalType: auth.PrincipalTest}
+		c.Set("actorContext", actor)
+		c.Request = c.Request.WithContext(auth.WithActor(c.Request.Context(), actor))
+	})
+	registerMeshBusinessRouter(router.Group("/api"), &AppServices{DeviceMesh: &devicemesh.Runtime{Coordination: service}, OwnedBusiness: business.NewEngine(service, p, &routerSummaryModel{})}, "core")
+	list := func(archive, cursor string) (business.QueryResult, int) {
+		t.Helper()
+		values := url.Values{"characterId": {"one"}, "archive": {archive}, "channel": {"web"}, "resourceKind": {"conversation"}, "limit": {"1"}}
+		if cursor != "" {
+			values.Set("cursor", cursor)
+		}
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/device-mesh/v1/business/conversations?"+values.Encode(), nil))
+		if response.Code != http.StatusOK {
+			return business.QueryResult{}, response.Code
+		}
+		var result struct {
+			Data business.QueryResult `json:"data"`
+		}
+		if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
+			t.Fatalf("页面响应 %s 解码失败: %v", response.Body.String(), err)
+		}
+		return result.Data, response.Code
+	}
+	first, status := list("active", "")
+	cursor := first.Snapshot.NextCursors["conversation"]
+	if status != http.StatusOK || cursor == "" || len(first.Snapshot.Resources) != 1 {
+		t.Fatalf("首屏 status=%d snapshot=%+v", status, first.Snapshot)
+	}
+	second, status := list("active", cursor)
+	if status != http.StatusOK || second.Snapshot.NextCursors["conversation"] != "" || len(second.Snapshot.Resources) != 1 {
+		t.Fatalf("下一页 status=%d snapshot=%+v", status, second.Snapshot)
+	}
+	ids := map[string]bool{first.Snapshot.Resources[0].ID: true, second.Snapshot.Resources[0].ID: true}
+	if !ids["active"] || !ids["shared"] {
+		t.Fatalf("跨角色群聊分页结果 %+v", ids)
+	}
+	if _, status := list("archived", cursor); status != http.StatusConflict {
+		t.Fatalf("归档列表接受了活动列表游标，status=%d", status)
+	}
+}
+
 func TestMeshConversationSearchOwnerRoleAndCursorIsolation(t *testing.T) {
 	p := setupMeshLocalDataPort(t)
 	db := p.services.KernelContainer.DeviceRegistry.Database()
@@ -138,18 +194,6 @@ func TestMeshConversationSearchOwnerRoleAndCursorIsolation(t *testing.T) {
 	allMemory.RoleID = coordination.AllMemoryRole
 	if _, err := p.HistoricalConversationPage(t.Context(), allMemory, foreignQuery); !errors.Is(err, coordination.ErrWrongOwner) {
 		t.Fatalf("all-memory role history accepted: %v", err)
-	}
-	legacyScope := scope
-	legacyScope.ResourceOwnerID = p.ownerID
-	legacy, err := p.HistoricalConversations(t.Context(), legacyScope)
-	if err != nil || len(legacy) != 6 {
-		t.Fatalf("legacy history=%d err=%v", len(legacy), err)
-	}
-	legacyForeignScope := legacyScope
-	legacyForeignScope.RoleID = "two"
-	legacyForeign, err := p.HistoricalConversations(t.Context(), legacyForeignScope)
-	if err != nil || len(legacyForeign) != 0 {
-		t.Fatalf("legacy foreign history=%d err=%v", len(legacyForeign), err)
 	}
 	query.HistoricalListCursor, query.SearchQuery = page.NextCursor, "其他条件"
 	if _, err := p.HistoricalConversationPage(t.Context(), scope, query); !errors.Is(err, coordination.ErrWrongOwner) {

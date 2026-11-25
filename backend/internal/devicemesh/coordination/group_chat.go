@@ -51,10 +51,6 @@ type GroupStatePort interface {
 	GroupState(context.Context, ExecutionScope, string) (GroupState, error)
 }
 
-type GroupConversationListPort interface {
-	GroupConversations(context.Context, ExecutionScope) ([]Resource, map[string]string, error)
-}
-
 func GroupConversationKind(kind string) bool {
 	switch kind {
 	case "conversation", "message", "summary", "group-round", "group-delivery", "group-invitation":

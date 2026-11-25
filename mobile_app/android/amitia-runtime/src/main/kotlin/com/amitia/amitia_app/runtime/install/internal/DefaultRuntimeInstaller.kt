@@ -3,10 +3,12 @@ package com.amitia.amitia_app.runtime.install.internal
 import com.amitia.amitia_app.runtime.abi.RuntimeAbiGate
 import com.amitia.amitia_app.runtime.install.ActiveRuntimeManager
 import com.amitia.amitia_app.runtime.install.ActiveRuntimeResult
+import com.amitia.amitia_app.runtime.install.ComponentPayload
 import com.amitia.amitia_app.runtime.install.DefaultInstallReceiptStore
 import com.amitia.amitia_app.runtime.install.DefaultInstalledRuntimeVerifier
 import com.amitia.amitia_app.runtime.install.DefaultRootfsManager
 import com.amitia.amitia_app.runtime.install.DefaultSafeArchiveExtractor
+import com.amitia.amitia_app.runtime.install.ExtractionResult
 import com.amitia.amitia_app.runtime.install.InstallLock
 import com.amitia.amitia_app.runtime.install.InstallLockResult
 import com.amitia.amitia_app.runtime.install.InstallReceiptResult
@@ -14,6 +16,7 @@ import com.amitia.amitia_app.runtime.install.InstalledRuntimeVerificationResult
 import com.amitia.amitia_app.runtime.install.InstalledRuntimeVerifier
 import com.amitia.amitia_app.runtime.install.PackageVerificationResult
 import com.amitia.amitia_app.runtime.install.PackageVerifier
+import com.amitia.amitia_app.runtime.install.PayloadCompression
 import com.amitia.amitia_app.runtime.install.RootfsPrepareResult
 import com.amitia.amitia_app.runtime.install.RuntimeInstallErrorCode
 import com.amitia.amitia_app.runtime.install.RuntimeInstaller
@@ -33,6 +36,36 @@ import com.amitia.amitia_app.runtime.manifest.RuntimeManifestStore
 import com.amitia.amitia_app.runtime.manifest.internal.DefaultRuntimeManifestBuilder
 import com.amitia.amitia_app.runtime.manifest.internal.InstalledTreeHasher
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.LinkOption
+import java.security.MessageDigest
+import java.util.concurrent.Callable
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import java.util.concurrent.Future
+
+private const val COMPONENT_EXTRACT_PARALLELISM = 4
+
+private val CLEANUP_EXECUTOR: ExecutorService = Executors.newSingleThreadExecutor { runnable ->
+    Thread(runnable, "amitia-runtime-cleanup").apply { isDaemon = true }
+}
+
+private class PhaseTiming {
+    private var last = System.nanoTime()
+    private val phases = mutableListOf<Pair<String, Long>>()
+
+    fun mark(name: String) {
+        val now = System.nanoTime()
+        phases.add(name to (now - last) / 1_000_000L)
+        last = now
+    }
+
+    fun log(log: (String, Throwable?) -> Unit) {
+        val text = phases.joinToString(" ") { "${it.first}=${it.second}ms" }
+        log("install timing: $text total=${phases.sumOf { it.second }}ms", null)
+    }
+}
 
 private enum class CommitStage {
     PRE_COMMIT,
@@ -68,6 +101,7 @@ internal class DefaultRuntimeInstaller(
     private val manifestStore: RuntimeManifestStore,
     private val manifestBuilder: RuntimeManifestBuilder,
     private val activeRuntimeManager: ActiveRuntimeManager,
+    private val installerLog: (String, Throwable?) -> Unit = { _, _ -> },
 ) : RuntimeInstaller {
 
     override fun install(request: RuntimeInstallRequest): RuntimeInstallResult {
@@ -118,6 +152,7 @@ internal class DefaultRuntimeInstaller(
         var versionExistedBeforeInstall = false
         var repairBackup: RepairBackup? = null
         var repairCompleted = false
+        val timing = PhaseTiming()
         try {
             transaction.updateStage(com.amitia.amitia_app.runtime.install.TransactionStage.CREATED)
 
@@ -125,6 +160,7 @@ internal class DefaultRuntimeInstaller(
                 is VerifyPackageSuccess -> result.pkg
                 is VerifyPackageFailure -> return result.failure
             }
+            timing.mark("package-verify")
 
             transaction.updateStage(com.amitia.amitia_app.runtime.install.TransactionStage.PACKAGE_VERIFIED)
             transaction.setRuntimeVersion(verifiedPackage.packageIndex.runtimeVersion)
@@ -170,18 +206,71 @@ internal class DefaultRuntimeInstaller(
 
             val rootfsPayloadRef = verifiedPackage.packageIndex.rootfsPayload
             val rootfsId = computeRootfsId(rootfsPayloadRef)
-            val rootfsResult = rootfsManager.prepareRootfs(
-                rootfsPayloadFile = verifiedPackage.rootfsPayloadFile,
-                expectedRootfsId = rootfsId,
-                expectedPayloadSha256 = rootfsPayloadRef.sha256,
-                allowReplace = request.allowRepairExisting,
+            val rootfsCompression = if (verifiedPackage.usesComponentPayloads) {
+                PayloadCompression.GZIP
+            } else {
+                PayloadCompression.XZ
+            }
+            val rootfsExecutor = Executors.newSingleThreadExecutor { runnable ->
+                Thread(runnable, "amitia-rootfs-prepare").apply { isDaemon = true }
+            }
+            val rootfsFuture = rootfsExecutor.submit(
+                Callable {
+                    rootfsManager.prepareRootfs(
+                        rootfsPayloadFile = verifiedPackage.rootfsPayloadFile,
+                        expectedRootfsId = rootfsId,
+                        expectedPayloadSha256 = rootfsPayloadRef.sha256,
+                        allowReplace = request.allowRepairExisting,
+                        payloadCompression = rootfsCompression,
+                    )
+                }
             )
+
+            val stagingDir = File(layout.stagingRoot, transaction.transactionId)
+            stagingDir.mkdirs()
+
+            val previousVersionDir = layout.runtimeVersionRoot(verifiedPackage.packageIndex.runtimeVersion)
+            val previousReceipt = (receiptStore.load(verifiedPackage.packageIndex.runtimeVersion)
+                as? InstallReceiptResult.Success)?.receipt
+
+            val runtimeExtractResult = try {
+                if (verifiedPackage.usesComponentPayloads) {
+                    extractComponentPayloads(
+                        pkg = verifiedPackage,
+                        stagingDir = stagingDir,
+                        previousVersionDir = previousVersionDir,
+                        previousReceipt = previousReceipt,
+                    )
+                } else {
+                    val runtimePayloadFile = verifiedPackage.runtimePayloadFile
+                    if (runtimePayloadFile == null) {
+                        SafeExtractResult.Failure(
+                            RuntimeInstallErrorCode.PACKAGE_INVALID,
+                            "missing runtime payload for package format ${verifiedPackage.packageFormatVersion}",
+                        )
+                    } else {
+                        archiveExtractor.extractTarXz(
+                            tarXzFile = runtimePayloadFile,
+                            targetDir = stagingDir,
+                            rootBoundary = stagingDir.absolutePath,
+                        )
+                    }
+                }
+            } catch (error: Throwable) {
+                awaitRootfs(rootfsFuture, rootfsExecutor)
+                throw error
+            }
+            timing.mark("extract")
+
+            val rootfsResult = awaitRootfs(rootfsFuture, rootfsExecutor)
+            timing.mark("rootfs")
 
             val rootfsInfo = when (rootfsResult) {
                 is RootfsPrepareResult.Reused -> rootfsResult.info
                 is RootfsPrepareResult.NewlyInstalled -> rootfsResult.info
                 is RootfsPrepareResult.Replaced -> rootfsResult.info
                 is RootfsPrepareResult.Conflict -> {
+                    cleanupStaging(stagingDir)
                     return RuntimeInstallResult.Failure(
                         code = RuntimeInstallErrorCode.ROOTFS_CONFLICT,
                         message = "rootfs conflict: existing=${rootfsResult.existingRootfsId} new=${rootfsResult.newRootfsId}",
@@ -190,6 +279,7 @@ internal class DefaultRuntimeInstaller(
                     )
                 }
                 is RootfsPrepareResult.Failure -> {
+                    cleanupStaging(stagingDir)
                     return RuntimeInstallResult.Failure(
                         code = rootfsResult.code,
                         message = rootfsResult.message,
@@ -200,15 +290,6 @@ internal class DefaultRuntimeInstaller(
             }
 
             transaction.updateStage(com.amitia.amitia_app.runtime.install.TransactionStage.ROOTFS_PREPARED)
-
-            val stagingDir = File(layout.stagingRoot, transaction.transactionId)
-            stagingDir.mkdirs()
-
-            val runtimeExtractResult = archiveExtractor.extractTarXz(
-                tarXzFile = verifiedPackage.runtimePayloadFile,
-                targetDir = stagingDir,
-                rootBoundary = stagingDir.absolutePath,
-            )
 
             if (runtimeExtractResult is SafeExtractResult.Failure) {
                 cleanupStaging(stagingDir)
@@ -233,6 +314,9 @@ internal class DefaultRuntimeInstaller(
                 )
             }
 
+            timing.mark("verify-staging")
+            val stagingVerification =
+                (verifyResult as InstalledRuntimeVerificationResult.Success).verification
             transaction.updateStage(com.amitia.amitia_app.runtime.install.TransactionStage.RUNTIME_VERIFIED)
 
             val versionDir = layout.runtimeVersionRoot(verifiedPackage.packageIndex.runtimeVersion)
@@ -258,7 +342,8 @@ internal class DefaultRuntimeInstaller(
             )
 
             versionDir.parentFile?.mkdirs()
-            if (!stagingDir.renameTo(versionDir)) {
+            val publishedByRename = stagingDir.renameTo(versionDir)
+            if (!publishedByRename) {
                 stagingDir.copyRecursively(versionDir, overwrite = true)
                 stagingDir.deleteRecursively()
             }
@@ -271,21 +356,27 @@ internal class DefaultRuntimeInstaller(
                 )
             }
 
+            timing.mark("publish")
             transaction.setTargetVersionDir(versionDir.absolutePath)
             transaction.updateStage(com.amitia.amitia_app.runtime.install.TransactionStage.PUBLISHED)
 
-            val finalVerifyResult = runtimeVerifier.verify(versionDir)
-            if (finalVerifyResult is InstalledRuntimeVerificationResult.Failure) {
-                cleanupVersionDirIfNotCommitted(versionDir, versionExistedBeforeInstall, commitStage)
-                return RuntimeInstallResult.Failure(
-                    code = finalVerifyResult.code,
-                    message = finalVerifyResult.message,
-                    phase = RuntimeInstallPhase.INSTALLED_VERIFY,
-                    transactionId = transaction.transactionId,
-                )
+            val finalVerification = if (publishedByRename) {
+                stagingVerification
+            } else {
+                val finalVerifyResult = runtimeVerifier.verify(versionDir)
+                if (finalVerifyResult is InstalledRuntimeVerificationResult.Failure) {
+                    cleanupVersionDirIfNotCommitted(versionDir, versionExistedBeforeInstall, commitStage)
+                    return RuntimeInstallResult.Failure(
+                        code = finalVerifyResult.code,
+                        message = finalVerifyResult.message,
+                        phase = RuntimeInstallPhase.INSTALLED_VERIFY,
+                        transactionId = transaction.transactionId,
+                    )
+                }
+                (finalVerifyResult as InstalledRuntimeVerificationResult.Success).verification
             }
 
-            val finalVerification = (finalVerifyResult as InstalledRuntimeVerificationResult.Success).verification
+            timing.mark("verify-published")
             transaction.updateStage(com.amitia.amitia_app.runtime.install.TransactionStage.VERIFYING_INSTALLED)
 
             val manifestPayloads = buildManifestPayloads(verifiedPackage)
@@ -394,8 +485,9 @@ internal class DefaultRuntimeInstaller(
                 packageSha256 = verifiedPackage.packageSha256,
                 rootfsId = rootfsInfo.rootfsId,
                 rootfsPayloadSha256 = rootfsInfo.payloadSha256,
-                runtimePayloadSha256 = verifiedPackage.packageIndex.runtimePayload.sha256,
+                runtimePayloadSha256 = runtimePayloadSha256(verifiedPackage),
                 runtimeRootTreeSha256 = finalVerification.runtimeRootTreeSha256,
+                componentSha256 = componentSha256Map(verifiedPackage),
             )
 
             val receiptSaveResult = receiptStore.save(receipt)
@@ -424,6 +516,7 @@ internal class DefaultRuntimeInstaller(
 
             }
 
+            timing.mark("receipt")
             repairCompleted = true
             return RuntimeInstallResult.Success(
                 runtimeVersion = receipt.runtimeVersion,
@@ -452,13 +545,189 @@ internal class DefaultRuntimeInstaller(
             val backup = repairBackup
             if (backup != null) {
                 if (repairCompleted) {
-                    backup.backupVersionDir?.let(::cleanupVersionDir)
+                    backup.backupVersionDir?.let(::scheduleVersionDirCleanup)
                 } else {
                     restoreRepairBackup(backup)
                 }
             }
-            rootfsManager.completePreparation(repairCompleted)
+            rootfsManager.completePreparation(repairCompleted)?.let(::scheduleVersionDirCleanup)
+            timing.mark("cleanup")
+            timing.log(installerLog)
         }
+    }
+
+    private fun extractComponentPayloads(
+        pkg: VerifiedPackage,
+        stagingDir: File,
+        previousVersionDir: File,
+        previousReceipt: RuntimeInstallReceipt?,
+    ): SafeExtractResult {
+        val previousComponents = previousReceipt?.componentSha256.orEmpty()
+        val canReuse = previousVersionDir.isDirectory && previousComponents.isNotEmpty()
+        val componentRoots = pkg.packageIndex.components.associate { it.id to it.path }
+
+        val pending = mutableListOf<ComponentPayload>()
+
+        for (payload in pkg.componentPayloads) {
+            val root = componentRoots[payload.componentId]
+            val targetRoot = root?.let { File(stagingDir, it) }
+            val unchanged = previousComponents[payload.componentId] == payload.sha256
+            if (canReuse && unchanged && root != null && targetRoot != null) {
+                if (hardlinkTree(File(previousVersionDir, root), targetRoot)) {
+                    continue
+                }
+            }
+            if (targetRoot != null && targetRoot.exists() && !targetRoot.deleteRecursively()) {
+                return SafeExtractResult.Failure(
+                    RuntimeInstallErrorCode.RUNTIME_EXTRACT_FAILED,
+                    "cannot clear stale component directory: ${targetRoot.absolutePath}",
+                )
+            }
+            pending.add(payload)
+        }
+
+        extractComponentsConcurrently(pending, stagingDir)?.let { return it }
+
+        val shared = pkg.sharedPayload ?: return SafeExtractResult.Success(ExtractionResult(0, 0L))
+        return archiveExtractor.extractTarGz(
+            tarGzFile = shared.file,
+            targetDir = stagingDir,
+            rootBoundary = stagingDir.absolutePath,
+        )
+    }
+
+    private fun awaitRootfs(
+        future: Future<RootfsPrepareResult>,
+        executor: ExecutorService,
+    ): RootfsPrepareResult {
+        try {
+            return future.get()
+        } catch (error: ExecutionException) {
+            val cause = error.cause ?: error
+            return RootfsPrepareResult.Failure(
+                RuntimeInstallErrorCode.ROOTFS_INSTALL_FAILED,
+                cause.message ?: cause.toString(),
+            )
+        } catch (error: InterruptedException) {
+            Thread.currentThread().interrupt()
+            return RootfsPrepareResult.Failure(
+                RuntimeInstallErrorCode.ROOTFS_INSTALL_FAILED,
+                error.message ?: "rootfs preparation interrupted",
+            )
+        } finally {
+            executor.shutdown()
+        }
+    }
+
+    private fun extractComponentsConcurrently(
+        payloads: List<ComponentPayload>,
+        stagingDir: File,
+    ): SafeExtractResult.Failure? {
+        if (payloads.isEmpty()) return null
+        val ordered = payloads.sortedByDescending { it.size }
+        val workers = minOf(
+            COMPONENT_EXTRACT_PARALLELISM,
+            ordered.size,
+            Runtime.getRuntime().availableProcessors().coerceAtLeast(1),
+        )
+        if (workers <= 1) {
+            for (payload in ordered) {
+                val result = archiveExtractor.extractTarGz(
+                    tarGzFile = payload.file,
+                    targetDir = stagingDir,
+                    rootBoundary = stagingDir.absolutePath,
+                )
+                if (result is SafeExtractResult.Failure) return result
+            }
+            return null
+        }
+        val pool = Executors.newFixedThreadPool(workers)
+        try {
+            val tasks = ordered.map { payload ->
+                Callable {
+                    archiveExtractor.extractTarGz(
+                        tarGzFile = payload.file,
+                        targetDir = stagingDir,
+                        rootBoundary = stagingDir.absolutePath,
+                    )
+                }
+            }
+            val futures = pool.invokeAll(tasks)
+            for ((index, future) in futures.withIndex()) {
+                val result = try {
+                    future.get()
+                } catch (error: ExecutionException) {
+                    val cause = error.cause ?: error
+                    return SafeExtractResult.Failure(
+                        RuntimeInstallErrorCode.RUNTIME_EXTRACT_FAILED,
+                        "component extraction failed: ${ordered[index].componentId}: ${cause.message ?: cause.toString()}",
+                    )
+                }
+                if (result is SafeExtractResult.Failure) return result
+            }
+            return null
+        } finally {
+            pool.shutdown()
+        }
+    }
+
+    private fun hardlinkTree(source: File, target: File): Boolean {
+        if (!source.isDirectory) return false
+        return try {
+            val sourceRoot = source.canonicalFile.toPath()
+            var complete = true
+            source.walkTopDown().forEach { file ->
+                if (!complete) return@forEach
+                val relative = sourceRoot.relativize(file.canonicalFile.toPath()).toString()
+                val destination = if (relative.isEmpty()) target else File(target, relative)
+                when {
+                    Files.isSymbolicLink(file.toPath()) -> {
+                        val linkTarget = Files.readSymbolicLink(file.toPath())
+                        if (Files.exists(destination.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+                            destination.delete()
+                        }
+                        destination.parentFile?.mkdirs()
+                        Files.createSymbolicLink(destination.toPath(), linkTarget)
+                    }
+                    file.isDirectory -> {
+                        if (!destination.exists() && !destination.mkdirs()) {
+                            complete = false
+                        }
+                    }
+                    file.isFile -> {
+                        destination.parentFile?.mkdirs()
+                        if (Files.exists(destination.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+                            destination.delete()
+                        }
+                        Files.createLink(destination.toPath(), file.toPath())
+                    }
+                    else -> complete = false
+                }
+            }
+            complete
+        } catch (originalError: Exception) {
+            originalError.printStackTrace()
+            false
+        }
+    }
+
+    private fun componentSha256Map(pkg: VerifiedPackage): Map<String, String> {
+        val result = sortedMapOf<String, String>()
+        for (payload in pkg.componentPayloads) {
+            result[payload.componentId] = payload.sha256
+        }
+        pkg.sharedPayload?.let { result[it.componentId] = it.sha256 }
+        return result
+    }
+
+    private fun runtimePayloadSha256(pkg: VerifiedPackage): String {
+        val legacy = pkg.packageIndex.runtimePayload
+        if (legacy != null) return legacy.sha256
+        val components = componentSha256Map(pkg)
+        if (components.isEmpty()) return ""
+        val material = components.entries.joinToString("\n") { "${it.key}=${it.value}" }
+        val digest = MessageDigest.getInstance("SHA-256")
+        return digest.digest(material.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
     }
 
     private fun createRepairBackup(
@@ -652,14 +921,38 @@ internal class DefaultRuntimeInstaller(
                 size = index.rootfsPayload.size,
             )
         )
-        payloads.add(
-            RuntimeManifestPayload(
-                id = "runtime",
-                role = "runtime",
-                sha256 = index.runtimePayload.sha256,
-                size = index.runtimePayload.size,
+        val runtimePayload = index.runtimePayload
+        if (runtimePayload != null) {
+            payloads.add(
+                RuntimeManifestPayload(
+                    id = "runtime",
+                    role = "runtime",
+                    sha256 = runtimePayload.sha256,
+                    size = runtimePayload.size,
+                )
             )
-        )
+        }
+        for (component in index.components) {
+            val payloadSha = component.payloadSha256 ?: continue
+            payloads.add(
+                RuntimeManifestPayload(
+                    id = component.id,
+                    role = "runtime-component",
+                    sha256 = payloadSha,
+                    size = component.payloadSize ?: 0L,
+                )
+            )
+        }
+        index.sharedPayload?.let { shared ->
+            payloads.add(
+                RuntimeManifestPayload(
+                    id = shared.id,
+                    role = "runtime-component",
+                    sha256 = shared.sha256,
+                    size = shared.size,
+                )
+            )
+        }
         payloads.add(
             RuntimeManifestPayload(
                 id = "sha256sums",
@@ -700,6 +993,19 @@ internal class DefaultRuntimeInstaller(
                 treeSha256 = null,
                 source = RuntimeManifestComponent.SOURCE_PACKAGE,
             )
+        }
+    }
+
+    private fun scheduleVersionDirCleanup(versionDir: File) {
+        CLEANUP_EXECUTOR.execute {
+            try {
+                cleanupVersionDir(versionDir)
+            } catch (error: Exception) {
+                installerLog(
+                    "deferred version dir cleanup failed: ${versionDir.absolutePath}: ${error.message}",
+                    error,
+                )
+            }
         }
     }
 

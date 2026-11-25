@@ -1,6 +1,7 @@
 import 'package:amitia_app/core/models/conversation.dart';
 import 'package:amitia_app/core/models/project.dart';
 import 'package:amitia_app/core/services/chat_service.dart';
+import 'package:amitia_app/core/services/device_owned_chat_service.dart';
 import 'package:amitia_app/core/services/providers.dart';
 import 'package:amitia_app/features/chat_logs/presentation/pages/chat_logs_page.dart';
 import 'package:flutter/material.dart';
@@ -18,15 +19,27 @@ class ArchiveService extends Fake implements ChatService {
   bool failFirst = false;
 
   @override
-  Future<List<ConversationDto>> archivedConversations({String projectId = '', String keyword = ''}) async => List.of(rows);
+  Future<ConversationPage> conversationPage({
+    Map<String, ConversationListCursor>? cursors,
+    String keyword = '',
+    bool selectedRoleOnly = false,
+    ConversationListFilter filter = const ConversationListFilter(),
+  }) async =>
+      (rows: List.of(rows), cursors: <String, ConversationListCursor>{});
   @override
-  Future<ConversationSidebarDto> conversationSidebar() async => const ConversationSidebarDto();
+  Future<ConversationSidebarDto> conversationSidebar([
+    List<ConversationDto> conversations = const [],
+  ]) async => const ConversationSidebarDto();
   @override
-  Future<void> restoreArchivedConversation(String id, {String? characterId}) async {
+  Future<void> restoreArchivedConversation(
+    String id, {
+    String? characterId,
+  }) async {
     if (failFirst && id == 'one') throw StateError('原始恢复错误');
     restored.add(id);
     rows.removeWhere((row) => row.id == id);
   }
+
   @override
   Future<bool> deleteConversation(String id, {String? characterId}) async {
     deleted.add(id);
@@ -35,11 +48,90 @@ class ArchiveService extends Fake implements ChatService {
   }
 }
 
+class _PagedArchiveService extends ArchiveService {
+  int pageCalls = 0;
+
+  @override
+  Future<ConversationPage> conversationPage({
+    Map<String, ConversationListCursor>? cursors,
+    String keyword = '',
+    bool selectedRoleOnly = false,
+    ConversationListFilter filter = const ConversationListFilter(),
+  }) async {
+    pageCalls++;
+    if (cursors == null) {
+      return (
+        rows: List.generate(
+          24,
+          (index) => ConversationDto(
+            id: 'archive-$index',
+            title: '归档条目 $index',
+            archivedAt: '2026-01-01',
+          ),
+        ),
+        cursors: {
+          'role': const ConversationListCursor('scope', {'cursor': 'next'}),
+        },
+      );
+    }
+    expect(cursors['role']?.parameters, {'cursor': 'next'});
+    return (
+      rows: [
+        ConversationDto(id: 'last', title: '下一页对话', archivedAt: '2025-12-31'),
+      ],
+      cursors: <String, ConversationListCursor>{},
+    );
+  }
+}
+
 void main() {
+  testWidgets('归档滚动到列表末尾自动加载下一页', (tester) async {
+    final service = _PagedArchiveService();
+    final router = GoRouter(
+      initialLocation: '/archive',
+      routes: [
+        GoRoute(path: '/archive', builder: (_, _) => const ChatLogsPage()),
+      ],
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [chatServiceProvider.overrideWithValue(service)],
+        child: MaterialApp.router(routerConfig: router),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(service.pageCalls, 1);
+    await tester.scrollUntilVisible(
+      find.text('下一页对话'),
+      360,
+      maxScrolls: 20,
+      scrollable: find.descendant(
+        of: find.byType(RefreshIndicator),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('下一页对话'), findsOneWidget);
+    expect(service.pageCalls, 2);
+  });
+
   testWidgets('归档多选恢复保留失败项及原始错误', (tester) async {
     final service = ArchiveService()..failFirst = true;
-    final router = GoRouter(initialLocation: '/archive', routes: [GoRoute(path: '/archive', builder: (context, state) => const ChatLogsPage())]);
-    await tester.pumpWidget(ProviderScope(overrides: [chatServiceProvider.overrideWithValue(service)], child: MaterialApp.router(routerConfig: router)));
+    final router = GoRouter(
+      initialLocation: '/archive',
+      routes: [
+        GoRoute(
+          path: '/archive',
+          builder: (context, state) => const ChatLogsPage(),
+        ),
+      ],
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [chatServiceProvider.overrideWithValue(service)],
+        child: MaterialApp.router(routerConfig: router),
+      ),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('多选'));
     await tester.pumpAndSettle();
@@ -59,8 +151,21 @@ void main() {
 
   testWidgets('归档永久删除需要确认', (tester) async {
     final service = ArchiveService();
-    final router = GoRouter(initialLocation: '/archive', routes: [GoRoute(path: '/archive', builder: (context, state) => const ChatLogsPage())]);
-    await tester.pumpWidget(ProviderScope(overrides: [chatServiceProvider.overrideWithValue(service)], child: MaterialApp.router(routerConfig: router)));
+    final router = GoRouter(
+      initialLocation: '/archive',
+      routes: [
+        GoRoute(
+          path: '/archive',
+          builder: (context, state) => const ChatLogsPage(),
+        ),
+      ],
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [chatServiceProvider.overrideWithValue(service)],
+        child: MaterialApp.router(routerConfig: router),
+      ),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('多选'));
     await tester.pumpAndSettle();

@@ -46,7 +46,7 @@ func (c *ServiceCatalog) Replace(module CatalogModule) error {
 		if serviceID == "" {
 			return fmt.Errorf("plugincontract: service id is required")
 		}
-		providerID := key + "/" + serviceID
+		providerID := composeProviderID(module.Module, serviceID)
 		if moduleProviderIDs[providerID] {
 			return fmt.Errorf("plugincontract: provider %s is duplicated", providerID)
 		}
@@ -172,7 +172,7 @@ func (c *ServiceCatalog) graphRequestUnsafe() ServiceGraphRequest {
 		for _, offer := range entry.Services.Provides {
 			serviceID := strings.TrimSpace(offer.ServiceID)
 			request.Providers = append(request.Providers, ServiceDescriptor{
-				ProviderID:   key + "/" + serviceID,
+				ProviderID:   composeProviderID(module, serviceID),
 				Module:       module,
 				ServiceID:    serviceID,
 				Version:      strings.TrimSpace(offer.Version),

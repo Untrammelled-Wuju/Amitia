@@ -67,13 +67,16 @@ SPDX-License-Identifier: AGPL-3.0-only
                   replyTarget.role === "assistant" ? "" : "自己"
                 }}：</span
               >
-              <span class="reply-preview-excerpt">{{ replyTargetExcerpt }}</span>
+              <span class="reply-preview-excerpt" :class="{ 'is-expanded': replyPreviewExpanded }">{{ replyTargetExcerpt }}</span>
+              <button v-if="replyTargetExcerpt.length > 30 || replyTargetExcerpt.includes('\n')" type="button" class="reply-preview-toggle" @click="replyPreviewExpanded = !replyPreviewExpanded">{{ replyPreviewExpanded ? '收起' : '展开' }}</button>
             </div>
             <el-button
               :icon="CloseBold"
               circle
               size="small"
               class="preview-remove"
+              aria-label="取消引用"
+              title="取消引用"
               @click="$emit('cancelReply')"
             />
           </div>
@@ -1291,11 +1294,12 @@ const { holding, startHold, endHold, cancelHold } = useVoiceInput(
   () => ElMessage.warning("无法使用麦克风，请检查录音权限"),
 );
 
+const replyPreviewExpanded = ref(false);
+watch(() => props.replyTarget?.id, () => { replyPreviewExpanded.value = false; });
 const replyTargetExcerpt = computed(() => {
   const target = props.replyTarget;
   if (!target) return "";
-  const excerpt = target.replyToExcerpt || target.content || "";
-  return excerpt.length > 60 ? `${excerpt.slice(0, 60)}...` : excerpt;
+  return target.content || target.fullContent || "原消息内容不可用";
 });
 
 const hasComposerContext = computed(
@@ -2724,6 +2728,7 @@ defineExpose({ focus, setText, getText: () => text.value, insertText: insertComp
   flex-direction: column;
   gap: 2px;
 }
+.reply-preview-bar .preview-remove { flex: 0 0 24px; width: 24px; height: 24px; min-width: 24px; padding: 0; }
 
 .reply-preview-label {
   color: var(--ac-color-primary);
@@ -2736,6 +2741,8 @@ defineExpose({ focus, setText, getText: () => text.value, insertText: insertComp
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.reply-preview-excerpt.is-expanded { max-height: 120px; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.reply-preview-toggle { align-self: flex-start; border: 0; padding: 0; background: transparent; color: var(--ac-color-primary); cursor: pointer; font-size: 11px; }
 
 @media (max-width: 768px) {
   .chat-input-bar {

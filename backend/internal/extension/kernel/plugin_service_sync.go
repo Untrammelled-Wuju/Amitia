@@ -17,15 +17,7 @@ func contractCatalogModules(contract *plugincontract.Manifest, enabled bool) []p
 	if contract == nil {
 		return nil
 	}
-	modules := make([]plugincontract.CatalogModule, 0, len(contract.Modules))
-	for _, module := range contract.Modules {
-		modules = append(modules, plugincontract.CatalogModule{
-			Module:   plugincontract.ModuleRef{PluginID: contract.Plugin.ID, ModuleID: module.ID},
-			Services: module.Services,
-			Enabled:  enabled,
-		})
-	}
-	return modules
+	return contract.CatalogModules(enabled)
 }
 
 func setPluginContractServices(catalog *plugincontract.ServiceCatalog, contract *plugincontract.Manifest, enabled bool) error {

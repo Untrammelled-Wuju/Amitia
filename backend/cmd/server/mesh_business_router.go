@@ -203,6 +203,29 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 			}
 			query.Limit = limit
 		}
+		filter := coordination.ConversationListFilter{
+			Archive:   c.Query("archive"),
+			ProjectID: c.Query("projectId"),
+			Channel:   c.Query("channel"),
+		}
+		if filter != (coordination.ConversationListFilter{}) {
+			if !query.ListConversations || (filter.Archive != "" && filter.Archive != "active" && filter.Archive != "archived") || len(filter.ProjectID) > 512 || len(filter.Channel) > 128 {
+				c.JSON(400, gin.H{"message": "会话筛选参数无效"})
+				return
+			}
+			query.ConversationListFilter = filter
+		}
+		coreCursor := c.Query("coreCursor")
+		if len(coreCursor) > 4096 || coreCursor != "" && (!query.ListConversations || query.ResourceKind != "conversation") {
+			c.JSON(400, gin.H{"message": "核心会话分页参数无效"})
+			return
+		}
+		continuingList := query.ListConversations && (query.Cursor != "" || query.HistoricalListCursor != "" || coreCursor != "")
+		if query.ListConversations {
+			query.ResourceKind = "conversation"
+			query.SkipConversationSnapshot = continuingList && query.Cursor == ""
+			query.SkipHistoricalConversationList = continuingList && query.HistoricalListCursor == ""
+		}
 		result, err := services.OwnedBusiness.Query(c.Request.Context(), request, query)
 		if err != nil {
 			status := 409
@@ -212,50 +235,41 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 			c.JSON(status, gin.H{"code": "mesh.context_unavailable", "message": err.Error()})
 			return
 		}
-		if query.ListConversations && query.Cursor == "" && services.RuntimeProfile == runtimeprofile.ProfileLocal && actor.IsLocalTrusted && actor.DeviceID.String() != coreID {
+		if query.ListConversations && (!continuingList || coreCursor != "") && services.RuntimeProfile == runtimeprofile.ProfileLocal && actor.IsLocalTrusted && actor.DeviceID.String() != coreID {
 			coreRequest := request
 			coreRequest.ResourceOwnerID = coreID
 			coreQuery := query
-			coreQuery.ResourceKind = "conversation"
+			coreQuery.Cursor = coreCursor
 			coreQuery.HistoricalListCursor = ""
-			seenCursors := map[string]bool{}
-			for {
-				page, err := services.OwnedBusiness.Query(c.Request.Context(), coreRequest, coreQuery)
-				if err != nil {
-					c.JSON(409, gin.H{"code": "mesh.context_unavailable", "message": err.Error()})
-					return
-				}
-				for _, resource := range page.Snapshot.Resources {
-					if resource.Kind != "conversation" {
-						continue
-					}
-					var document map[string]any
-					if err := json.Unmarshal(resource.Body, &document); err != nil {
-						c.JSON(500, gin.H{"message": err.Error()})
-						return
-					}
-					if document["source"] != "reminder" && document["source"] != "proactive" {
-						continue
-					}
-					document["ownerId"] = resource.OwnerID
-					encoded, err := json.Marshal(document)
-					if err != nil {
-						c.JSON(500, gin.H{"message": err.Error()})
-						return
-					}
-					result.HistoricalConversations = append(result.HistoricalConversations, encoded)
-				}
-				cursor := page.Snapshot.NextCursors["conversation"]
-				if cursor == "" {
-					break
-				}
-				if seenCursors[cursor] || len(seenCursors) >= 256 {
-					c.JSON(500, gin.H{"message": "提醒会话分页结果无效"})
-					return
-				}
-				seenCursors[cursor] = true
-				coreQuery.Cursor = cursor
+			coreQuery.SkipConversationSnapshot = false
+			coreQuery.SkipHistoricalConversationList = true
+			coreQuery.CoreReminderConversations = true
+			page, err := services.OwnedBusiness.Query(c.Request.Context(), coreRequest, coreQuery)
+			if err != nil {
+				c.JSON(409, gin.H{"code": "mesh.context_unavailable", "message": err.Error()})
+				return
 			}
+			for _, resource := range page.Snapshot.Resources {
+				if resource.Kind != "conversation" {
+					continue
+				}
+				var document map[string]any
+				if err := json.Unmarshal(resource.Body, &document); err != nil {
+					c.JSON(500, gin.H{"message": err.Error()})
+					return
+				}
+				if document["source"] != "reminder" && document["source"] != "proactive" {
+					continue
+				}
+				document["ownerId"] = resource.OwnerID
+				encoded, err := json.Marshal(document)
+				if err != nil {
+					c.JSON(500, gin.H{"message": err.Error()})
+					return
+				}
+				result.HistoricalConversations = append(result.HistoricalConversations, encoded)
+			}
+			result.NextCoreCursor = page.Snapshot.NextCursors["conversation"]
 		}
 		c.JSON(200, gin.H{"code": 200, "data": result})
 	}

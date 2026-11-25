@@ -635,6 +635,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		registerLocalSourceTaskApprovalRouter(r.Group("/internal/device-mesh", localAuthMiddleware, localControlMiddleware), services)
 	}
 	apiGroup.Use(security.AuthenticationMiddleware(newAuthConfig(config.AppCfg.Security.Mode)))
+	registerFeatureGateRoutes(apiGroup, r)
 	if channelSandbox != nil {
 		channelsandbox.RegisterRoutes(apiGroup, channelSandbox)
 	}

@@ -17,7 +17,6 @@ import (
 	"github.com/u-ai/backend/internal/spaceidentity"
 	"github.com/u-ai/backend/internal/tts"
 	"github.com/u-ai/backend/pkg/app"
-	amitialog "log"
 )
 
 type meshLocalDataPort struct {
@@ -142,43 +141,6 @@ func (p *meshLocalDataPort) GroupState(ctx context.Context, scope coordination.E
 		return coordination.GroupState{}, coordination.ErrWrongOwner
 	}
 	return state, state.Validate()
-}
-
-func (p *meshLocalDataPort) GroupConversations(ctx context.Context, scope coordination.ExecutionScope) ([]coordination.Resource, map[string]string, error) {
-	if !p.ownsScope(scope) || scope.RoleID == "" {
-		return nil, nil, coordination.ErrWrongOwner
-	}
-	rows, err := p.services.KernelContainer.DeviceRegistry.Database().QueryContext(ctx, `SELECT resource_id,role_id,revision,body FROM kernel_device_owned_resources WHERE owner_id=? AND kind='conversation' AND deleted=0 ORDER BY updated_at DESC,resource_id DESC LIMIT 4096`, p.ownerID)
-	if err != nil {
-		return nil, nil, err
-	}
-	defer rows.Close()
-	resources := make([]coordination.Resource, 0)
-	roles := make(map[string]string)
-	for rows.Next() {
-		var resource coordination.Resource
-		var body []byte
-		if err := rows.Scan(&resource.ID, &resource.RoleID, &resource.Revision, &body); err != nil {
-			return nil, nil, err
-		}
-		resource.OwnerID = p.ownerID
-		resource.Kind = "conversation"
-		resource.Body = json.RawMessage(body)
-		var state coordination.GroupState
-		if json.Unmarshal(resource.Body, &state) != nil || state.ConversationType != "group" {
-			continue
-		}
-		state.RoleOwnerID = p.ownerID
-		if _, ok := state.ActiveMember(scope.RoleID); !ok {
-			continue
-		}
-		resources = append(resources, resource)
-		roles[resource.ID] = resource.RoleID
-	}
-	if err := rows.Err(); err != nil {
-		return nil, nil, err
-	}
-	return resources, roles, nil
 }
 
 func (p *meshLocalDataPort) roleCatalogLocked(ctx context.Context, scope coordination.ExecutionScope, includeDisabled bool) ([]coordination.Role, error) {
@@ -368,6 +330,9 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 		for _, currentPartition := range partitions {
 			resourceQuery := query
 			resourceQuery.Cursor = ""
+			if query.ListConversations && query.ResourceKind == kind && kind == "conversation" {
+				resourceQuery.Cursor = query.Cursor
+			}
 			if kind == "continuity" && !query.Management {
 				if lease := coordination.CommitLease(ctx); lease != nil {
 					resourceQuery.ResourceID = lease.ContinuityID
@@ -414,6 +379,9 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 			}
 		}
 		for _, resource := range resources {
+			if query.ListConversations && kind == "conversation" && resource.RoleID != partition {
+				snapshot.GroupRoles[resource.ID] = resource.RoleID
+			}
 			projected, err := projectGroupResourceForSnapshot(resource)
 			if err != nil {
 				return snapshot, err
@@ -492,28 +460,6 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 				}
 			}
 			snapshot.Resources = append(snapshot.Resources, resource)
-		}
-	}
-	if query.ListConversations {
-		groupResources, groupRoles, err := p.GroupConversations(ctx, scope)
-		if err != nil {
-			return snapshot, fmt.Errorf("读取本机会话列表失败: %w", err)
-		}
-		seen := make(map[string]bool)
-		for _, resource := range snapshot.Resources {
-			seen[resource.Kind+"/"+resource.ID] = true
-		}
-		for _, resource := range groupResources {
-			if seen[resource.Kind+"/"+resource.ID] {
-				continue
-			}
-			projected, err := projectGroupResourceForSnapshot(resource)
-			if err != nil {
-				return snapshot, err
-			}
-			resource = projected
-			snapshot.Resources = append(snapshot.Resources, resource)
-			snapshot.GroupRoles[resource.ID] = groupRoles[resource.ID]
 		}
 	}
 	if (query.ResourceKind == "" || query.ResourceKind == "worldbook") && scope.WorldbookRoleID != coordination.GlobalWorldbookRole {
@@ -651,64 +597,6 @@ func (p *meshLocalDataPort) listAllWorldbookResources(ctx context.Context, parti
 		}
 		cursor = next
 	}
-}
-
-func (p *meshLocalDataPort) HistoricalConversations(ctx context.Context, scope coordination.ExecutionScope) ([]json.RawMessage, error) {
-	if !scope.Coordinated || scope.TargetDeviceID != p.ownerID || scope.ResourceOwnerID != p.ownerID || (scope.RoleOwnerID != p.ownerID && scope.RoleOwnerID != scope.CoreID) {
-		return nil, coordination.ErrWrongOwner
-	}
-	partition := coordination.StorageRole(scope, "conversation")
-	if partition == "" || partition == coordination.AllMemoryRole {
-		return nil, coordination.ErrWrongOwner
-	}
-	rows, err := p.services.KernelContainer.DeviceRegistry.Database().QueryContext(ctx, `SELECT body FROM kernel_device_owned_resources WHERE owner_id=? AND role_id=? AND kind='conversation' AND deleted=0 ORDER BY updated_at DESC,resource_id DESC LIMIT 128`, p.ownerID, partition)
-	if err != nil {
-		return nil, err
-	}
-	result := []json.RawMessage{}
-	seen := map[string]bool{}
-	for rows.Next() {
-		var raw []byte
-		if err := rows.Scan(&raw); err != nil {
-			if err := rows.Close(); err != nil {
-				amitialog.Printf("[original-error] %v", err)
-			}
-			return nil, err
-		}
-		var value map[string]any
-		if err := json.Unmarshal(raw, &value); err != nil {
-			if err := rows.Close(); err != nil {
-				amitialog.Printf("[original-error] %v", err)
-			}
-			return nil, err
-		}
-		value["ownerId"] = p.ownerID
-		id, _ := value["id"].(string)
-		if id == "" {
-			continue
-		}
-		seen[id] = true
-		encoded, err := json.Marshal(value)
-		if err != nil {
-			if err := rows.Close(); err != nil {
-				amitialog.Printf("[original-error] %v", err)
-			}
-			return nil, err
-		}
-		result = append(result, encoded)
-	}
-	err = rows.Err()
-	if err := rows.Close(); err != nil {
-		amitialog.Printf("[original-error] %v", err)
-	}
-	if err != nil {
-		return nil, err
-	}
-	enriched, err := chat.EnrichConversationActivityBodies(p.services.DB, result)
-	if err != nil {
-		return nil, err
-	}
-	return p.enrichOwnedConversationActivity(ctx, enriched)
 }
 
 func (p *meshLocalDataPort) HistoricalSnapshot(ctx context.Context, scope coordination.ExecutionScope, query coordination.DataQuery) (*coordination.DataSnapshot, error) {

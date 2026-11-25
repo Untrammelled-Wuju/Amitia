@@ -501,14 +501,16 @@ func (s *OwnershipStore) ListForQuery(ctx context.Context, kind, role string, qu
 }
 
 type resourceCursor struct {
-	Owner        string `json:"owner"`
-	Kind         string `json:"kind"`
-	Role         string `json:"role"`
-	Conversation string `json:"conversation"`
-	Order        string `json:"order"`
-	ID           string `json:"id"`
-	SearchHash   string `json:"searchHash,omitempty"`
-	RequestID    string `json:"requestId,omitempty"`
+	Owner                     string                 `json:"owner"`
+	Kind                      string                 `json:"kind"`
+	Role                      string                 `json:"role"`
+	Conversation              string                 `json:"conversation"`
+	Order                     string                 `json:"order"`
+	ID                        string                 `json:"id"`
+	SearchHash                string                 `json:"searchHash,omitempty"`
+	RequestID                 string                 `json:"requestId,omitempty"`
+	CoreReminderConversations bool                   `json:"coreReminders,omitempty"`
+	ConversationListFilter    ConversationListFilter `json:"listFilter,omitempty"`
 }
 
 func ConversationSearchHash(search string) string {
@@ -540,7 +542,7 @@ func (s *OwnershipStore) ListPage(ctx context.Context, kind, role string, query 
 			return nil, "", ErrWrongOwner
 		}
 		encoded, err := base64.RawURLEncoding.DecodeString(query.Cursor)
-		if err != nil || json.Unmarshal(encoded, &cursor) != nil || cursor.Owner != s.ownerID || cursor.Kind != kind || cursor.Role != role || cursor.Conversation != query.ConversationID || cursor.SearchHash != searchHash || cursor.RequestID != query.RequestID || cursor.Order == "" || cursor.ID == "" || len(cursor.ID) > 512 || len(cursor.Order) > 128 {
+		if err != nil || json.Unmarshal(encoded, &cursor) != nil || cursor.Owner != s.ownerID || cursor.Kind != kind || cursor.Role != role || cursor.Conversation != query.ConversationID || cursor.SearchHash != searchHash || cursor.RequestID != query.RequestID || cursor.CoreReminderConversations != query.CoreReminderConversations || cursor.ConversationListFilter != query.ConversationListFilter || cursor.Order == "" || cursor.ID == "" || len(cursor.ID) > 512 || len(cursor.Order) > 128 {
 			return nil, "", ErrWrongOwner
 		}
 	}
@@ -555,7 +557,13 @@ func (s *OwnershipStore) ListPage(ctx context.Context, kind, role string, query 
 	}
 	statement := `SELECT resource_id,source_id,revision,deleted,body,role_id,` + order + ` AS resource_order FROM kernel_device_owned_resources WHERE owner_id=? AND kind=? AND deleted=0`
 	arguments := []any{s.ownerID, kind}
-	if role != AllMemoryRole {
+	if kind == "conversation" && query.ListConversations && role != AllMemoryRole && !query.CoreReminderConversations {
+		statement += ` AND (role_id=? OR (json_extract(CAST(body AS TEXT),'$.conversationType')='group' AND EXISTS (
+			SELECT 1 FROM json_each(CAST(body AS TEXT),'$.members') AS member
+			WHERE json_extract(member.value,'$.characterId')=? AND json_extract(member.value,'$.status')='active'
+		)))`
+		arguments = append(arguments, role, role)
+	} else if role != AllMemoryRole {
 		statement += ` AND role_id=?`
 		arguments = append(arguments, role)
 	} else if !MemoryKind(kind) {
@@ -606,6 +614,14 @@ func (s *OwnershipStore) ListPage(ctx context.Context, kind, role string, query 
 			arguments = append(arguments, query.ResourceID)
 		}
 	case "conversation":
+		if query.CoreReminderConversations {
+			statement += ` AND json_extract(CAST(body AS TEXT),'$.source') IN ('reminder','proactive')`
+		}
+		if query.ListConversations {
+			predicate, parameters := query.ConversationListFilter.Predicate()
+			statement += predicate
+			arguments = append(arguments, parameters...)
+		}
 		if search != "" {
 			statement += OwnedConversationSearchPredicate
 			arguments = append(arguments, search, search)
@@ -691,7 +707,7 @@ func (s *OwnershipStore) ListPage(ctx context.Context, kind, role string, query 
 			count = limit
 		}
 		last := resources[count-1]
-		encoded, _ := json.Marshal(resourceCursor{Owner: s.ownerID, Kind: kind, Role: role, Conversation: query.ConversationID, Order: orders[count-1], ID: last.ID, SearchHash: searchHash, RequestID: query.RequestID})
+		encoded, _ := json.Marshal(resourceCursor{Owner: s.ownerID, Kind: kind, Role: role, Conversation: query.ConversationID, Order: orders[count-1], ID: last.ID, SearchHash: searchHash, RequestID: query.RequestID, CoreReminderConversations: query.CoreReminderConversations, ConversationListFilter: query.ConversationListFilter})
 		next = base64.RawURLEncoding.EncodeToString(encoded)
 		resources = resources[:count]
 	}

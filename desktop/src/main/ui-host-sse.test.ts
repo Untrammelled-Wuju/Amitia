@@ -37,6 +37,17 @@ function fixture() {
   return { fetch, send, win, dispatch };
 }
 
+it('does not show execution progress alerts but retains approvals and completed messages', () => {
+  const f = fixture();
+  f.dispatch('start', undefined, { type: 'run.start', phase: 'running', ackable: false });
+  f.dispatch('tool', undefined, { type: 'run.update', phase: 'running', ackable: false });
+  f.dispatch('end', undefined, { type: 'run.end', phase: 'completed', ackable: false });
+  expect(notifications.entries).toHaveLength(0);
+  f.dispatch('approval', undefined, { type: 'run.update', phase: 'waiting_approval', ackable: false });
+  f.dispatch('message', undefined, { type: 'message.completed', ackable: false });
+  expect(notifications.entries).toHaveLength(2);
+});
+
 it('registers the desktop notification endpoint from its confirmed write before opening SSE', async () => {
   identityMock.mockResolvedValue({ deviceId: 'desktop-device', runtimeId: 'runtime', platform: 'darwin' });
   const fetch = vi.fn()

@@ -227,6 +227,45 @@ Stream<List<int>> bytes(List<Map<String, dynamic>> events) {
 }
 
 void main() {
+  test('读取完整引用快照', () {
+    final original = '原始消息' * 60;
+    final service = DeviceOwnedChatService(_OwnedApi());
+    final messages = service.messages({
+      'executionScope': scope(),
+      'snapshot': {
+        'ownerId': 'a',
+        'resources': [
+          {
+            'kind': 'message',
+            'revision': 1,
+            'body': {
+              'id': 'reply',
+              'role': 'user',
+              'content': '回复',
+              'createdAt': '2026-11-23T00:00:00Z',
+              'quote': {'messageId': 'source', 'content': original},
+            },
+          },
+        ],
+      },
+    });
+    expect(messages.single.replyToMessageId, 'source');
+    expect(messages.single.replyToExcerpt, original);
+  });
+  test('读取文件引用的文件名', () {
+    final service = DeviceOwnedChatService(_OwnedApi());
+    final messages = service.messages({
+      'executionScope': scope(),
+      'snapshot': {
+        'ownerId': 'a',
+        'resources': [
+          {'kind': 'message', 'revision': 1, 'body': {'id': 'source', 'role': 'user', 'content': '[文件]', 'fileName': '报告.pdf', 'createdAt': '2026-11-23T00:00:00Z'}},
+          {'kind': 'message', 'revision': 1, 'body': {'id': 'reply', 'role': 'user', 'content': '回复', 'createdAt': '2026-11-23T00:00:01Z', 'quote': {'ownerId': 'a', 'messageId': 'source', 'content': '[文件]'}}},
+        ],
+      },
+    });
+    expect(messages.last.replyToExcerpt, '[文件] 报告.pdf');
+  });
   test('群聊流按投递身份接收多个角色并校验最终保存确认', () async {
     final first = {
       ...scope(),

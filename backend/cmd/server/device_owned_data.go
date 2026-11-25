@@ -81,7 +81,7 @@ func newDeviceOwnedDataHandler(services *AppServices, dataDir string) (agent.Can
 		if cred == nil || cred.ExpiresAt.Before(time.Now()) || invocation.SpaceID != cred.SpaceID || invocation.DeviceID != identity.DeviceID || invocation.RuntimeID != identity.RuntimeID || scope.SpaceID != cred.SpaceID.String() || scope.CoreID != cred.SpaceID.String() || scope.TargetDeviceID != identity.DeviceID.String() {
 			return nil, fmt.Errorf("设备凭据与调用范围不匹配: %w", coordination.ErrWrongOwner)
 		}
-		if req.Operation != "attachment-reference-prepare" && req.Operation != "attachment-reference-commit" && req.Operation != "attachment-reference-abort" && req.Operation != "attachment-reference-remove" && req.Operation != "attachment-validate" && req.Operation != "attachment-storage-chunk" && req.Operation != "channel-delivery" && req.Operation != "chat-management" && req.Operation != "task-definition" && req.Operation != "task-catalog-entry" && req.Operation != "task-permissions" && req.Operation != "task-catalog" && req.Operation != "task-history-resource" && req.Operation != "history" && req.Operation != "history-list" && req.Operation != "history-list-page" && req.Operation != "history-roles" && req.Operation != "group-state" && (scope.ResourceOwnerID != identity.DeviceID.String() || (scope.RoleOwnerID != identity.DeviceID.String() && scope.RoleOwnerID != scope.CoreID)) {
+		if req.Operation != "attachment-reference-prepare" && req.Operation != "attachment-reference-commit" && req.Operation != "attachment-reference-abort" && req.Operation != "attachment-reference-remove" && req.Operation != "attachment-validate" && req.Operation != "attachment-storage-chunk" && req.Operation != "channel-delivery" && req.Operation != "chat-management" && req.Operation != "task-definition" && req.Operation != "task-catalog-entry" && req.Operation != "task-permissions" && req.Operation != "task-catalog" && req.Operation != "task-history-resource" && req.Operation != "history" && req.Operation != "history-list-page" && req.Operation != "history-roles" && req.Operation != "group-state" && (scope.ResourceOwnerID != identity.DeviceID.String() || (scope.RoleOwnerID != identity.DeviceID.String() && scope.RoleOwnerID != scope.CoreID)) {
 			return nil, fmt.Errorf("数据持有方与目标设备不匹配: %w", coordination.ErrWrongOwner)
 		}
 		var result any
@@ -312,11 +312,6 @@ func newDeviceOwnedDataHandler(services *AppServices, dataDir string) (agent.Can
 				if err != nil {
 					err = fmt.Errorf("读取设备历史快照失败: %w", err)
 				}
-			case "history-list":
-				if !scope.Coordinated || scope.TargetDeviceID != identity.DeviceID.String() || (scope.ResourceOwnerID != identity.DeviceID.String() && scope.ResourceOwnerID != scope.CoreID) || (scope.RoleOwnerID != identity.DeviceID.String() && scope.RoleOwnerID != scope.CoreID) {
-					return deviceOwnedWrongOwner(req.Operation, scope.CoreID, scope, "history list requires a coordinated Core-owned scope")
-				}
-				result, err = port.HistoricalConversations(ctx, scope)
 			case "history-list-page":
 				result, err = port.HistoricalConversationPage(ctx, scope, req.Query)
 			case "history-roles":

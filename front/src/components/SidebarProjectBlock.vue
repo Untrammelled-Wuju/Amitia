@@ -5,7 +5,8 @@
         type="button"
         class="project-main"
         :title="project.statusReason || project.name"
-        @click="expanded = !expanded"
+        @click="emit('toggleProject')"
+        :aria-expanded="expanded"
       >
         <el-icon><FolderOpened /></el-icon>
         <span>{{ project.name }}</span>
@@ -42,7 +43,7 @@
     <Transition name="project-threads">
       <div v-if="expanded" class="project-threads">
         <SidebarConversationRow
-          v-for="conversation in visibleConversations"
+          v-for="conversation in project.conversations"
           :key="conversation.id"
           :conversation="conversation"
           :active="conversation.id === activeConversationId"
@@ -60,28 +61,26 @@
           @mark-read="emit('markConversationRead', $event)"
           @delete="emit('deleteConversation', $event)"
         />
-        <button
-          v-if="canToggleConversations"
-          type="button"
-          class="thread-expand"
-          @click="toggleConversations"
-        >
-          {{ hasMoreConversations ? "展开显示" : "收起" }}
-        </button>
-        <div v-if="project.conversations.length === 0" class="thread-empty">暂无对话</div>
+
+        <div v-if="conversationPage?.error" class="thread-empty project-page-error" role="alert">{{ conversationPage.error }}</div>
+        <button v-if="conversationPage?.error" class="project-page-retry" type="button" @click="emit('loadConversations')">重试</button>
+        <div v-else-if="conversationPage?.loading" class="thread-empty project-page-status" role="status">加载中～</div>
+        <div v-else-if="canLoadConversations && conversationPage?.loaded && !conversationPage.cursor && project.conversations.length" class="thread-empty project-page-status" role="status">到底啦～</div>
+        <div v-else-if="(!canLoadConversations || conversationPage?.loaded && !conversationPage.cursor) && !project.conversations.length" class="thread-empty">暂无对话</div>
+        <ConversationListEnd :enabled="expanded && canLoadConversations && !conversationPage?.loading && !conversationPage?.error && (!conversationPage?.loaded || Boolean(conversationPage.cursor))" @reach="emit('loadConversations')" />
       </div>
     </Transition>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed } from "vue";
 import { FolderOpened, MoreFilled, Plus } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 import type { ConversationItem, ProjectItem } from "@/stores/chat";
-import { useConversationDisclosure } from "@/composables/useConversationDisclosure";
 import { isDesktopShell } from "@/runtime/runtime-capabilities";
 import { openContextMenu } from "./context-menu/contextMenuStore";
+import ConversationListEnd from "./ConversationListEnd.vue";
 import SidebarConversationRow from "./SidebarConversationRow.vue";
 
 const props = defineProps<{
@@ -90,11 +89,15 @@ const props = defineProps<{
   activeConversationId: string;
   projects?: ProjectItem[];
   selecting?: boolean;
+  expanded?: boolean;
+  conversationPage?: { loading: boolean; loaded: boolean; cursor?: unknown; error: string };
   selectedIds?: string[];
 }>();
 
 const emit = defineEmits<{
   select: [conversation: ConversationItem];
+  toggleProject: [];
+  loadConversations: [];
   startBatch: [conversation: ConversationItem];
   createConversation: [project: ProjectItem];
   command: [project: ProjectItem, command: string | number | object];
@@ -107,6 +110,8 @@ const emit = defineEmits<{
   deleteConversation: [conversation: ConversationItem];
 }>();
 
+const canLoadConversations = computed(() => Boolean(props.project.resourceId && props.project.roleId && props.project.ownerId));
+
 function createConversation() {
   if (!props.project.available || props.project.readOnly) {
     ElMessage.warning(props.project.statusReason || (props.project.readOnly ? "只读项目不能创建对话。" : "项目不可用，无法创建对话。"));
@@ -115,7 +120,6 @@ function createConversation() {
   emit("createConversation", props.project);
 }
 
-const expanded = ref(false);
 const workspaces = computed(() => props.project.workspaces || []);
 const dynamicProjectAccessKeys = "BCDEFGHIJKLMQSTUVWYZ0123456789";
 const projectCommands = computed(() => {
@@ -140,12 +144,6 @@ function openProjectContextMenu(event: MouseEvent) {
   event.stopPropagation();
   openContextMenu({ x: event.clientX, y: event.clientY, title: props.project.name, items: projectCommands.value.map((item) => ({ id: item.command, label: item.label, accessKey: item.accessKey, disabled: item.disabled, separatorBefore: item.divided, action: () => emit("command", props.project, item.command) })) });
 }
-const {
-  visible: visibleConversations,
-  hasMore: hasMoreConversations,
-  canToggle: canToggleConversations,
-  toggle: toggleConversations,
-} = useConversationDisclosure(() => props.project.conversations);
 </script>
 
 <style scoped>
@@ -280,27 +278,15 @@ const {
     transition: none;
   }
 }
-.thread-expand {
-  justify-self: start;
-  margin: 2px 0;
-  padding: 3px 8px;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--ac-color-primary);
-  cursor: pointer;
-  font: inherit;
-  font-size: var(--ac-font-size-xs);
-}
-.thread-expand:hover {
-  background: var(--workbench-sidebar-hover);
-}
 .thread-empty {
   padding: 5px 9px;
   color: var(--text-muted);
   font-size: var(--ac-font-size-xs);
 }
 
+.project-page-status { color: color-mix(in srgb, var(--text-muted) 92%, transparent); text-align: center; }
+.project-page-error { white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
+.project-page-retry { justify-self: center; color: var(--ac-color-primary); }
 button { line-height: 1.45; }
 button:not(:disabled):focus-visible { outline: 2px solid var(--ac-color-primary); outline-offset: -2px; }
 </style>

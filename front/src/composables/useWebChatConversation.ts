@@ -33,7 +33,6 @@ export function useWebChatConversation(
   const { saveCache } = useCachedApi();
 
   const characters = ref<any[]>([]);
-  const conversations = ref<any[]>([]);
   const group = ref<OwnedGroupState | null>(null);
   const memories = ref<any[]>([]);
   const conversationLoading = ref(false);
@@ -97,7 +96,6 @@ return;
     group.value = null;
     showCharPicker.value = false;
     ElMessage.success("已切换角色: " + c.name);
-    await fetchConversations();
     if (owned.enabled.value) await chatStore.fetchSidebar().catch((error) => {
   console.error("[original-error]", error);
   return undefined;
@@ -168,23 +166,6 @@ return;
     }
   }
 
-  async function fetchConversations() {
-    try {
-      if (owned.enabled.value) {
-        if (!characterId.value) { conversations.value = []; return; }
-        const selectedRole = characterId.value;
-        const rows = await owned.conversations(selectedRole);
-        if (characterId.value !== selectedRole) return;
-        conversations.value = rows;
-        return;
-      }
-      throw new Error(owned.notice.value || "设备对话服务尚未就绪");
-    } catch (error) {
-  console.error("[original-error]", error);
-conversations.value = [];
-    }
-  }
-
   async function handleViewMemories() {
     showMemories.value = true;
     await owned.refresh();
@@ -224,7 +205,6 @@ return "";
 
   return {
     characters,
-    conversations,
     group,
     memories,
     conversationLoading,
@@ -235,7 +215,6 @@ return "";
     clearGroupConversation,
     handleSwitchChar,
     loadCharacterConversation,
-    fetchConversations,
     handleViewMemories,
     fetchWebMsgCount,
     refreshCharacters,

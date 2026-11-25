@@ -23,12 +23,18 @@ internal sealed interface RootfsPrepareResult {
     ) : RootfsPrepareResult
 }
 
+internal enum class PayloadCompression {
+    XZ,
+    GZIP,
+}
+
 internal interface RootfsManager {
     fun prepareRootfs(
         rootfsPayloadFile: File,
         expectedRootfsId: String,
         expectedPayloadSha256: String,
         allowReplace: Boolean = false,
+        payloadCompression: PayloadCompression = PayloadCompression.XZ,
     ): RootfsPrepareResult
     fun getInstalledRootfs(): RootfsInfo?
 }
@@ -49,6 +55,7 @@ internal class DefaultRootfsManager(
         expectedRootfsId: String,
         expectedPayloadSha256: String,
         allowReplace: Boolean,
+        payloadCompression: PayloadCompression,
     ): RootfsPrepareResult {
         val installed = getInstalledRootfs()
 
@@ -57,7 +64,7 @@ internal class DefaultRootfsManager(
                 return RootfsPrepareResult.Reused(installed)
             }
             if (!allowReplace) return RootfsPrepareResult.Conflict(installed.rootfsId, expectedRootfsId)
-            return replaceRootfs(rootfsPayloadFile, expectedRootfsId, expectedPayloadSha256)
+            return replaceRootfs(rootfsPayloadFile, expectedRootfsId, expectedPayloadSha256, payloadCompression)
         }
 
         val rootfsDir = File(rootfsRoot.toPath().toString())
@@ -66,10 +73,10 @@ internal class DefaultRootfsManager(
         }
         rootfsDir.mkdirs()
 
-        val extractResult = extractor.extractTarXz(
-            tarXzFile = rootfsPayloadFile,
+        val extractResult = extractPayload(
+            payload = rootfsPayloadFile,
             targetDir = rootfsDir,
-            rootBoundary = rootfsDir.absolutePath,
+            payloadCompression = payloadCompression,
         )
 
         when (extractResult) {
@@ -88,10 +95,11 @@ internal class DefaultRootfsManager(
         }
     }
 
-    fun completePreparation(success: Boolean) {
-        val replacement = pendingReplacement ?: return
+    fun completePreparation(success: Boolean): File? {
+        val replacement = pendingReplacement ?: return null
         if (success) {
-            replacement.backupDir.deleteRecursively()
+            pendingReplacement = null
+            return replacement.backupDir
         } else {
             rootfsRoot.deleteRecursively()
             if (!replacement.backupDir.renameTo(rootfsRoot)) {
@@ -101,19 +109,21 @@ internal class DefaultRootfsManager(
             rootfsMarkerFile.writeBytes(replacement.previousMarker)
         }
         pendingReplacement = null
+        return null
     }
 
     private fun replaceRootfs(
         payload: File,
         rootfsId: String,
         payloadSha256: String,
+        payloadCompression: PayloadCompression,
     ): RootfsPrepareResult {
         val nonce = UUID.randomUUID().toString()
         val stageDir = File(controlRoot, ".rootfs-stage-$nonce")
         val backupDir = File(controlRoot, ".rootfs-backup-$nonce")
         val previousMarker = rootfsMarkerFile.readBytes()
         stageDir.mkdirs()
-        val extraction = extractor.extractTarXz(payload, stageDir, stageDir.absolutePath)
+        val extraction = extractPayload(payload, stageDir, payloadCompression)
         if (extraction is SafeExtractResult.Failure) {
             stageDir.deleteRecursively()
             return RootfsPrepareResult.Failure(extraction.code, extraction.message)
@@ -142,6 +152,23 @@ internal class DefaultRootfsManager(
         } finally {
             stageDir.deleteRecursively()
         }
+    }
+
+    private fun extractPayload(
+        payload: File,
+        targetDir: File,
+        payloadCompression: PayloadCompression,
+    ): SafeExtractResult = when (payloadCompression) {
+        PayloadCompression.XZ -> extractor.extractTarXz(
+            tarXzFile = payload,
+            targetDir = targetDir,
+            rootBoundary = targetDir.absolutePath,
+        )
+        PayloadCompression.GZIP -> extractor.extractTarGz(
+            tarGzFile = payload,
+            targetDir = targetDir,
+            rootBoundary = targetDir.absolutePath,
+        )
     }
 
     override fun getInstalledRootfs(): RootfsInfo? {

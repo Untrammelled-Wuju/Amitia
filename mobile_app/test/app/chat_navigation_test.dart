@@ -5,6 +5,8 @@ import 'package:amitia_app/core/models/conversation.dart';
 import 'package:amitia_app/core/models/memory.dart';
 import 'package:amitia_app/core/models/project.dart';
 import 'package:amitia_app/core/models/reminder.dart';
+import 'package:amitia_app/core/services/chat_service.dart';
+import 'package:amitia_app/core/services/device_owned_chat_service.dart';
 import 'package:amitia_app/core/services/extension_service.dart';
 import 'package:amitia_app/core/services/providers.dart';
 import 'package:amitia_app/core/ui_runtime/routing/builtin_route_catalog.dart';
@@ -230,6 +232,23 @@ GoRouter _router() {
   );
 }
 
+class _ConversationSearchService extends Fake implements ChatService {
+  _ConversationSearchService(this.conversations);
+
+  final List<ConversationDto> conversations;
+
+  @override
+  Future<ConversationPage> conversationPage({
+    Map<String, ConversationListCursor>? cursors,
+    String keyword = '',
+    bool selectedRoleOnly = false,
+    ConversationListFilter filter = const ConversationListFilter(),
+  }) async => (
+    rows: conversations.where((row) => row.title.contains(keyword)).toList(),
+    cursors: <String, ConversationListCursor>{},
+  );
+}
+
 Widget _app(
   GoRouter router, {
   List<ConversationDto> conversations = const <ConversationDto>[],
@@ -239,6 +258,9 @@ Widget _app(
 }) {
   return ProviderScope(
     overrides: [
+      chatServiceProvider.overrideWithValue(
+        _ConversationSearchService(conversations),
+      ),
       conversationListProvider.overrideWith((ref) async => conversations),
       conversationSidebarProvider.overrideWith(
         (ref) async => const ConversationSidebarDto(),
@@ -369,6 +391,12 @@ void main() {
       const EdgeInsets.fromLTRB(16, 12, 16, 4),
     );
 
+    expect(
+      tester
+          .widget<AmitiaIcon>(find.byKey(const ValueKey('main-tab-icon-任务')))
+          .glyph,
+      AmitiaIconGlyph.calendar,
+    );
     await tester.tap(find.byKey(const ValueKey('main-tab-任务')));
     await tester.pumpAndSettle();
     expect(find.byType(TaskHubPage), findsOneWidget);
@@ -396,9 +424,7 @@ void main() {
 
     expect(
       tester
-          .widget<AmitiaIcon>(
-            find.byKey(const ValueKey('main-tab-icon-扩展')),
-          )
+          .widget<AmitiaIcon>(find.byKey(const ValueKey('main-tab-icon-扩展')))
           .glyph,
       AmitiaIconGlyph.extensions,
     );
@@ -542,6 +568,18 @@ void main() {
     expect(find.text('世界书目标页'), findsOneWidget);
   });
 
+  testWidgets('新对话在会话创建前显示默认标题', (tester) async {
+    final router = _router();
+    addTearDown(router.dispose);
+    await tester.pumpWidget(_app(router));
+    await tester.pumpAndSettle();
+
+    router.push(AppRoutes.chat);
+    await tester.pumpAndSettle();
+
+    expect(find.text('新对话'), findsOneWidget);
+  });
+
   testWidgets('消息页加号提供新对话、新群聊、新团队和新项目', (tester) async {
     await tester.pumpWidget(_app(_router()));
     await tester.pumpAndSettle();
@@ -604,7 +642,7 @@ void main() {
     expect(find.byType(MainTabScaffold), findsNothing);
 
     await tester.enterText(find.byType(TextField), '小夏');
-    await tester.pump();
+    await tester.pumpAndSettle(const Duration(milliseconds: 250));
     expect(find.byKey(const ValueKey('search-result-c1')), findsOneWidget);
   });
 

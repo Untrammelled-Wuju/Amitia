@@ -166,9 +166,18 @@ func (m Module) ToDomain(extensionID domain.ExtensionID) (domain.ModuleDefinitio
 			Metadata: cloneMap(capability.Metadata),
 		})
 	}
+	declaredCapabilities := make(map[string]bool, len(moduleDefinition.ProvidedCapabilities))
+	for _, capability := range moduleDefinition.ProvidedCapabilities {
+		declaredCapabilities[strings.TrimSpace(capability.ID)] = true
+	}
 	for _, service := range m.Services.Provides {
+		serviceID := strings.TrimSpace(service.ServiceID)
+		if declaredCapabilities[serviceID] {
+			continue
+		}
+		declaredCapabilities[serviceID] = true
 		moduleDefinition.ProvidedCapabilities = append(moduleDefinition.ProvidedCapabilities, domain.ProvidedCapability{
-			ID:      service.ServiceID,
+			ID:      serviceID,
 			Version: service.Version,
 		})
 	}

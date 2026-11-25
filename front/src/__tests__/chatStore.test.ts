@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 
 const mocks = vi.hoisted(() => ({
-  conversations: vi.fn(),
+  conversationPage: vi.fn(),
   edit: vi.fn(),
   projects: vi.fn(),
   refresh: vi.fn(),
@@ -20,7 +20,7 @@ vi.mock("@/composables/useDeviceOwnedConversation", async () => {
       policy: ref({ selectedRole: "role-1", providerEpoch: 1, coordinated: false, modeRevision: 1, permissionRevision: 1 }),
       refresh: mocks.refresh,
       selectInitialRole: () => "role-1",
-      conversations: mocks.conversations,
+      conversationPage: mocks.conversationPage,
       projects: mocks.projects,
       edit: mocks.edit,
     }),
@@ -32,7 +32,7 @@ import { useChatStore } from "@/stores/chat";
 describe("chat store", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
-    mocks.conversations.mockReset();
+    mocks.conversationPage.mockReset();
     mocks.edit.mockReset();
     mocks.projects.mockReset();
     mocks.refresh.mockReset();
@@ -52,7 +52,7 @@ describe("chat store", () => {
       createdAt: "2026-09-19T00:00:00Z",
       updatedAt: "2026-09-19T00:00:00Z",
     };
-    mocks.conversations.mockResolvedValue([conversation]);
+    mocks.conversationPage.mockResolvedValue({ rows: [conversation] });
 
     const store = useChatStore();
     await store.restoreConversation(conversation.id);
@@ -63,7 +63,7 @@ describe("chat store", () => {
   });
 
   it("signals the archive page after archiving a conversation", async () => {
-    mocks.conversations.mockResolvedValue([]);
+    mocks.conversationPage.mockResolvedValue({ rows: [] });
     const store = useChatStore();
     await store.archiveConversation("conversation-2");
 
@@ -87,7 +87,7 @@ describe("chat store", () => {
       createdAt: "2026-09-19T00:00:00Z",
       updatedAt: "2026-09-19T00:00:00Z",
     };
-    mocks.conversations.mockResolvedValue([conversation]);
+    mocks.conversationPage.mockResolvedValue({ rows: [conversation] });
     const store = useChatStore();
     await store.fetchSidebar();
     await store.markConversationRead(conversation.id, 2);
@@ -100,13 +100,13 @@ describe("chat store", () => {
 
   it("keeps a newer unread turn when the sidebar refreshes while marking read", async () => {
     const conversation = { id: "conversation-4", projectId: "", title: "Unread", channel: "web", source: "device-mesh", messageCount: 1, hasUnread: true, unreadCompletedCount: 1, lastReadTurnSequence: 0, lastTerminalTurnSequence: 2, createdAt: "2026-09-19T00:00:00Z", updatedAt: "2026-09-19T00:00:00Z" };
-    mocks.conversations.mockResolvedValue([conversation]);
+    mocks.conversationPage.mockResolvedValue({ rows: [conversation] });
     let finishEdit!: () => void;
     mocks.edit.mockImplementation(() => new Promise<void>((resolve) => { finishEdit = resolve; }));
     const store = useChatStore();
     await store.fetchSidebar();
     const marking = store.markConversationRead(conversation.id, 2);
-    mocks.conversations.mockResolvedValue([{ ...conversation, lastTerminalTurnSequence: 3 }]);
+    mocks.conversationPage.mockResolvedValue({ rows: [{ ...conversation, lastTerminalTurnSequence: 3 }] });
     await store.fetchSidebar();
     finishEdit();
     await marking;

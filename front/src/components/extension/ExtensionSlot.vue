@@ -176,16 +176,16 @@ const isHidden = computed(() =>
 );
 
 const rootEl = computed(() => rootRef.value ?? null);
-function interactiveElement(): HTMLInputElement | HTMLTextAreaElement | HTMLElement | null {
+function editableElement(): HTMLInputElement | HTMLTextAreaElement | HTMLElement | null {
   return rootRef.value?.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLElement>(
-    "textarea, input, [contenteditable='true'], [tabindex]:not([tabindex='-1']), button",
+    "textarea:not(:disabled):not([readonly]), input:not([type]):not(:disabled):not([readonly]), input:is([type='text'], [type='search'], [type='email'], [type='url'], [type='tel'], [type='password']):not(:disabled):not([readonly]), [contenteditable='true']",
   ) ?? null;
 }
 function focus() {
-  interactiveElement()?.focus?.();
+  (editableElement() ?? rootRef.value?.querySelector<HTMLElement>("[tabindex]:not([tabindex='-1']), button:not(:disabled)"))?.focus();
 }
 function setText(value: unknown) {
-  const element = interactiveElement();
+  const element = editableElement();
   if (!element) return;
   const text = value == null ? "" : String(value);
   if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
@@ -200,8 +200,12 @@ function setText(value: unknown) {
     element.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: text }));
   }
 }
+function getText() {
+  const element = editableElement();
+  return element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement ? element.value : element?.textContent ?? "";
+}
 function clear() { setText(""); }
-defineExpose({ rootEl, focus, setText, clear });
+defineExpose({ rootEl, focus, setText, getText, clear });
 
 </script>
 

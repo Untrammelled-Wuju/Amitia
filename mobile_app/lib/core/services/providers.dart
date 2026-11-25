@@ -430,10 +430,63 @@ final characterListProvider = FutureProvider.autoDispose<List<CharacterDto>>((
   return svc.list(target: target);
 });
 
+final conversationPageRequestProvider = StateProvider.autoDispose<int>(
+  (ref) => 0,
+);
+
+final conversationPageCacheProvider =
+    Provider.autoDispose<ConversationPageCache>(
+      (ref) => ConversationPageCache(),
+    );
+
+class ConversationPageCache {
+  ConversationPage? page;
+  int request = 0;
+  Object? error;
+  StackTrace? stackTrace;
+
+  bool get hasMore => page?.cursors.isNotEmpty ?? false;
+}
+
 final conversationListProvider =
     FutureProvider.autoDispose<List<ConversationDto>>((ref) async {
+      final request = ref.watch(conversationPageRequestProvider);
+      final cache = ref.watch(conversationPageCacheProvider);
       final svc = ref.read(chatServiceProvider);
-      return svc.listConversations();
+      final previous = request != cache.request ? cache.page : null;
+      cache.request = request;
+      cache.error = null;
+      cache.stackTrace = null;
+      var cancelled = false;
+      ref.onDispose(() => cancelled = true);
+      try {
+        final page = await svc.conversationPage(
+          cursors: previous?.cursors,
+          filter: const ConversationListFilter(
+            archive: 'active',
+            channel: 'web',
+          ),
+        );
+        final rows = {
+          for (final row in previous?.rows ?? const <ConversationDto>[])
+            row.id: row,
+          for (final row in page.rows) row.id: row,
+        }.values.toList();
+        if (!cancelled) cache.page = (rows: rows, cursors: page.cursors);
+        return rows;
+      } catch (error, stackTrace) {
+        if (previous == null) rethrow;
+        if (!cancelled) {
+          cache.error = error;
+          cache.stackTrace = stackTrace;
+        }
+        return previous.rows;
+      }
+    });
+
+final conversationBackupListProvider =
+    FutureProvider.autoDispose<List<ConversationDto>>((ref) {
+      return ref.read(chatServiceProvider).listConversations();
     });
 
 final conversationCharacterProvider = FutureProvider.autoDispose
@@ -455,8 +508,8 @@ final conversationCharacterProvider = FutureProvider.autoDispose
 
 final conversationSidebarProvider =
     FutureProvider.autoDispose<ConversationSidebarDto>((ref) async {
-      final svc = ref.read(chatServiceProvider);
-      return svc.conversationSidebar();
+      final conversations = await ref.watch(conversationListProvider.future);
+      return ref.read(chatServiceProvider).conversationSidebar(conversations);
     });
 
 final activeConversationIdProvider = StateProvider<String>((ref) => '');

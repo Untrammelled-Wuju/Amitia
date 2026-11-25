@@ -4,6 +4,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('排队引用显示原始消息并可展开', (tester) async {
+    final content = '原始内容' * 30;
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: QueuedMessagesPanel(
+      items: const [{'requestId': 'a', 'message': '回复', 'status': 'queued', 'quote': {'ownerId': 'a', 'messageId': 'source'}}],
+      quoteText: (_) => content,
+      busy: false, canSteer: true, error: '', onReorder: (_) {}, onSteer: (_) {}, onDelete: (_) {}, onEdit: (_) {}, onShowError: (_) {},
+    ))));
+    expect(find.text('引用：$content'), findsOneWidget);
+    await tester.tap(find.text('展开'));
+    await tester.pump();
+    expect(find.text('收起'), findsOneWidget);
+  });
   testWidgets('长按拖拽排序并保留引导与删除入口', (tester) async {
     List<String> reordered = <String>[];
     String? steered;

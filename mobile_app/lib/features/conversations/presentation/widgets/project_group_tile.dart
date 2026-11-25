@@ -26,6 +26,9 @@ class ProjectGroupTile extends ConsumerWidget {
     required this.onCreateConversation,
     required this.onAction,
     this.busy = false,
+    this.hasMoreConversations = false,
+    this.loadedConversations,
+    this.conversationFooter,
     this.selecting = false,
     this.selectedIds = const {},
   });
@@ -33,6 +36,9 @@ class ProjectGroupTile extends ConsumerWidget {
   final ProjectDto project;
   final bool expanded;
   final bool busy;
+  final bool hasMoreConversations;
+  final List<ConversationDto>? loadedConversations;
+  final Widget? conversationFooter;
   final bool selecting;
   final Set<String> selectedIds;
   final VoidCallback onToggle;
@@ -68,14 +74,15 @@ class ProjectGroupTile extends ConsumerWidget {
       if (runningCount > 0) '$runningCount 个进行中',
       if (unreadCount > 0) '$unreadCount 条未读',
     ].join(' · ');
-    final conversations = project.conversations.toList(growable: false)
-      ..sort((a, b) {
-        final aTime = DateTime.tryParse(a.updatedAt);
-        final bTime = DateTime.tryParse(b.updatedAt);
-        return (bTime ?? DateTime.fromMillisecondsSinceEpoch(0)).compareTo(
-          aTime ?? DateTime.fromMillisecondsSinceEpoch(0),
-        );
-      });
+    final conversations =
+        (loadedConversations ?? project.conversations).toList(growable: false)
+          ..sort((a, b) {
+            final aTime = DateTime.tryParse(a.updatedAt);
+            final bTime = DateTime.tryParse(b.updatedAt);
+            return (bTime ?? DateTime.fromMillisecondsSinceEpoch(0)).compareTo(
+              aTime ?? DateTime.fromMillisecondsSinceEpoch(0),
+            );
+          });
     final canCreate =
         !project.readOnly &&
         !busy &&
@@ -327,58 +334,51 @@ class ProjectGroupTile extends ConsumerWidget {
             child: expanded
                 ? Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: conversations.isEmpty
-                        ? [
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                              child: Text(
-                                '暂无对话',
-                                style: AppTypography.caption(context),
-                              ),
+                    children: [
+                      if (conversations.isEmpty && !hasMoreConversations)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                          child: Text(
+                            '暂无对话',
+                            style: AppTypography.caption(context),
+                          ),
+                        ),
+                      for (var index = 0; index < conversations.length; index++)
+                        ConversationSwipeTile(
+                          key: ValueKey(
+                            'project-conversation-${conversations[index].id}',
+                          ),
+                          enabled: !selecting,
+                          pinned: conversations[index].pinnedAt
+                              .trim()
+                              .isNotEmpty,
+                          readable: true,
+                          onPin: () => onConversationPin(conversations[index]),
+                          onArchive: () =>
+                              onConversationArchive(conversations[index]),
+                          onMarkRead: () =>
+                              onConversationMarkRead(conversations[index]),
+                          child: ConversationListTile(
+                            conversation: conversations[index],
+                            selecting: selecting,
+                            selected: selectedIds.contains(
+                              conversations[index].id,
                             ),
-                          ]
-                        : [
-                            for (
-                              var index = 0;
-                              index < conversations.length;
-                              index++
-                            )
-                              ConversationSwipeTile(
-                                key: ValueKey(
-                                  'project-conversation-${conversations[index].id}',
-                                ),
-                                enabled: !selecting,
-                                pinned: conversations[index].pinnedAt
-                                    .trim()
-                                    .isNotEmpty,
-                                readable: true,
-                                onPin: () =>
-                                    onConversationPin(conversations[index]),
-                                onArchive: () =>
-                                    onConversationArchive(conversations[index]),
-                                onMarkRead: () => onConversationMarkRead(
+                            timeText: formatConversationTime(
+                              conversations[index].updatedAt,
+                            ),
+                            showDivider: index < conversations.length - 1,
+                            onTap: () =>
+                                onOpenConversation(conversations[index]),
+                            onLongPressAt: (position) =>
+                                onConversationLongPress(
                                   conversations[index],
+                                  position,
                                 ),
-                                child: ConversationListTile(
-                                  conversation: conversations[index],
-                                  selecting: selecting,
-                                  selected: selectedIds.contains(
-                                    conversations[index].id,
-                                  ),
-                                  timeText: formatConversationTime(
-                                    conversations[index].updatedAt,
-                                  ),
-                                  showDivider: index < conversations.length - 1,
-                                  onTap: () =>
-                                      onOpenConversation(conversations[index]),
-                                  onLongPressAt: (position) =>
-                                      onConversationLongPress(
-                                        conversations[index],
-                                        position,
-                                      ),
-                                ),
-                              ),
-                          ],
+                          ),
+                        ),
+                      if (conversationFooter != null) conversationFooter!,
+                    ],
                   )
                 : const SizedBox.shrink(),
           ),

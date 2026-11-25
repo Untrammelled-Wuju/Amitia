@@ -107,8 +107,9 @@
             {{ restoringChatSearchId === item.id ? "撤销中" : "撤销归档" }}
           </button>
         </div>
+        <ConversationListEnd :enabled="Boolean(chatSearchCursor) && !chatSearchLoading && !chatSearchError" @reach="loadRemoteChatSearch(chatSearchQuery.trim(), true)" />
         <div v-if="chatSearchError" class="workspace-search-message is-error">{{ chatSearchError }}</div>
-        <div v-else-if="!chatSearchLoading && chatSearchResults.length === 0" class="workspace-search-message">
+        <div v-else-if="!chatSearchLoading && !chatSearchCursor && chatSearchResults.length === 0" class="workspace-search-message">
           没有找到相关对话
         </div>
       </div>
@@ -144,6 +145,10 @@
             :project="project"
             :active="project.id === chatStore.currentProjectId"
             :active-conversation-id="activeConversationId"
+            :expanded="expandedSidebarProjects.includes(project.id)"
+            :conversation-page="chatStore.projectConversationPages[project.id]"
+            @load-conversations="chatStore.fetchProjectConversationPage(project.id)"
+            @toggle-project="toggleSidebarProject(project.id)"
             :projects="chatStore.sidebar.projects"
             :selecting="batchSelecting" :selected-ids="selectedIds"
             @select="handleSelectConversation"
@@ -162,14 +167,25 @@
 
         <div v-if="sidebarView === 'chat'" class="thread-section">
           <div class="section-caption project-caption" @contextmenu="openSectionContextMenu($event, 'chat')">
-            <span>聊天</span>
+            <input
+              v-if="batchSelecting"
+              class="batch-select-all"
+              type="checkbox"
+              aria-label="全选已加载对话"
+              :title="batchAllSelected ? '取消全选' : '全选'"
+              :checked="batchAllSelected"
+              :indeterminate.prop="batchPartiallySelected"
+              :disabled="batchRows.size === 0"
+              @change="toggleBatchAll"
+            />
+            <span>对话</span>
             <button type="button" class="section-add" :title="batchSelecting ? '退出多选' : '批量选择'" @click="toggleBatchSelection">☑</button>
             <button type="button" class="section-add" data-amitia-ui="app.sidebar.item" title="新建对话" aria-label="新建对话" @click="handleNewChat">
               <el-icon><Plus /></el-icon>
             </button>
           </div>
           <SidebarConversationRow
-            v-for="conversation in visibleRecentConversations"
+            v-for="conversation in chatStore.sidebar.recent"
             :key="conversation.id"
             :conversation="conversation"
             :active="conversation.id === activeConversationId"
@@ -185,19 +201,23 @@
             @mark-read="handleMarkConversationRead"
             @delete="handleDeleteConversation"
           />
-          <button
-            v-if="canToggleRecentConversations"
-            type="button"
-            class="thread-expand"
-            @click="toggleRecentConversations"
-          >
-            {{ hasMoreRecentConversations ? "展开显示" : "收起" }}
-          </button>
-          <div v-if="chatStore.sidebar.recent.length === 0" class="thread-empty">暂无对话</div>
+
+          <div v-if="!chatStore.sidebarLoading && !chatStore.sidebarHasMore && chatStore.sidebar.recent.length === 0" class="thread-empty">暂无对话</div>
         </div>
 
         <div v-if="sidebarView === 'project'" class="thread-section">
           <div class="section-caption project-caption" @contextmenu="openSectionContextMenu($event, 'project')">
+            <input
+              v-if="batchSelecting"
+              class="batch-select-all"
+              type="checkbox"
+              aria-label="全选已展开项目中加载的对话"
+              :title="batchAllSelected ? '取消全选' : '全选'"
+              :checked="batchAllSelected"
+              :indeterminate.prop="batchPartiallySelected"
+              :disabled="batchRows.size === 0"
+              @change="toggleBatchAll"
+            />
             <span>项目</span>
             <button type="button" class="section-add" :title="batchSelecting ? '退出多选' : '批量选择'" @click="toggleBatchSelection">☑</button>
             <button type="button" class="section-add" data-amitia-ui="app.sidebar.item" title="新增项目" aria-label="新增项目" @click="handleAddProject">
@@ -210,6 +230,10 @@
             :project="project"
             :active="project.id === chatStore.currentProjectId"
             :active-conversation-id="activeConversationId"
+            :expanded="expandedSidebarProjects.includes(project.id)"
+            :conversation-page="chatStore.projectConversationPages[project.id]"
+            @load-conversations="chatStore.fetchProjectConversationPage(project.id)"
+            @toggle-project="toggleSidebarProject(project.id)"
             :projects="chatStore.sidebar.projects"
             :selecting="batchSelecting" :selected-ids="selectedIds"
             @select="handleSelectConversation"
@@ -226,6 +250,13 @@
           />
           <div v-if="chatStore.sidebar.projects.length === 0" class="thread-empty">暂无项目</div>
         </div>
+        <div v-if="sidebarPageError" class="thread-empty">
+          <div class="workspace-page-error" role="alert">{{ sidebarPageError }}</div>
+          <button type="button" class="sidebar-page-retry" @click="loadSidebarPage(sidebarHasFailedAppend)">重试</button>
+        </div>
+        <div v-else-if="chatStore.sidebarLoading" class="thread-empty thread-list-status" role="status">加载中～</div>
+        <div v-else-if="sidebarView === 'chat' && !chatStore.sidebarHasMore && (chatStore.sidebar.pinned.length || chatStore.sidebar.recent.length)" class="thread-empty thread-list-status" role="status">到底啦～</div>
+        <ConversationListEnd :enabled="sidebarPageEnabled" @reach="loadSidebarPage(true)" :key="sidebarView" />
       </div>
     </div>
     <el-dialog
@@ -362,10 +393,10 @@ import TeamCreateDialog from "@/components/TeamCreateDialog.vue";
 import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversation";
 import type { OwnedGroupState } from "@/runtime/device-owned-chat";
 import type { Team } from "@/api/role-types";
-import { useConversationDisclosure } from "@/composables/useConversationDisclosure";
+import ConversationListEnd from "./ConversationListEnd.vue";
 import { useConversationWorkspace } from "@/composables/useConversationWorkspace";
 import { isDesktopShell } from "@/runtime/runtime-capabilities";
-import { originalErrorMessage } from "@/runtime/original-error";
+import { originalErrorMessage, originalErrorText } from "@/runtime/original-error";
 import { ownedProjectReference } from "@/runtime/owned-project-reference";
 import SidebarConversationRow from "./SidebarConversationRow.vue";
 import SidebarProjectBlock from "./SidebarProjectBlock.vue";
@@ -394,6 +425,7 @@ const viewIndicatorStyle = ref<Record<string, string>>({});
 const chatSearchQuery = ref("");
 const chatSearchOpen = ref(false);
 const chatSearchLoading = ref(false);
+const chatSearchCursor = ref<Awaited<ReturnType<typeof owned.conversationPage>>["cursor"]>();
 const chatSearchError = ref("");
 const chatSearchActiveIndex = ref(0);
 const restoringChatSearchId = ref("");
@@ -429,12 +461,32 @@ const projectDragDepth = ref(0);
 const activeConversationId = computed(() => String(route.query.conversationId || ""));
 const isChatPage = computed(() => route.path === "/chat");
 const newGroupDefaultRoleId = computed(() => String(route.query.characterId || localStorage.getItem(`webchat-char-id:${owned.coreId.value}:${owned.roleOwnerId.value}`) || owned.selectInitialRole()));
-const {
-  visible: visibleRecentConversations,
-  hasMore: hasMoreRecentConversations,
-  canToggle: canToggleRecentConversations,
-  toggle: toggleRecentConversations,
-} = useConversationDisclosure(() => chatStore.sidebar.recent);
+const expandedSidebarProjects = ref<string[]>([]);
+function toggleSidebarProject(id: string) {
+  if (expandedSidebarProjects.value.includes(id)) {
+    expandedSidebarProjects.value = expandedSidebarProjects.value.filter((value) => value !== id);
+    return;
+  }
+  expandedSidebarProjects.value = [...expandedSidebarProjects.value, id];
+  if (!chatStore.projectConversationPages[id]?.loaded) void chatStore.fetchProjectConversationPage(id);
+}
+const sidebarPageError = ref("");
+const sidebarHasFailedAppend = ref(false);
+const sidebarPageEnabled = computed(() => sidebarView.value === "chat" && chatStore.sidebarHasMore && !chatStore.sidebarLoading && !sidebarPageError.value && !showChatSearchResults.value);
+async function loadSidebarPage(append: boolean) {
+  if (chatStore.sidebarLoading) return;
+  try {
+    if (append) await chatStore.fetchSidebarPage(true);
+    else await chatStore.fetchSidebar();
+  } catch (error) {
+    console.error("[original-error]", error);
+    sidebarHasFailedAppend.value = append;
+    sidebarPageError.value = originalErrorText(error);
+  }
+}
+watch(() => chatStore.sidebarLoading, (loading) => {
+  if (loading) sidebarPageError.value = "";
+}, { flush: "sync" });
 const pinnedProjects = computed(() =>
   chatStore.sidebar.projects.filter((project) => Boolean(project.pinnedAt)),
 );
@@ -495,7 +547,9 @@ function normalizeSearchResult(value: Record<string, any>): ConversationItem | n
   };
 }
 
-async function loadRemoteChatSearch(query: string) {
+async function loadRemoteChatSearch(query: string, append = false) {
+  if (append && (chatSearchLoading.value || !chatSearchCursor.value || chatSearchError.value)) return;
+  chatSearchLoading.value = true;
   const ticket = ++chatSearchRequest;
   const role = String(route.query.characterId || localStorage.getItem(`webchat-char-id:${owned.coreId.value}:${owned.roleOwnerId.value}`) || owned.selectInitialRole());
   if (!role) {
@@ -506,20 +560,21 @@ async function loadRemoteChatSearch(query: string) {
   }
   try {
     if (!owned.enabled.value && !(await owned.refresh())) throw new Error(owned.notice.value || "设备对话服务尚未就绪");
-    const values = await owned.conversations(role, query);
+    const page = await owned.conversationPage(role, query, append ? chatSearchCursor.value : undefined);
     if (ticket !== chatSearchRequest || query !== chatSearchQuery.value.trim()) return;
-    const normalized = values
+    const normalized = page.rows
       .map((value) => normalizeSearchResult(value))
       .filter((value): value is ConversationItem => Boolean(value));
-    remoteChatSearchResults.value = normalized;
-    remoteChatSearchIds.value = new Set(normalized.map((item) => item.id));
+    const rows = new Map((append ? remoteChatSearchResults.value : []).map((row) => [row.id, row]));
+    for (const row of normalized) rows.set(row.id, row);
+    remoteChatSearchResults.value = [...rows.values()];
+    remoteChatSearchIds.value = new Set(rows.keys());
+    chatSearchCursor.value = page.cursor;
     chatSearchActiveIndex.value = Math.min(chatSearchActiveIndex.value, Math.max(0, chatSearchResults.value.length - 1));
   } catch (error) {
     if (ticket !== chatSearchRequest) return;
     console.error("[original-error]", error);
-    chatSearchError.value = originalErrorMessage(error);
-    remoteChatSearchResults.value = [];
-    remoteChatSearchIds.value = new Set();
+    chatSearchError.value = originalErrorText(error);
   } finally {
     if (ticket === chatSearchRequest) chatSearchLoading.value = false;
   }
@@ -642,6 +697,8 @@ function syncViewIndicator() {
 }
 
 watch(chatSearchQuery, (value) => {
+  chatSearchRequest++;
+  chatSearchCursor.value = undefined;
   if (chatSearchTimer !== null) window.clearTimeout(chatSearchTimer);
   chatSearchTimer = null;
   chatSearchError.value = "";
@@ -668,9 +725,7 @@ watch(sidebarView, () => {
 });
 
 function refreshSidebarWhenVisible() {
-  if (document.visibilityState === "visible") void chatStore.fetchSidebar().catch((error) => {
-    console.error("[original-error]", error);
-  });
+  if (document.visibilityState === "visible") void loadSidebarPage(false);
 }
 
 async function handleNewChat() {
@@ -739,33 +794,60 @@ async function handleSelectConversation(conversation: ConversationItem) {
 
 const batchSelecting = ref(false);
 const selectedIds = ref<string[]>([]);
-const batchRows = computed(() => [...chatStore.sidebar.pinned, ...chatStore.sidebar.recent, ...chatStore.sidebar.projects.flatMap((project) => project.conversations)]);
+const batchRows = computed(() => {
+  const rows = sidebarView.value === "chat"
+    ? [...chatStore.sidebar.pinned, ...chatStore.sidebar.recent]
+    : chatStore.sidebar.projects
+      .filter((project) => expandedSidebarProjects.value.includes(project.id))
+      .flatMap((project) => project.conversations);
+  return new Map(rows.filter((row) => row.id).map((row) => [row.id, row]));
+});
+const selectedBatchRows = computed(() => selectedIds.value
+  .map((id) => batchRows.value.get(id))
+  .filter((row): row is ConversationItem => Boolean(row)));
+const batchAllSelected = computed(() => batchRows.value.size > 0 && selectedBatchRows.value.length === batchRows.value.size);
+const batchPartiallySelected = computed(() => selectedBatchRows.value.length > 0 && !batchAllSelected.value);
+
+function toggleBatchAll() {
+  if (!batchSelecting.value || batchRows.value.size === 0) return;
+  if (batchAllSelected.value) {
+    selectedIds.value = selectedIds.value.filter((id) => !batchRows.value.has(id));
+    return;
+  }
+  selectedIds.value = [...new Set([...selectedIds.value, ...batchRows.value.keys()])];
+}
+
 function toggleBatchSelection() { batchSelecting.value = !batchSelecting.value; selectedIds.value = []; }
 function startBatchSelection(conversation: ConversationItem) { batchSelecting.value = true; selectedIds.value = [conversation.id]; }
 function openSectionContextMenu(event: MouseEvent, section: "chat" | "project") {
   if (!isDesktopShell()) return;
   event.preventDefault();
   event.stopPropagation();
-  openContextMenu({ x: event.clientX, y: event.clientY, title: section === "chat" ? "聊天" : "项目", items: [
+  openContextMenu({ x: event.clientX, y: event.clientY, title: section === "chat" ? "对话" : "项目", items: [
     { id: "select", label: batchSelecting.value ? "取消多选" : "多选", accessKey: "S", action: toggleBatchSelection },
     { id: "add", label: section === "chat" ? "新建对话" : "新增项目", accessKey: "N", action: section === "chat" ? handleNewChat : handleAddProject },
   ] });
 }
 async function batchOperation(action: string, projectId = "") {
+  const rows = [...selectedBatchRows.value];
+  if (!rows.length) return;
   if (action === "delete") {
-    const confirmed = await ElMessageBox.confirm(`确定删除选中的 ${selectedIds.value.length} 个对话吗？`, "批量删除", { type: "warning" }).then(() => true).catch(handleProjectDialogDismiss);
+    const confirmed = await ElMessageBox.confirm(`确定删除选中的 ${rows.length} 个对话吗？`, "批量删除", { type: "warning" }).then(() => true).catch(handleProjectDialogDismiss);
     if (!confirmed) return;
   }
   const failures: string[] = [];
   const succeeded: string[] = [];
-  for (const id of selectedIds.value) {
-    const row = batchRows.value.find((item) => item.id === id) as ((typeof batchRows.value)[number] & { ownerId?: string; revision?: number }) | undefined;
-    if (!row) { failures.push(`${id}: 对话不存在`); continue; }
+  for (const row of rows) {
+    const id = row.id;
+    if (!batchRows.value.has(id) || !selectedIds.value.includes(id)) {
+      failures.push(`${row.title || id}：当前列表中没有这条已选对话`);
+      continue;
+    }
     try {
       const changes = action === "archive" ? { archived: true } : action === "pin" ? { pinned: true } : action === "read" ? { lastReadTurnSequence: Number(row.lastTerminalTurnSequence || 0) } : action === "move" ? { projectId } : {};
       await owned.edit("conversation", id, changes, { deleted: action === "delete", characterId: row.characterId, expectedOwnerId: row.ownerId, expectedRevision: row.revision });
       succeeded.push(id);
-    } catch (error) { failures.push(`${row.title || id}: ${error instanceof Error ? error.stack || error.message : String(error)}`); }
+    } catch (error) { failures.push(`${row.title || id}: ${originalErrorText(error)}`); }
   }
   selectedIds.value = selectedIds.value.filter((id) => !succeeded.includes(id));
   await chatStore.fetchSidebar();
@@ -776,17 +858,15 @@ async function batchOperation(action: string, projectId = "") {
 function handleBatchContextMenu(event: MouseEvent) {
   if (!batchSelecting.value || !(event.target as Element).closest(".thread-row")) return;
   event.preventDefault(); event.stopPropagation();
-  const disabled = selectedIds.value.length === 0;
-  const selectableIds = [...new Set(batchRows.value.map((row) => row.id))];
-  const allSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.value.includes(id));
+  const disabled = selectedBatchRows.value.length === 0;
   const items: ContextMenuAction[] = [
-    { id: "all", label: allSelected ? "取消全选" : "全选", accessKey: "A", disabled: selectableIds.length === 0, action: () => { selectedIds.value = allSelected ? selectedIds.value.filter((id) => !selectableIds.includes(id)) : [...new Set([...selectedIds.value, ...selectableIds])]; } },
+    { id: "all", label: batchAllSelected.value ? "取消全选" : "全选", accessKey: "A", disabled: batchRows.value.size === 0, action: toggleBatchAll },
     ...[["archive", "归档", "R"], ["read", "标为已读", "M"], ["pin", "置顶", "P"]].map(([id, label, accessKey]) => ({ id, label, accessKey, disabled, action: () => batchOperation(id) })),
     { id: "move", label: "移动到项目", accessKey: "V", disabled, children: [{ id: "ungrouped", label: "移出项目", accessKey: "H", action: () => batchOperation("move") }, ...chatStore.sidebar.projects.filter((project) => !project.readOnly).map((project, index) => ({ id: project.id, label: project.name, accessKey: projectContextMenuAccessKeys[index], action: () => batchOperation("move", project.id) }))] },
     { id: "delete", label: "删除", accessKey: "D", danger: true, disabled, action: () => batchOperation("delete") },
     { id: "cancel", label: "取消多选", accessKey: "C", action: toggleBatchSelection },
   ];
-  openContextMenu({ x: event.clientX, y: event.clientY, title: `已选择 ${selectedIds.value.length} 个对话`, items });
+  openContextMenu({ x: event.clientX, y: event.clientY, title: `已选择 ${selectedBatchRows.value.length} 个对话`, items });
 }
 
 async function handleConversationRename(conversation: ConversationItem, title: string) {
@@ -1074,10 +1154,7 @@ onMounted(() => {
     if (projectViewTabRef.value) viewSwitchResizeObserver.observe(projectViewTabRef.value);
   }
   void nextTick(syncViewIndicator);
-  void chatStore.fetchSidebar().catch((error) => {
-  console.error("[original-error]", error);
-  return undefined;
-});
+  void loadSidebarPage(false);
   window.addEventListener("focus", refreshSidebarWhenVisible);
   document.addEventListener("visibilitychange", refreshSidebarWhenVisible);
 });
@@ -1290,6 +1367,8 @@ onUnmounted(() => {
 .workspace-search-restore:disabled { cursor: wait; opacity: 0.6; }
 .workspace-search-message { padding: 14px 10px 16px; color: var(--text-muted); font-size: var(--ac-font-size-xs); text-align: center; }
 .workspace-search-message.is-error { color: var(--ac-color-danger); text-align: left; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
+.sidebar-page-retry { margin-top: 4px; color: var(--ac-color-primary); }
+.workspace-page-error, .workspace-search-message.is-error { white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
 .workspace-scroll { min-height: 0; flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; padding: 6px 8px 8px; }
 .thread-sidebar { display: flex; flex-direction: column; padding: 2px 0 8px; }
 .section-caption { padding: 0 9px 5px; color: var(--text-muted); font-size: var(--ac-font-size-xs); font-weight: 550; }
@@ -1298,12 +1377,11 @@ onUnmounted(() => {
 .thread-main { display: flex; align-items: center; gap: 7px; min-width: 0; flex: 1; min-height: 30px; padding: 0 6px 0 8px; border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; font-size: var(--ac-font-size-sm); text-align: left; }
 .thread-main span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .thread-name-input { min-width: 0; width: 100%; min-height: 28px; padding: 3px 6px; border: 1px solid var(--ac-color-primary); border-radius: 5px; background: var(--surface-bg); color: var(--text-primary); font: inherit; outline: none; }
-.thread-expand { align-self: flex-start; margin: 2px 0; padding: 3px 8px; border: 0; border-radius: 5px; background: transparent; color: var(--ac-color-primary); cursor: pointer; font: inherit; font-size: var(--ac-font-size-xs); }
-.thread-expand:hover { background: var(--workbench-sidebar-hover); }
 .thread-section { display: flex; flex-direction: column; gap: 1px; padding: 4px 0; }
 .thread-section + .thread-section { margin-top: 6px; border-top: 1px solid var(--surface-border); padding-top: 10px; }
 .project-caption { display: flex; align-items: center; gap: 2px; }
 .project-caption > span { margin-right: auto; }
+.batch-select-all { flex: 0 0 auto; margin: 0 4px 0 0; accent-color: var(--ac-color-primary); cursor: pointer; }
 .section-add, .project-action { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--text-muted); cursor: pointer; }
 .section-add:hover, .project-action:hover { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
 .section-add { opacity: 0; pointer-events: none; transition: opacity 0.16s ease, background-color 0.16s ease, color 0.16s ease; }
@@ -1323,6 +1401,7 @@ onUnmounted(() => {
 .thread-item:hover { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
 .project-thread { min-height: 27px; font-size: var(--ac-font-size-xs); }
 .thread-empty { padding: 5px 9px; color: var(--text-muted); font-size: var(--ac-font-size-xs); }
+.thread-list-status { color: color-mix(in srgb, var(--text-muted) 92%, transparent); text-align: center; }
 .project-folder-dropzone {
   position: relative;
   display: grid;

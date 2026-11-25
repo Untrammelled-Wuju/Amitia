@@ -53,7 +53,7 @@ import RouteSurfaceHost from "./components/ui-runtime/RouteSurfaceHost.vue";
 import { useAppUIHost } from "./composables/useAppUIHost";
 import ApplicationBackground from "./components/ApplicationBackground.vue";
 import AppContextMenu from "./components/context-menu/AppContextMenu.vue";
-import { originalErrorMessage } from "./runtime/original-error";
+import { originalErrorMessage, originalErrorText } from "./runtime/original-error";
 
 const router = useRouter();
 const route = useRoute();
@@ -110,10 +110,10 @@ watch(
 );
 
 onErrorCaptured((err, _instance, info) => {
-  const errorMessage = originalErrorMessage(err);
+  const errorMessage = `${info}\n${originalErrorMessage(err)}\n${originalErrorText(err)}`;
   console.error("[App] render error:", err, info);
+  capturedError.value = capturedError.value ? `${capturedError.value}\n\n${errorMessage}` : errorMessage;
   renderError.value = true;
-  capturedError.value = errorMessage;
   return false;
 });
 

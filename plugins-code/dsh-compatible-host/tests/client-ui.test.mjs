@@ -133,7 +133,7 @@ test("loads a DSH client plugin and registers its React slot", async () => {
     },
     slots: {
       getDefinition(id) {
-        return id === "ui.portal.overlay" ? { slotId: id } : undefined;
+        return ["ui.portal.overlay", "chat.composer.root"].includes(id) ? { slotId: id } : undefined;
       },
       register(pluginId, slotId, key, component, options) {
         registrations.push({ pluginId, slotId, key, component, options });

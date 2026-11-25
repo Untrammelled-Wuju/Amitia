@@ -11,7 +11,8 @@
           <div class="amrp-quote-bar"></div>
           <div>
             <div class="amrp-quote-name">{{ replySender }}</div>
-            <div class="amrp-quote-text">{{ replyText }}</div>
+            <div class="amrp-quote-text" :class="{ 'is-expanded': replyExpanded }">{{ replyText }}</div>
+            <button v-if="replyText.length > 30 || replyText.includes('\n')" type="button" class="amrp-quote-toggle" @click.stop="replyExpanded = !replyExpanded">{{ replyExpanded ? '收起' : '展开' }}</button>
           </div>
         </div>
         <ExtensionSlot
@@ -377,7 +378,9 @@ const streaming = computed(() => message.value.state === "streaming" || message.
 const hasReply = computed(() => Boolean(props.message.replyToMessageId));
 const replyId = computed(() => String(props.message.replyToMessageId ?? ""));
 const replySender = computed(() => String(props.message.replyToRole === "user" ? "你" : props.charName));
-const replyText = computed(() => String(props.message.replyToExcerpt ?? "").slice(0, 120));
+const replyText = computed(() => String(props.message.replyToExcerpt || "原消息内容不可用"));
+const replyExpanded = ref(false);
+watch(() => props.message.id, () => { replyExpanded.value = false; });
 const isAssistant = computed(() => message.value.role === "assistant");
 const showFeedbackActions = computed(() => !props.readOnly && props.message.readOnly !== true && isAssistant.value);
 const feedbackReady = computed(() => showFeedbackActions.value && !streaming.value && props.message.saved !== false && Number(props.message.sourceRevision) > 0 && Boolean(props.message.id && props.characterId));
@@ -827,6 +830,8 @@ async function handleCopy(mode: "plain" | "markdown") {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.amrp-quote-text.is-expanded { max-height: 160px; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.amrp-quote-toggle { border: 0; padding: 0 0 6px; background: transparent; color: var(--amrp-accent); cursor: pointer; font-size: 11px; }
 
 .amrp-actions {
   display: flex;

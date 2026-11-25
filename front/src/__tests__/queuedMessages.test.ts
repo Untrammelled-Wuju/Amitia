@@ -22,7 +22,7 @@ describe("排队消息操作", () => {
     await rows[0].trigger("drop");
     expect(wrapper.emitted("reorder")?.[0]).toEqual([["b", "a"]]);
     await rows[0].findAll("button")[0].trigger("click");
-    await rows[1].findAll("button")[2].trigger("click");
+    await rows[1].find("[aria-label='删除排队消息']").trigger("click");
     expect(wrapper.emitted("steer")?.[0]).toEqual(["a"]);
     expect(wrapper.emitted("remove")?.[0]).toEqual(["b"]);
   });
@@ -47,13 +47,13 @@ describe("排队消息操作", () => {
       items: [
         { requestId: "a", message: "第一条", position: 1, status: "queued" },
         { requestId: "b", message: "第二条", position: 2, status: "uncertain", error: "底层错误\n原因链", attachments: [{ artifactId: "art", ownerDeviceId: "device", storageDeviceId: "device", kind: "file", name: "说明.pdf", mimeType: "application/pdf", sha256: "abc", sizeBytes: 3 }], quote: { ownerId: "device", characterId: "role", conversationId: "chat", messageId: "source", expectedRevision: 2 } },
-      ], busy: false, canSteer: true, error: "",
+      ], messages: [{ id: "source", ownerId: "device", content: "完整的原始消息" }], busy: false, canSteer: true, error: "",
     } });
     const rows = wrapper.findAll(".queue-item");
     expect(rows[1].attributes("tabindex")).toBe("0");
     expect(rows[1].text()).toContain("状态不确定");
     expect(rows[1].text()).toContain("说明.pdf");
-    expect(rows[1].text()).toContain("引用 source");
+    expect(rows[1].text()).toContain("引用：完整的原始消息");
     expect(rows[1].text()).toContain("底层错误");
   });
 
@@ -112,12 +112,12 @@ describe("排队消息操作", () => {
     } });
     const rows = wrapper.findAll(".queue-item");
     expect(rows[0].classes()).not.toContain("is-expanded");
-    expect(rows[0].find(".queue-expand").attributes("aria-expanded")).toBe("false");
-    await rows[0].find(".queue-expand").trigger("click");
+    expect(rows[0].attributes("aria-expanded")).toBe("false");
+    await rows[0].find(".queue-head").trigger("click");
     expect(rows[0].classes()).toContain("is-expanded");
-    expect(rows[0].find(".queue-expand").attributes("aria-expanded")).toBe("true");
+    expect(rows[0].attributes("aria-expanded")).toBe("true");
     expect(rows[0].find(".queue-body").text()).toContain("说明.pdf");
-    await rows[0].find(".queue-expand").trigger("click");
+    await rows[0].find(".queue-head").trigger("click");
     expect(rows[0].classes()).not.toContain("is-expanded");
     expect(rows[1].classes()).toContain("is-expanded");
     expect(rows[1].find(".queue-body").text()).toContain("底层错误");

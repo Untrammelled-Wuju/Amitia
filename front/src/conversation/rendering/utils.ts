@@ -1,10 +1,15 @@
+import { ElMessageBox } from "element-plus";
+import { originalErrorMessage, originalErrorText } from "@/runtime/original-error";
+
 export async function copyText(value: string): Promise<boolean> {
   try {
-    await navigator.clipboard.writeText(value);
+    if (window.amitiaDesktop?.writeClipboardText) await window.amitiaDesktop.writeClipboardText(value);
+    else await navigator.clipboard.writeText(value);
     return true;
   } catch (error) {
-  console.error("[original-error]", error);
-return false;
+    console.error("[original-error]", error);
+    await ElMessageBox.alert(`${originalErrorMessage(error)}\n\n${originalErrorText(error)}`, "复制失败，查看原始错误", { confirmButtonText: "关闭" });
+    return false;
   }
 }
 

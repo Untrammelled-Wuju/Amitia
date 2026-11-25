@@ -10,9 +10,19 @@ internal data class PackageIndex(
     val guestLayout: PayloadRef,
     val mountContract: PayloadRef,
     val rootfsPayload: PayloadRef,
-    val runtimePayload: PayloadRef,
+    val runtimePayload: PayloadRef?,
     val sha256sums: PayloadRef,
     val licenses: PayloadRef?,
+    val packageFormatVersion: Int = 1,
+    val components: List<ComponentRef> = emptyList(),
+    val sharedPayload: ComponentPayloadRef? = null,
+)
+
+internal data class ComponentPayloadRef(
+    val id: String,
+    val path: String,
+    val sha256: String,
+    val size: Long,
 )
 
 internal data class PackageTarget(
@@ -41,6 +51,17 @@ internal data class ComponentRef(
     val architecture: String?,
     val path: String,
     val sha256: String,
+    val payloadPath: String? = null,
+    val payloadSha256: String? = null,
+    val payloadSize: Long? = null,
+)
+
+internal data class ComponentPayload(
+    val componentId: String,
+    val path: String,
+    val sha256: String,
+    val size: Long,
+    val file: File,
 )
 
 internal data class GuestLayout(
@@ -66,10 +87,16 @@ internal data class VerifiedPackage(
     val guestLayout: GuestLayout,
     val mountContract: MountContract,
     val rootfsPayloadFile: File,
-    val runtimePayloadFile: File,
+    val runtimePayloadFile: File?,
     val sha256sumsFile: File,
     val metadataDir: File,
-)
+    val packageFormatVersion: Int = 1,
+    val componentPayloads: List<ComponentPayload> = emptyList(),
+    val sharedPayload: ComponentPayload? = null,
+) {
+    val usesComponentPayloads: Boolean
+        get() = packageFormatVersion >= 2
+}
 
 internal sealed interface PackageVerificationResult {
     data class Success(val package_: VerifiedPackage) : PackageVerificationResult

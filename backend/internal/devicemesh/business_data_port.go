@@ -29,7 +29,7 @@ func (rt *Runtime) callOwnedData(ctx context.Context, scope coordination.Executi
 		if scope.ResourceOwnerID != scope.TargetDeviceID || (scope.RoleOwnerID != scope.TargetDeviceID && scope.RoleOwnerID != scope.CoreID) {
 			return coordination.ErrWrongOwner
 		}
-	} else if operation == "history" || operation == "history-list" || operation == "history-list-page" || operation == "history-roles" {
+	} else if operation == "history" || operation == "history-list-page" || operation == "history-roles" {
 		if (scope.ResourceOwnerID != scope.TargetDeviceID && scope.ResourceOwnerID != scope.CoreID) || (scope.RoleOwnerID != scope.TargetDeviceID && scope.RoleOwnerID != scope.CoreID) {
 			return coordination.ErrWrongOwner
 		}
@@ -99,40 +99,6 @@ func (rt *Runtime) HistoricalConversationPage(ctx context.Context, scope coordin
 		}
 	}
 	return result, nil
-}
-
-func (rt *Runtime) HistoricalConversations(ctx context.Context, scope coordination.ExecutionScope) ([]json.RawMessage, error) {
-	if err := rt.validateDataRoute(ctx, scope); err != nil {
-		return nil, err
-	}
-	if scope.ResourceOwnerID != scope.TargetDeviceID || scope.TargetDeviceID == scope.CoreID {
-		return nil, nil
-	}
-	if scope.TargetDeviceID == rt.LocalDeviceID {
-		if port, ok := rt.LocalDeviceDataPort.(coordination.HistoricalConversationPort); ok {
-			return port.HistoricalConversations(ctx, scope)
-		}
-	}
-	var rows []json.RawMessage
-	if err := rt.callOwnedData(ctx, scope, "history-list", coordination.DataQuery{ListConversations: true, Limit: 128}, &rows); err != nil {
-		return nil, err
-	}
-	if len(rows) > 256 {
-		return nil, coordination.ErrPendingLimit
-	}
-	for _, raw := range rows {
-		var row struct {
-			OwnerID string `json:"ownerId"`
-			ID      string `json:"id"`
-		}
-		if err := json.Unmarshal(raw, &row); err != nil {
-			return nil, err
-		}
-		if row.OwnerID != scope.TargetDeviceID || row.ID == "" {
-			return nil, coordination.ErrWrongOwner
-		}
-	}
-	return rows, nil
 }
 
 func (rt *Runtime) LocalMemoryArchiveEmpty(ctx context.Context, scope coordination.ExecutionScope) (bool, error) {

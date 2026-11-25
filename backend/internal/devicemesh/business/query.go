@@ -13,6 +13,7 @@ import (
 )
 
 type QueryResult struct {
+	NextCoreCursor           string                         `json:"nextCoreCursor,omitempty"`
 	ConversationID           string                         `json:"conversationId,omitempty"`
 	ConversationOrigin       *ConversationOrigin            `json:"conversationOrigin,omitempty"`
 	DeliveryFailures         []coordination.DeliveryFailure `json:"deliveryFailures,omitempty"`
@@ -97,25 +98,23 @@ func (e *Engine) Query(ctx context.Context, request Request, query coordination.
 		return QueryResult{}, err
 	}
 	query.ConversationID = conversationRoute.CurrentID
-	snapshot, err := e.data.Snapshot(ctx, scope, query)
-	if err != nil {
-		return QueryResult{}, fmt.Errorf("读取查询快照失败: %w", err)
+	snapshot := coordination.DataSnapshot{OwnerID: scope.ResourceOwnerID, Role: role, Resources: []coordination.Resource{}}
+	if !query.ListConversations || !query.SkipConversationSnapshot {
+		snapshot, err = e.data.Snapshot(ctx, scope, query)
+		if err != nil {
+			return QueryResult{}, fmt.Errorf("读取查询快照失败: %w", err)
+		}
 	}
 	if err := coordination.ValidateSnapshot(scope, snapshot); err != nil {
 		return QueryResult{}, err
 	}
 	result := QueryResult{ConversationID: conversationRoute.CurrentID, Scope: scope, Snapshot: snapshot, ConversationOrigin: conversationRoute.Origin}
-	if port, ok := e.data.(coordination.HistoricalConversationPagePort); ok && scope.Coordinated && query.ListConversations {
+	if port, ok := e.data.(coordination.HistoricalConversationPagePort); ok && scope.Coordinated && query.ListConversations && !query.SkipHistoricalConversationList {
 		page, pageErr := port.HistoricalConversationPage(ctx, scope, query)
 		if pageErr != nil {
 			return QueryResult{}, pageErr
 		}
 		result.HistoricalConversations, result.NextHistoricalListCursor = page.Conversations, page.NextCursor
-	} else if port, ok := e.data.(coordination.HistoricalConversationPort); ok && scope.Coordinated && query.ListConversations {
-		result.HistoricalConversations, err = port.HistoricalConversations(ctx, scope)
-		if err != nil {
-			return QueryResult{}, err
-		}
 	}
 	historicalID := conversationRoute.HistoricalID
 	if historicalID == "" && query.Management && query.HistoricalRoleID != "" && scope.Coordinated && scope.TargetDeviceID != scope.CoreID && request.ConversationOrigin == nil {

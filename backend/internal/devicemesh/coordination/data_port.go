@@ -23,31 +23,35 @@ type Role struct {
 }
 
 type DataQuery struct {
-	Attachment           *ChatAttachmentRead      `json:"attachment,omitempty"`
-	AttachmentReference  *ChatAttachmentReference `json:"attachmentReference,omitempty"`
-	IncludeDisabled      bool                     `json:"includeDisabled,omitempty"`
-	ChatRuntime          *OwnedChatRuntimeQuery   `json:"chatRuntime,omitempty"`
-	GroupVisibilityStart int64                    `json:"groupVisibilityStart,omitempty"`
-	Management           bool                     `json:"management,omitempty"`
-	RuntimeTurns         bool                     `json:"runtimeTurns,omitempty"`
-	QueuedChats          bool                     `json:"queuedChats,omitempty"`
-	Vector               []float32                `json:"vector,omitempty"`
-	VectorModel          string                   `json:"vectorModel,omitempty"`
-	Cursor               string                   `json:"cursor,omitempty"`
-	HistoricalCursor     string                   `json:"historicalCursor,omitempty"`
-	HistoricalListCursor string                   `json:"historicalListCursor,omitempty"`
-	ResourceKind         string                   `json:"resourceKind,omitempty"`
-	ResourceID           string                   `json:"resourceId,omitempty"`
-	RequestID            string                   `json:"requestId,omitempty"`
-	ConversationID       string                   `json:"conversationId,omitempty"`
-	Query                string                   `json:"query,omitempty"`
-	SearchQuery          string                   `json:"searchQuery,omitempty"`
-	Limit                int                      `json:"limit,omitempty"`
-	HistoricalRoleID     string                   `json:"historicalRoleId,omitempty"`
-	ListConversations    bool                     `json:"listConversations,omitempty"`
-	GroupState           *GroupState              `json:"-"`
-	Role                 *Role                    `json:"role,omitempty"`
-	SkipRelationshipTime bool                     `json:"-"`
+	Attachment                     *ChatAttachmentRead      `json:"attachment,omitempty"`
+	AttachmentReference            *ChatAttachmentReference `json:"attachmentReference,omitempty"`
+	IncludeDisabled                bool                     `json:"includeDisabled,omitempty"`
+	ChatRuntime                    *OwnedChatRuntimeQuery   `json:"chatRuntime,omitempty"`
+	GroupVisibilityStart           int64                    `json:"groupVisibilityStart,omitempty"`
+	Management                     bool                     `json:"management,omitempty"`
+	RuntimeTurns                   bool                     `json:"runtimeTurns,omitempty"`
+	QueuedChats                    bool                     `json:"queuedChats,omitempty"`
+	Vector                         []float32                `json:"vector,omitempty"`
+	VectorModel                    string                   `json:"vectorModel,omitempty"`
+	Cursor                         string                   `json:"cursor,omitempty"`
+	HistoricalCursor               string                   `json:"historicalCursor,omitempty"`
+	HistoricalListCursor           string                   `json:"historicalListCursor,omitempty"`
+	ResourceKind                   string                   `json:"resourceKind,omitempty"`
+	ResourceID                     string                   `json:"resourceId,omitempty"`
+	RequestID                      string                   `json:"requestId,omitempty"`
+	ConversationID                 string                   `json:"conversationId,omitempty"`
+	Query                          string                   `json:"query,omitempty"`
+	SearchQuery                    string                   `json:"searchQuery,omitempty"`
+	Limit                          int                      `json:"limit,omitempty"`
+	HistoricalRoleID               string                   `json:"historicalRoleId,omitempty"`
+	ListConversations              bool                     `json:"listConversations,omitempty"`
+	ConversationListFilter         ConversationListFilter   `json:"conversationListFilter,omitempty"`
+	CoreReminderConversations      bool                     `json:"coreReminderConversations,omitempty"`
+	SkipConversationSnapshot       bool                     `json:"-"`
+	SkipHistoricalConversationList bool                     `json:"-"`
+	GroupState                     *GroupState              `json:"-"`
+	Role                           *Role                    `json:"role,omitempty"`
+	SkipRelationshipTime           bool                     `json:"-"`
 }
 
 type RoleCatalogPort interface {
@@ -61,6 +65,40 @@ type OwnedChatRuntimeQuery struct {
 	PeerID         string `json:"peerId,omitempty"`
 	IsInternal     bool   `json:"isInternal,omitempty"`
 	DeviceTimezone string `json:"deviceTimezone,omitempty"`
+}
+
+type ConversationListFilter struct {
+	Archive   string `json:"archive,omitempty"`
+	ProjectID string `json:"projectId,omitempty"`
+	Channel   string `json:"channel,omitempty"`
+}
+
+func (f ConversationListFilter) Predicate() (string, []any) {
+	predicate := ""
+	var arguments []any
+	archived := `(CASE json_type(CAST(body AS TEXT),'$.archived') WHEN 'true' THEN 1 WHEN 'false' THEN 0 ELSE COALESCE(json_extract(CAST(body AS TEXT),'$.archivedAt'),'')<>'' END)`
+	switch f.Archive {
+	case "active":
+		predicate += " AND " + archived + "=0"
+	case "archived":
+		predicate += " AND " + archived + "=1"
+	}
+	if f.ProjectID != "" {
+		predicate += ` AND json_extract(CAST(body AS TEXT),'$.projectId')=?`
+		arguments = append(arguments, f.ProjectID)
+	}
+	if f.Channel != "" {
+		predicate += ` AND (CASE
+			WHEN trim(COALESCE(json_extract(CAST(body AS TEXT),'$.channel'),json_extract(CAST(body AS TEXT),'$.channelId'),json_extract(CAST(body AS TEXT),'$.body.channelId'),'')) NOT IN ('','web')
+				THEN trim(COALESCE(json_extract(CAST(body AS TEXT),'$.channel'),json_extract(CAST(body AS TEXT),'$.channelId'),json_extract(CAST(body AS TEXT),'$.body.channelId'),''))
+			WHEN resource_id GLOB 'conv-qq-personal-*' THEN 'qq_personal'
+			WHEN resource_id GLOB 'conv-group-*' THEN 'qq'
+			WHEN resource_id GLOB 'wechat-ipad860-*' OR instr(resource_id,'@im.wechat')>0 OR instr(resource_id,'@chatroom')>0 THEN 'wechat'
+			ELSE 'web'
+		END)=?`
+		arguments = append(arguments, f.Channel)
+	}
+	return predicate, arguments
 }
 
 func NormalizeConversationSearch(value string) (string, error) {
@@ -104,10 +142,6 @@ type HistoricalRole struct {
 
 type HistoricalRolesPort interface {
 	HistoricalRoles(context.Context, ExecutionScope) ([]HistoricalRole, error)
-}
-
-type HistoricalConversationPort interface {
-	HistoricalConversations(context.Context, ExecutionScope) ([]json.RawMessage, error)
 }
 
 type HistoricalConversationPage struct {

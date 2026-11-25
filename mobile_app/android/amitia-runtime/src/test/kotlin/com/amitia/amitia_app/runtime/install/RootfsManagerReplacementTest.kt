@@ -30,6 +30,16 @@ class RootfsManagerReplacementTest {
                 File(targetDir, "version").writeText(tarXzFile.name)
                 return SafeExtractResult.Success(ExtractionResult(1, tarXzFile.length()))
             }
+
+            override fun extractTarGz(
+                tarGzFile: File,
+                targetDir: File,
+                rootBoundary: String?,
+            ): SafeExtractResult {
+                targetDir.mkdirs()
+                File(targetDir, "version").writeText(tarGzFile.name)
+                return SafeExtractResult.Success(ExtractionResult(1, tarGzFile.length()))
+            }
         }
         val manager = DefaultRootfsManager(control, extractor)
         val first = folder.newFile("first")

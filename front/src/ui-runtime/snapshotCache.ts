@@ -1,31 +1,64 @@
 import type { UIContributionSnapshot } from "@/stores/extensionUI";
 
-const PREFIX = "amitia.ui.snapshot.lkg.v1";
+const databaseName = "amitia.ui.snapshot";
+const storeName = "snapshots";
+const localSnapshotPrefix = "amitia.ui.snapshot.lkg.v1:";
 
-function key(platform: string, deviceId: string, backendNamespace?: string): string {
-  const origin = backendNamespace || (typeof window === "undefined" ? "server" : window.location.origin);
-  return `${PREFIX}:${encodeURIComponent(origin)}:${platform}:${deviceId || "anonymous"}`;
-}
-
-export function saveLastKnownGoodSnapshot(platform: string, deviceId: string, snapshot: UIContributionSnapshot, backendNamespace?: string): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(key(platform, deviceId, backendNamespace), JSON.stringify({ savedAt: Date.now(), snapshot }));
-  } catch (error) {
-  console.error("[original-error]", error);
-// Cache failure must never make the UI runtime unavailable.
+function removeSupersededLocalSnapshots(platform: string, deviceId: string): void {
+  const suffix = `:${platform}:${deviceId}`;
+  const keys = Array.from({ length: window.localStorage.length }, (_, index) => window.localStorage.key(index));
+  for (const storedKey of keys) {
+    if (!storedKey?.startsWith(localSnapshotPrefix) || !storedKey.endsWith(suffix)) continue;
+    const namespace = decodeURIComponent(storedKey.slice(localSnapshotPrefix.length, -suffix.length));
+    if (/^http:\/\/127\.0\.0\.1:\d+\|device=/.test(namespace) && namespace.endsWith(`|device=${deviceId}`)) {
+      window.localStorage.removeItem(storedKey);
+    }
   }
 }
 
-export function loadLastKnownGoodSnapshot(platform: string, deviceId: string, backendNamespace?: string): UIContributionSnapshot | null {
-  if (typeof window === "undefined") return null;
+function key(platform: string, deviceId: string, backendNamespace?: string): string {
+  return JSON.stringify([backendNamespace || window.location.origin, platform, deviceId]);
+}
+
+function openDatabase(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(databaseName, 1);
+    request.onupgradeneeded = () => request.result.createObjectStore(storeName);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+    request.onblocked = () => reject(new Error("界面快照数据库被占用"));
+  });
+}
+
+export async function saveLastKnownGoodSnapshot(platform: string, deviceId: string, snapshot: UIContributionSnapshot, backendNamespace?: string): Promise<void> {
+  const db = await openDatabase();
   try {
-    const raw = window.localStorage.getItem(key(platform, deviceId, backendNamespace));
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as { snapshot?: UIContributionSnapshot };
-    return parsed.snapshot ?? null;
-  } catch (error) {
-  console.error("[original-error]", error);
-return null;
+    await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction(storeName, "readwrite");
+      transaction.objectStore(storeName).put({ savedAt: Date.now(), snapshot: JSON.parse(JSON.stringify(snapshot)) }, key(platform, deviceId, backendNamespace));
+      transaction.oncomplete = () => resolve();
+      transaction.onabort = () => reject(transaction.error);
+      transaction.onerror = () => reject(transaction.error);
+    });
+    if (window.amitiaDesktop && backendNamespace === `desktop-local:${deviceId}` && deviceId) {
+      removeSupersededLocalSnapshots(platform, deviceId);
+    }
+  } finally {
+    db.close();
+  }
+}
+
+export async function loadLastKnownGoodSnapshot(platform: string, deviceId: string, backendNamespace?: string): Promise<UIContributionSnapshot | null> {
+  const db = await openDatabase();
+  try {
+    return await new Promise((resolve, reject) => {
+      const transaction = db.transaction(storeName, "readonly");
+      const request = transaction.objectStore(storeName).get(key(platform, deviceId, backendNamespace));
+      transaction.oncomplete = () => resolve(request.result?.snapshot ?? null);
+      transaction.onabort = () => reject(transaction.error);
+      transaction.onerror = () => reject(transaction.error);
+    });
+  } finally {
+    db.close();
   }
 }

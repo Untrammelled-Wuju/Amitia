@@ -15,7 +15,8 @@ import { resolveUIClientInfo } from "@/ui-runtime/clientInfo";
 import { loadLastKnownGoodSnapshot, saveLastKnownGoodSnapshot } from "@/ui-runtime/snapshotCache";
 import { isProviderCompatible } from "@/ui-runtime/providerRuntime";
 import { resolveHostEnvironment } from "@/composables/useHostEnvironment";
-import { getRuntimeConnection } from "@/runtime/runtime-adapter";
+import { getDeploymentConfig, getRuntimeConnection } from "@/runtime/runtime-adapter";
+import { originalErrorText } from "@/runtime/original-error";
 
 export interface UIContributionSummary {
   contributionId: string;
@@ -350,15 +351,28 @@ export const useExtensionUIStore = defineStore("extensionUI", () => {
         console.error("[original-error]", error);
         return window.location.origin;
       });
-      const cacheNamespace = `${backendNamespace}|device=${deviceId || "browser"}`;
+      let cacheNamespace = `${backendNamespace}|device=${deviceId || "browser"}`;
       try {
+        const deployment = await getDeploymentConfig();
+        cacheNamespace = window.amitiaDesktop && deployment.mode === "local"
+          ? `desktop-local:${deviceId}`
+          : `${deployment.mode === "cloud" && deployment.serverURL ? deployment.serverURL : backendNamespace}|device=${deviceId || "browser"}`;
         const next = await fetchUISnapshot(platform, deviceId);
         snapshot.value = next;
         lastFetchAt.value = Date.now();
         usingLastKnownGood.value = false;
-        saveLastKnownGoodSnapshot(platform, deviceId, next, cacheNamespace);
+        try {
+          await saveLastKnownGoodSnapshot(platform, deviceId, next, cacheNamespace);
+        } catch (error) {
+          recordError({ contributionId: "", slotId: "", message: originalErrorText(error), timestamp: Date.now(), recoverable: true });
+        }
       } catch (e) {
-        const cached = loadLastKnownGoodSnapshot(platform, deviceId, cacheNamespace);
+        let cached: UIContributionSnapshot | null = null;
+        try {
+          cached = await loadLastKnownGoodSnapshot(platform, deviceId, cacheNamespace);
+        } catch (error) {
+          recordError({ contributionId: "", slotId: "", message: originalErrorText(error), timestamp: Date.now(), recoverable: true });
+        }
         if (cached) {
           const client = await resolveUIClientInfo();
           snapshot.value = {
@@ -380,7 +394,7 @@ export const useExtensionUIStore = defineStore("extensionUI", () => {
         recordError({
           contributionId: "",
           slotId: "",
-          message: e instanceof Error ? e.message : String(e),
+          message: originalErrorText(e),
           timestamp: Date.now(),
           recoverable: true,
         });

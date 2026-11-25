@@ -11,9 +11,10 @@ internal data class RuntimeInstallReceipt(
     val rootfsPayloadSha256: String,
     val runtimePayloadSha256: String,
     val runtimeRootTreeSha256: String,
+    val componentSha256: Map<String, String> = emptyMap(),
 ) {
     companion object {
-        const val SCHEMA_VERSION = 1
+        const val SCHEMA_VERSION = 2
     }
 }
 
@@ -49,7 +50,17 @@ internal class DefaultInstallReceiptStore(
                 appendLine("  \"rootfsId\": \"${receipt.rootfsId}\",")
                 appendLine("  \"rootfsPayloadSha256\": \"${receipt.rootfsPayloadSha256}\",")
                 appendLine("  \"runtimePayloadSha256\": \"${receipt.runtimePayloadSha256}\",")
-                appendLine("  \"runtimeRootTreeSha256\": \"${receipt.runtimeRootTreeSha256}\"")
+                appendLine("  \"runtimeRootTreeSha256\": \"${receipt.runtimeRootTreeSha256}\",")
+                val componentEntries = receipt.componentSha256.entries
+                    .sortedBy { it.key }
+                    .joinToString(",\n") { (id, sha) -> "    \"$id\": \"$sha\"" }
+                if (componentEntries.isEmpty()) {
+                    appendLine("  \"componentSha256\": {}")
+                } else {
+                    appendLine("  \"componentSha256\": {")
+                    appendLine(componentEntries)
+                    appendLine("  }")
+                }
                 appendLine("}")
             }
             tmpFile.writeText(content, Charsets.UTF_8)
@@ -94,6 +105,7 @@ internal class DefaultInstallReceiptStore(
     }
 
     private fun parseReceipt(json: String): RuntimeInstallReceipt {
+        val schemaVersion = extractJsonNumberOrNull(json, "schemaVersion")
         val runtimeVersion = extractJsonString(json, "runtimeVersion")
         val packageId = extractJsonString(json, "packageId")
         val packageSha256 = extractJsonString(json, "packageSha256")
@@ -103,7 +115,7 @@ internal class DefaultInstallReceiptStore(
         val runtimeRootTreeSha256 = extractJsonString(json, "runtimeRootTreeSha256")
 
         return RuntimeInstallReceipt(
-            schemaVersion = RuntimeInstallReceipt.SCHEMA_VERSION,
+            schemaVersion = schemaVersion ?: RuntimeInstallReceipt.SCHEMA_VERSION,
             runtimeVersion = runtimeVersion,
             packageId = packageId,
             packageSha256 = packageSha256,
@@ -111,7 +123,22 @@ internal class DefaultInstallReceiptStore(
             rootfsPayloadSha256 = rootfsPayloadSha256,
             runtimePayloadSha256 = runtimePayloadSha256,
             runtimeRootTreeSha256 = runtimeRootTreeSha256,
+            componentSha256 = parseComponentSha256(json),
         )
+    }
+
+    private fun parseComponentSha256(json: String): Map<String, String> {
+        val objectMatch = Regex("\"componentSha256\"\\s*:\\s*\\{([^{}]*)\\}").find(json)
+            ?: return emptyMap()
+        val entryPattern = Regex("\"([^\"]+)\"\\s*:\\s*\"([a-fA-F0-9]{64})\"")
+        return entryPattern.findAll(objectMatch.groupValues[1]).associate {
+            it.groupValues[1] to it.groupValues[2].lowercase()
+        }
+    }
+
+    private fun extractJsonNumberOrNull(json: String, key: String): Int? {
+        val pattern = "\"$key\"\\s*:\\s*(\\d+)".toRegex()
+        return pattern.find(json)?.groupValues?.get(1)?.toIntOrNull()
     }
 
     private fun extractJsonString(json: String, key: String): String {

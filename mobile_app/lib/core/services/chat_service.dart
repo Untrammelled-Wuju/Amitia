@@ -8,6 +8,11 @@ import '../models/conversation.dart';
 import '../models/project.dart';
 import 'device_owned_chat_service.dart';
 
+typedef ConversationPage = ({
+  List<ConversationDto> rows,
+  Map<String, ConversationListCursor> cursors,
+});
+
 class ChatSubmitResult {
   final String conversationId;
   final String userMessageId;
@@ -247,6 +252,75 @@ class ChatService {
       throw StateError(owned.notice.isEmpty ? '设备对话服务尚未就绪' : owned.notice);
   }
 
+  Future<ConversationPage> conversationPage({
+    Map<String, ConversationListCursor>? cursors,
+    String keyword = '',
+    bool selectedRoleOnly = false,
+    ConversationListFilter filter = const ConversationListFilter(),
+  }) async {
+    if (cursors == null) await _requireOwned();
+    final selected = owned.selectRole(null);
+    final roles =
+        cursors?.keys.toList() ??
+        (selectedRoleOnly
+            ? [selected]
+            : owned.roles.map((role) => role['id'].toString()).toList());
+    final pages = await Future.wait(
+      roles.map(
+        (role) async => (
+          role: role,
+          page: await owned.conversationPage(
+            characterId: role,
+            keyword: keyword,
+            cursor: cursors?[role],
+            filter: filter,
+          ),
+        ),
+      ),
+    );
+    return (
+      rows: [
+        for (final item in pages)
+          ...item.page.rows.where(
+            (row) =>
+                item.role == selected ||
+                row.source == 'reminder' ||
+                row.source == 'proactive',
+          ),
+      ],
+      cursors: {
+        for (final item in pages)
+          if (item.page.cursor != null) item.role: item.page.cursor!,
+      },
+    );
+  }
+
+  Future<OwnedConversationPage> projectConversationPage(
+    ProjectDto project, {
+    ConversationListCursor? cursor,
+  }) async {
+    if (cursor == null) await _requireOwned();
+    final page = await owned.conversationPage(
+      characterId: project.roleId,
+      cursor: cursor,
+      filter: ConversationListFilter(
+        archive: 'active',
+        channel: 'web',
+        projectId: project.id,
+      ),
+    );
+    return (
+      rows: page.rows
+          .where(
+            (row) =>
+                row.projectId == project.id &&
+                row.sourceOwnerId == project.ownerId,
+          )
+          .toList(),
+      cursor: page.cursor,
+    );
+  }
+
   Future<List<ConversationDto>> listConversations() async {
     await _requireOwned();
     final selectedRole = owned.selectRole(null);
@@ -257,28 +331,12 @@ class ChatService {
     return [
       for (var index = 0; index < roles.length; index++)
         ...pages[index].where(
-          (item) => roles[index] == selectedRole ||
+          (item) =>
+              roles[index] == selectedRole ||
               item.source == 'reminder' ||
               item.source == 'proactive',
         ),
     ];
-  }
-
-  Future<List<ConversationDto>> archivedConversations({
-    String projectId = '',
-    String keyword = '',
-  }) async {
-    await _requireOwned();
-    final rows = await owned.conversations(
-      keyword: keyword.trim().toLowerCase(),
-    );
-    return rows
-        .where(
-          (row) =>
-              row.archivedAt.isNotEmpty &&
-              (projectId.isEmpty || row.projectId == projectId),
-        )
-        .toList();
   }
 
   Future<void> updateConversationModelSettings(
@@ -309,11 +367,11 @@ class ChatService {
     );
   }
 
-  Future<ConversationSidebarDto> conversationSidebar() async {
+  Future<ConversationSidebarDto> conversationSidebar([
+    List<ConversationDto> conversations = const [],
+  ]) async {
     await _requireOwned();
-    final rows = (await listConversations())
-        .where((row) => row.archivedAt.isEmpty)
-        .toList();
+    final rows = conversations.where((row) => row.archivedAt.isEmpty).toList();
     final projects = (await owned.projects())
         .where((project) => !project.readOnly)
         .toList(growable: false);
@@ -364,13 +422,6 @@ class ChatService {
           .where((project) => project.hiddenAt.isNotEmpty)
           .toList(),
     );
-  }
-
-  Future<List<ConversationDto>> channelConversations() async {
-    await _requireOwned();
-    return (await owned.conversations())
-        .where((row) => row.channel.isNotEmpty && row.channel != 'web')
-        .toList();
   }
 
   Future<ProjectDto> createProject({

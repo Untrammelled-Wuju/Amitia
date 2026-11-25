@@ -9,12 +9,19 @@ import SidebarProjectBlock from "../components/SidebarProjectBlock.vue";
 import SidebarConversationRow from "../components/SidebarConversationRow.vue";
 import { contextMenuState, closeContextMenu } from "../components/context-menu/contextMenuStore";
 
-const mocks = vi.hoisted(() => ({ get: vi.fn(), startDraft: vi.fn(), pickProjectWorkspace: vi.fn(), registerProjectWorkspaces: vi.fn(), createProjectFromWorkspaces: vi.fn() }));
+const mocks = vi.hoisted(() => ({ edit: vi.fn(), get: vi.fn(), startDraft: vi.fn(), pickProjectWorkspace: vi.fn(), registerProjectWorkspaces: vi.fn(), createProjectFromWorkspaces: vi.fn() }));
 
 vi.mock("../composables/useApi", () => ({
   apiClient: { get: mocks.get },
   useApi: () => ({ get: vi.fn(), post: vi.fn() }),
 }));
+vi.mock("../composables/useDeviceOwnedConversation", async (importOriginal) => {
+  const original = await importOriginal<typeof import("../composables/useDeviceOwnedConversation")>();
+  return {
+    ...original,
+    useDeviceOwnedConversation: () => ({ ...original.useDeviceOwnedConversation(), edit: mocks.edit }),
+  };
+});
 vi.mock("../composables/useConversationWorkspace", () => ({
   useConversationWorkspace: () => ({ startDraftConversation: mocks.startDraft, pickProjectWorkspace: mocks.pickProjectWorkspace, registerProjectWorkspaces: mocks.registerProjectWorkspaces, createProjectFromWorkspaces: mocks.createProjectFromWorkspaces, addWorkspaceToProject: vi.fn(), removeWorkspaceFromProject: vi.fn(), setPrimaryWorkspace: vi.fn() }),
 }));
@@ -210,7 +217,7 @@ describe("sidebar conversation selection", () => {
       chat.sidebar.recent = [conversation];
       chat.sidebar.projects = [project];
       await flushPromises();
-      expect(wrapper.findAll(".section-caption > span").map((item) => item.text())).toEqual(["聊天"]);
+      expect(wrapper.findAll(".section-caption > span").map((item) => item.text())).toEqual(["对话"]);
       expect(wrapper.get('[data-amitia-ui="workspace.view.chat"]').attributes("aria-selected")).toBe("true");
       expect(wrapper.find(".workspace-view-indicator").exists()).toBe(true);
       await showProjects(wrapper);
@@ -302,7 +309,7 @@ describe("sidebar conversation selection", () => {
     wrapper.unmount();
   });
 
-  it("toggles select all and deselect all across chat and project conversations", async () => {
+  it("toggles the project list selection from the context menu", async () => {
     const { wrapper, chat } = await renderSidebar("/chat");
     const projectConversation = { ...conversation, id: "project-conversation", projectId: "project" };
     chat.sidebar.recent = [conversation];
@@ -323,6 +330,90 @@ describe("sidebar conversation selection", () => {
     expect(wrapper.findAll('.thread-row input[type="checkbox"]').every((item) => !(item.element as HTMLInputElement).checked)).toBe(true);
     closeContextMenu();
     wrapper.unmount();
+  });
+
+  it("selects only loaded chat rows and leaves newly loaded rows unchecked", async () => {
+    const { wrapper, chat } = await renderSidebar("/chat");
+    try {
+      chat.sidebar.pinned = [{ ...conversation, id: "pinned", title: "置顶对话" }];
+      chat.sidebar.recent = [conversation];
+      expect(wrapper.find(".batch-select-all").exists()).toBe(false);
+      await wrapper.get('[title="批量选择"]').trigger("click");
+      expect(wrapper.get(".batch-select-all + span").text()).toBe("对话");
+      await wrapper.get(".batch-select-all").setValue(true);
+      expect(wrapper.findAll<HTMLInputElement>('.thread-row input[type="checkbox"]').map((item) => item.element.checked)).toEqual([true, true]);
+
+      chat.sidebar.recent.push({ ...conversation, id: "next-page", title: "下一页对话" });
+      await flushPromises();
+      const selectAll = wrapper.get<HTMLInputElement>(".batch-select-all");
+      expect(selectAll.element.indeterminate).toBe(true);
+      expect(wrapper.get<HTMLInputElement>('[aria-label="选择 下一页对话"]').element.checked).toBe(false);
+      await selectAll.setValue(true);
+      await selectAll.setValue(false);
+      expect(wrapper.findAll<HTMLInputElement>('.thread-row input[type="checkbox"]').every((item) => !item.element.checked)).toBe(true);
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
+  it("deletes only confirmed loaded rows from expanded projects", async () => {
+    const { wrapper, chat } = await renderSidebar("/chat");
+    const refresh = vi.spyOn(chat, "fetchSidebar").mockResolvedValue();
+    const expandedRows = [
+      { ...conversation, id: "loaded-1", projectId: "open", ownerId: "owner", revision: 4 },
+      { ...conversation, id: "loaded-2", projectId: "open" },
+    ];
+    const project = {
+      id: "open", name: "已展开项目", workspaceId: "", deviceId: "", rootUri: "",
+      primaryWorkspaceId: "", workspaces: [], available: true, status: "available",
+      conversations: expandedRows, conversationCount: 12,
+    };
+    type Confirmation = Awaited<ReturnType<typeof ElMessageBox.confirm>>;
+    const confirmed = "confirm" as Confirmation;
+    let confirm!: (value: Confirmation) => void;
+    const dialog = vi.spyOn(ElMessageBox, "confirm").mockImplementation(() => new Promise((resolve) => { confirm = resolve; }));
+    const alert = vi.spyOn(ElMessageBox, "alert").mockResolvedValue(confirmed);
+    mocks.edit.mockResolvedValue({});
+    try {
+      chat.sidebar.recent = [{ ...conversation, id: "outside-project" }];
+      chat.sidebar.projects = [project, {
+        ...project, id: "closed", name: "折叠项目",
+        conversations: [{ ...conversation, id: "collapsed-row", projectId: "closed" }],
+      }];
+      await showProjects(wrapper);
+      await wrapper.get('[title="批量选择"]').trigger("click");
+      expect(wrapper.get(".batch-select-all + span").text()).toBe("项目");
+      expect(wrapper.get<HTMLInputElement>(".batch-select-all").element.disabled).toBe(true);
+      await wrapper.findAll(".project-main")[0].trigger("click");
+      await wrapper.get(".batch-select-all").setValue(true);
+      await wrapper.findAll(".thread-main")[0].trigger("contextmenu");
+      expect(contextMenuState.title).toBe("已选择 2 个对话");
+      const deleting = contextMenuState.items.find((item) => item.id === "delete")?.action?.();
+      expect(dialog).toHaveBeenCalledWith("确定删除选中的 2 个对话吗？", "批量删除", expect.anything());
+
+      chat.sidebar.projects[0].conversations = [
+        expandedRows[0],
+        { ...conversation, id: "new-page-row", projectId: "open" },
+      ];
+      await flushPromises();
+      await wrapper.get(".batch-select-all").setValue(true);
+      confirm(confirmed);
+      await deleting;
+
+      expect(mocks.edit).toHaveBeenCalledTimes(1);
+      expect(mocks.edit).toHaveBeenCalledWith("conversation", "loaded-1", {}, expect.objectContaining({
+        deleted: true,
+        expectedOwnerId: "owner",
+        expectedRevision: 4,
+      }));
+      expect(alert).toHaveBeenCalledWith(expect.stringContaining("当前列表中没有这条已选对话"), expect.anything(), expect.anything());
+    } finally {
+      alert.mockRestore();
+      dialog.mockRestore();
+      refresh.mockRestore();
+      closeContextMenu();
+      wrapper.unmount();
+    }
   });
 
   it("shows the project empty state only when there are no projects", async () => {

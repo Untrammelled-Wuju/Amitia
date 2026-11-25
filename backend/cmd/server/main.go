@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/config"
+	"github.com/u-ai/backend/internal/extension/kernel/featuregate"
 	"github.com/u-ai/backend/internal/platform/process"
 	"github.com/u-ai/backend/internal/runtimeendpoint"
 	"github.com/u-ai/backend/internal/runtimeport"
@@ -156,6 +157,10 @@ func main() {
 	runtimeRoot := util.RuntimeRoot()
 	configDir := util.RuntimeConfigDir(runtimeRoot)
 	config.InitConfig(configDir)
+	if err := featuregate.Configure(config.AppCfg.Features); err != nil {
+		fmt.Fprintf(os.Stderr, "功能开关配置失败: %v\n", err)
+		os.Exit(1)
+	}
 	conversationstream.DefaultManager().SetRingSize(config.AppCfg.Chat.EventReplayRingSize)
 	conversationstream.DefaultManager().SetMaxConcurrentExecutions(config.AppCfg.Chat.AgentMaxParallelTurns)
 
@@ -443,6 +448,9 @@ func main() {
 func startCoreWorkers(appCtx context.Context, services *AppServices, r *http.Server) error {
 	ginEngine := r.Handler
 	_ = ginEngine
+	if err := applyFeatureCanary(appCtx, services); err != nil {
+		return fmt.Errorf("应用功能开关 runtime-canary: %w", err)
+	}
 	if result, err := services.UnifiedEntry.RecoverStaleInteractions(context.Background(), time.Now()); err != nil {
 		log.Error("交互启动恢复失败:", err)
 	} else if result.Recovered > 0 || result.Failed > 0 {

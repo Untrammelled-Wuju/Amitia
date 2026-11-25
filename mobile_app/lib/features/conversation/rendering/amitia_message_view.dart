@@ -9,6 +9,7 @@ import '../../../shared/models/models.dart';
 import '../../../core/models/feedback.dart';
 import '../../../core/services/providers.dart';
 import '../../../core/widgets/amitia_popup_menu.dart';
+import '../../../core/widgets/quoted_message_text.dart';
 import '../../../core/widgets/user_message_surface.dart';
 import '../../../core/widgets/character_avatar.dart';
 import '../../../core/settings/chat_appearance_preferences.dart';
@@ -199,10 +200,8 @@ class _AmitiaMessageViewState extends ConsumerState<AmitiaMessageView> {
                 if ((widget.message.replyToMessageId ?? '').isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 6),
-                    child: Text(
-                      '引用：${widget.message.replyToExcerpt ?? '原消息'}',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                    child: QuotedMessageText(
+                      text: '引用：${widget.message.replyToExcerpt ?? '原消息内容不可用'}',
                       style: TextStyle(
                         color: context.textSecondary,
                         fontSize: 12,
@@ -215,10 +214,23 @@ class _AmitiaMessageViewState extends ConsumerState<AmitiaMessageView> {
           ),
         );
       }
-      return _UserMessage(
-        message: message,
-        tokens: tokens,
-        material: widget.userMessageMaterial,
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          if ((widget.message.replyToMessageId ?? '').isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: QuotedMessageText(
+                text: '引用：${widget.message.replyToExcerpt ?? '原消息内容不可用'}',
+                style: TextStyle(color: context.textSecondary, fontSize: 12),
+              ),
+            ),
+          _UserMessage(
+            message: message,
+            tokens: tokens,
+            material: widget.userMessageMaterial,
+          ),
+        ],
       );
     }
     final bubble = widget.messageStyle == ChatMessageStyle.bubble;
@@ -1095,9 +1107,9 @@ class _CompactMessageAction extends StatelessWidget {
     if (reason == null) return button;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(reason)),
-      ),
+      onTap: () => ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(reason))),
       child: button,
     );
   }

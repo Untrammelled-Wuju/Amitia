@@ -1,0 +1,126 @@
+server:
+  port: 0
+  host: "127.0.0.1"
+  mode: "debug"
+
+storage:
+  dataDir: "data"
+
+security:
+  mode: "local_single_user"
+  allowRemoteAccess: false
+  localToken: ""
+  localTokenFile: "security/local-token"
+  allowedOrigins:
+    - "app://amitia"
+    - "http://127.0.0.1:5178"
+    - "http://localhost:5178"
+
+config:
+  version: 2
+
+app:
+  name: "U-Ai"
+  version: "26.2.0-beta.23"
+  deployMode: "desktop-local"
+
+chat:
+  contextWindowMaxRounds: 20
+  agentTurnTimeoutSeconds: 1800
+  agentMaxParallelTools: 4
+  agentMaxParallelTurns: 16
+
+providers:
+  scriptRuntime:
+    enabled: true
+    required: false
+    provider: "builtin.node-process"
+  vectorStore:
+    enabled: true
+    required: false
+    provider: "builtin.qdrant-process"
+    qdrant:
+      host: "127.0.0.1"
+      port: 0
+      collectionName: "memory_embeddings"
+      vectorDim: 1536
+      limit: 10
+      collections:
+        memory_embeddings:
+          name: "memory_embeddings"
+          vectorDim: 1536
+        working_memory:
+          name: "working_memory"
+          vectorDim: 1536
+        user_profiles:
+          name: "user_profiles"
+          vectorDim: 1536
+        episodic_memories:
+          name: "episodic_memories"
+          vectorDim: 1536
+  graphStore:
+    enabled: true
+    required: false
+    provider: "builtin.surrealdb-process"
+    surrealdb:
+      host: "127.0.0.1"
+      port: 0
+      namespace: "uai"
+      database: "memory_graph"
+      username: "root"
+      password: "Ieo9TMnTwzecmFt6_dZ4k2U27Bbnp_2N8EGl3wcNdgc"
+      dataPath: "data/graph.db"
+  browser:
+    enabled: true
+    executablePath: ""
+    headless: true
+    userDataRoot: ""
+    startupTimeoutSec: 30
+    shutdownTimeoutSec: 5
+    maxBrowserMemoryBytes: 0
+    allowedSchemes:
+      - "http"
+      - "https"
+    maxSessions: 8
+    maxTabsPerSession: 8
+    maxTabsTotal: 32
+    navigationTimeoutSec: 30
+    maxNavigationTimeoutSec: 120
+components:
+  taskHost:
+    enabled: true
+    entryUri: ""
+    workUri: ""
+
+embedding:
+  modelName: "text-embedding-3-small"
+  baseUrl: ""
+  apiKey: ""
+
+runtime:
+  mode: "desktop"
+  node:
+    binaryPath: ""
+    npmPath: ""
+    npxPath: ""
+    workDir: ""
+  taskHost:
+    enabled: true
+    entryPath: ""
+    workDir: ""
+
+desktopPetRuntime:
+  enabled: true
+  path: "/internal/desktop-pet/runtime/ws"
+  loopbackOnly: true
+  allowRemote: false
+  heartbeatIntervalMs: 10000
+  heartbeatTimeoutMs: 30000
+  maxMessageBytes: 1048576
+  registerTimeoutSec: 10
+  sendQueueSize: 64
+  commandTimeoutSec: 30
+  maxRetryAttempts: 5
+  retryBaseDelayMs: 500
+  retryMaxDelayMs: 30000
+  commandRetentionHours: 24

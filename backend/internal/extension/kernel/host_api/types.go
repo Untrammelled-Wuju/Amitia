@@ -172,7 +172,9 @@ type CallRequest struct {
 	TargetScopeSnapshotID string
 	PermissionSnapshotID  string
 	TraceID               string
+	RootExecutionID       string
 	InvocationID          string
+	IdempotencyKey        string
 	ApprovalRecordID      string
 	ExecutionContext      permission.PermissionExecutionContext
 	ParentID              string

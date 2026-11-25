@@ -6,6 +6,8 @@ import java.io.File
 import java.security.MessageDigest
 import java.util.UUID
 
+private const val COPY_BUFFER_SIZE = 1024 * 1024
+
 class AndroidBundledRuntimePackageSource(
     private val context: Context,
     private val layout: RuntimeHostLayout,
@@ -45,15 +47,22 @@ class AndroidBundledRuntimePackageSource(
         )
 
         return try {
+            val digest = MessageDigest.getInstance("SHA-256")
             context.applicationContext.assets.open(TrustedRuntimePackageSource.ASSET_PATH).use { input ->
                 tempFile.outputStream().use { output ->
-                    input.copyTo(output)
+                    val buffer = ByteArray(COPY_BUFFER_SIZE)
+                    var read = input.read(buffer)
+                    while (read != -1) {
+                        digest.update(buffer, 0, read)
+                        output.write(buffer, 0, read)
+                        read = input.read(buffer)
+                    }
                     output.flush()
                     output.fd.sync()
                 }
             }
 
-            val tempSha = computeSha256(tempFile)
+            val tempSha = digest.digest().joinToString("") { "%02x".format(it) }
             if (!tempSha.equals(expectedSha, ignoreCase = true)) {
                 return RuntimePackageSourceResult.Failed(
                     RuntimePackageSourceErrorCode.BUNDLED_PACKAGE_HASH_MISMATCH,
@@ -65,14 +74,6 @@ class AndroidBundledRuntimePackageSource(
                 return RuntimePackageSourceResult.Failed(
                     RuntimePackageSourceErrorCode.PACKAGE_MATERIALIZE_FAILED,
                     "Failed to move package to final location: ${finalFile.absolutePath}"
-                )
-            }
-
-            val finalSha = computeSha256(finalFile)
-            if (!finalSha.equals(expectedSha, ignoreCase = true)) {
-                return RuntimePackageSourceResult.Failed(
-                    RuntimePackageSourceErrorCode.BUNDLED_PACKAGE_HASH_MISMATCH,
-                    "Final package hash mismatch: expected=$expectedSha actual=$finalSha"
                 )
             }
 

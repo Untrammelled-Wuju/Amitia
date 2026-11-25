@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "serviceId": "memory.search",
+  "revision": 4,
+  "scope": "global",
+  "candidates": [
+    {
+      "providerId": "provider.a",
+      "priority": 10
+    },
+    {
+      "providerId": "provider.b",
+      "priority": 5
+    }
+  ],
+  "selected": "provider.b",
+  "trail": [
+    "device=skip",
+    "space=skip",
+    "global=hit"
+  ]
+}

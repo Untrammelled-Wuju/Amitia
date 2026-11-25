@@ -18,15 +18,16 @@ type meshHistoricalPosition struct {
 }
 
 type meshHistoricalListCursor struct {
-	Fence      string                 `json:"fence"`
-	Owner      string                 `json:"owner"`
-	Core       string                 `json:"core"`
-	Role       string                 `json:"role"`
-	Epoch      int64                  `json:"epoch"`
-	Mode       int64                  `json:"mode"`
-	Permission int64                  `json:"permission"`
-	SearchHash string                 `json:"searchHash,omitempty"`
-	Owned      meshHistoricalPosition `json:"owned"`
+	Fence      string                              `json:"fence"`
+	Owner      string                              `json:"owner"`
+	Core       string                              `json:"core"`
+	Role       string                              `json:"role"`
+	Epoch      int64                               `json:"epoch"`
+	Mode       int64                               `json:"mode"`
+	Permission int64                               `json:"permission"`
+	SearchHash string                              `json:"searchHash,omitempty"`
+	Filter     coordination.ConversationListFilter `json:"filter,omitempty"`
+	Owned      meshHistoricalPosition              `json:"owned"`
 }
 
 func (p *meshLocalDataPort) HistoricalConversationPage(ctx context.Context, scope coordination.ExecutionScope, query coordination.DataQuery) (coordination.HistoricalConversationPage, error) {
@@ -54,10 +55,11 @@ func (p *meshLocalDataPort) HistoricalConversationPage(ctx context.Context, scop
 	digest := sha256.Sum256(encodedScope)
 	cursor := meshHistoricalListCursor{Fence: hex.EncodeToString(digest[:]), Owner: p.ownerID, Core: scope.CoreID, Role: scope.RoleID, Epoch: scope.TargetProviderEpoch, Mode: scope.ModeRevision, Permission: scope.TargetPermissionRevision}
 	cursor.SearchHash = coordination.ConversationSearchHash(search)
+	cursor.Filter = query.ConversationListFilter
 	if query.HistoricalListCursor != "" {
 		raw, err := base64.RawURLEncoding.DecodeString(query.HistoricalListCursor)
 		var previous meshHistoricalListCursor
-		if err != nil || len(raw) > 4096 || json.Unmarshal(raw, &previous) != nil || previous.Fence != cursor.Fence || previous.Owner != cursor.Owner || previous.Core != cursor.Core || previous.Role != cursor.Role || previous.Epoch != cursor.Epoch || previous.Mode != cursor.Mode || previous.Permission != cursor.Permission || previous.SearchHash != cursor.SearchHash {
+		if err != nil || len(raw) > 4096 || json.Unmarshal(raw, &previous) != nil || previous.Fence != cursor.Fence || previous.Owner != cursor.Owner || previous.Core != cursor.Core || previous.Role != cursor.Role || previous.Epoch != cursor.Epoch || previous.Mode != cursor.Mode || previous.Permission != cursor.Permission || previous.SearchHash != cursor.SearchHash || previous.Filter != cursor.Filter {
 			return result, coordination.ErrWrongOwner
 		}
 		cursor = previous
@@ -84,6 +86,9 @@ func (p *meshLocalDataPort) HistoricalConversationPage(ctx context.Context, scop
 	if !cursor.Owned.Done {
 		statement := `SELECT resource_id,updated_at,body FROM kernel_device_owned_resources WHERE owner_id=? AND role_id=? AND kind='conversation' AND deleted=0`
 		args := []any{p.ownerID, partition}
+		predicate, parameters := query.ConversationListFilter.Predicate()
+		statement += predicate
+		args = append(args, parameters...)
 		if search != "" {
 			statement += coordination.OwnedConversationSearchPredicate
 			args = append(args, search, search)
@@ -139,6 +144,9 @@ func (p *meshLocalDataPort) HistoricalConversationPage(ctx context.Context, scop
 	if err != nil {
 		return result, err
 	}
-	result.Conversations = enriched
+	result.Conversations, err = p.enrichOwnedConversationActivity(ctx, enriched)
+	if err != nil {
+		return result, err
+	}
 	return result, ctx.Err()
 }

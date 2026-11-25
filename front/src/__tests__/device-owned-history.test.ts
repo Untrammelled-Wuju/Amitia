@@ -12,6 +12,19 @@ const scope = { coreId: "core", providerEpoch: 1, modeRevision: 1, permissionRev
 const response = (nextCursors: Record<string, string>, historical?: Record<string, string>, revision = 1) => ({ data: { executionScope: { ...scope, roleRevision: revision }, snapshot: { ownerId: "a", resources: [], nextCursors }, ...(historical ? { historicalSnapshot: { ownerId: "old-device", resources: [], nextCursors: historical } } : {}) } });
 
 describe("owned conversation history", () => {
+  it("保留已校验引用的完整正文", () => {
+    const original = "原始消息内容".repeat(50);
+    const rows = useDeviceOwnedConversation().messages({ executionScope: scope, snapshot: { ownerId: "a", resources: [{ kind: "message", revision: 1, body: { id: "reply", role: "user", content: "回复", quote: { messageId: "source", role: "assistant", content: original } } }] } } as any);
+    expect(rows[0].replyToExcerpt).toBe(original);
+    expect(rows[0].replyToMessageId).toBe("source");
+  });
+  it("引用文件时展示文件名", () => {
+    const rows = useDeviceOwnedConversation().messages({ executionScope: scope, snapshot: { ownerId: "a", resources: [
+      { kind: "message", revision: 1, body: { id: "source", role: "user", content: "[文件]", fileName: "报告.pdf" } },
+      { kind: "message", revision: 1, body: { id: "reply", role: "user", content: "回复", quote: { ownerId: "a", messageId: "source", role: "user", content: "[文件]" } } },
+    ] } } as any);
+    expect(rows.find((message) => message.id === "reply").replyToExcerpt).toBe("[文件] 报告.pdf");
+  });
   it("passes normalized search through every page without filtering message matches by title", async () => {
     const owned = useDeviceOwnedConversation();
     mocks.get.mockResolvedValueOnce({ data: { executionScope: scope, snapshot: { ownerId: "a", resources: [{ kind: "conversation", body: { id: "first", title: "ordinary" } }], nextCursors: { conversation: "search-page" } } } });

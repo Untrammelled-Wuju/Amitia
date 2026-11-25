@@ -1,0 +1,188 @@
+{
+  "schemaVersion": 1,
+  "providerId": "com.amitia/emote/emote-runtime/com.amitia/emote/ai",
+  "cases": [
+    {
+      "name": "macos-device-fully-granted",
+      "profile": {
+        "platform": "macos",
+        "host": "device",
+        "grantedPermissions": [
+          "message.append",
+          "resource.read",
+          "resource.write",
+          "storage.state.read",
+          "storage.state.write",
+          "tool.invoke"
+        ],
+        "contractVersion": "0.1.0"
+      },
+      "decision": "candidate",
+      "candidates": [
+        "com.amitia/emote/emote-runtime/com.amitia/emote/ai"
+      ]
+    },
+    {
+      "name": "windows-device-fully-granted",
+      "profile": {
+        "platform": "windows",
+        "host": "device",
+        "grantedPermissions": [
+          "message.append",
+          "resource.read",
+          "resource.write",
+          "storage.state.read",
+          "storage.state.write",
+          "tool.invoke"
+        ],
+        "contractVersion": "0.2.5"
+      },
+      "decision": "candidate",
+      "candidates": [
+        "com.amitia/emote/emote-runtime/com.amitia/emote/ai"
+      ]
+    },
+    {
+      "name": "android-device-higher-contract",
+      "profile": {
+        "platform": "android",
+        "host": "device",
+        "grantedPermissions": [
+          "message.append",
+          "resource.read",
+          "resource.write",
+          "storage.state.read",
+          "storage.state.write",
+          "tool.invoke"
+        ],
+        "contractVersion": "9.9.9"
+      },
+      "decision": "candidate",
+      "candidates": [
+        "com.amitia/emote/emote-runtime/com.amitia/emote/ai"
+      ]
+    },
+    {
+      "name": "ios-device-placement-mismatch",
+      "profile": {
+        "platform": "ios",
+        "host": "core",
+        "grantedPermissions": [
+          "message.append",
+          "resource.read",
+          "resource.write",
+          "storage.state.read",
+          "storage.state.write",
+          "tool.invoke"
+        ],
+        "contractVersion": "0.1.0"
+      },
+      "decision": "rejected",
+      "candidates": [],
+      "gate": "placement",
+      "detail": "placement device does not run on host core"
+    },
+    {
+      "name": "linux-cloud-placement-mismatch",
+      "profile": {
+        "platform": "linux",
+        "host": "cloud",
+        "grantedPermissions": [
+          "message.append",
+          "resource.read",
+          "resource.write",
+          "storage.state.read",
+          "storage.state.write",
+          "tool.invoke"
+        ],
+        "contractVersion": "0.1.0"
+      },
+      "decision": "rejected",
+      "candidates": [],
+      "gate": "placement",
+      "detail": "placement device does not run on host cloud"
+    },
+    {
+      "name": "macos-device-partial-permissions",
+      "profile": {
+        "platform": "macos",
+        "host": "device",
+        "grantedPermissions": [
+          "tool.invoke",
+          "resource.read"
+        ],
+        "contractVersion": "0.1.0"
+      },
+      "decision": "rejected",
+      "candidates": [],
+      "gate": "permission",
+      "detail": "missing required permissions: message.append,resource.write,storage.state.read,storage.state.write"
+    },
+    {
+      "name": "linux-device-no-permissions",
+      "profile": {
+        "platform": "linux",
+        "host": "device",
+        "grantedPermissions": null,
+        "contractVersion": "0.1.0"
+      },
+      "decision": "rejected",
+      "candidates": [],
+      "gate": "permission",
+      "detail": "missing required permissions: message.append,resource.read,resource.write,storage.state.read,storage.state.write,tool.invoke"
+    },
+    {
+      "name": "macos-device-contract-too-low",
+      "profile": {
+        "platform": "macos",
+        "host": "device",
+        "grantedPermissions": [
+          "message.append",
+          "resource.read",
+          "resource.write",
+          "storage.state.read",
+          "storage.state.write",
+          "tool.invoke"
+        ],
+        "contractVersion": "0.0.9"
+      },
+      "decision": "rejected",
+      "candidates": [],
+      "gate": "contractVersion",
+      "detail": "host contract version 0.0.9 is below required 0.1.0"
+    },
+    {
+      "name": "macos-device-contract-missing",
+      "profile": {
+        "platform": "macos",
+        "host": "device",
+        "grantedPermissions": [
+          "message.append",
+          "resource.read",
+          "resource.write",
+          "storage.state.read",
+          "storage.state.write",
+          "tool.invoke"
+        ],
+        "contractVersion": ""
+      },
+      "decision": "rejected",
+      "candidates": [],
+      "gate": "contractVersion",
+      "detail": "host contract version is empty, provider requires 0.1.0"
+    },
+    {
+      "name": "ios-device-permissions-before-contract",
+      "profile": {
+        "platform": "ios",
+        "host": "device",
+        "grantedPermissions": null,
+        "contractVersion": "0.0.1"
+      },
+      "decision": "rejected",
+      "candidates": [],
+      "gate": "permission",
+      "detail": "missing required permissions: message.append,resource.read,resource.write,storage.state.read,storage.state.write,tool.invoke"
+    }
+  ]
+}

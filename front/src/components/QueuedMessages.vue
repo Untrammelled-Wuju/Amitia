@@ -2,7 +2,7 @@
   <section v-if="items.length || error" class="queue" aria-label="排队消息">
     <div v-for="item in items" :key="item.requestId" class="queue-item"
       :class="{ 'is-editing': item.requestId === editingId, 'is-expanded': isExpanded(item.requestId) }"
-      draggable="true" tabindex="0" :aria-label="`${statusLabel(item.status)}：${item.message}`"
+      draggable="true" tabindex="0" role="button" :aria-expanded="isExpanded(item.requestId)" :aria-label="`${statusLabel(item.status)}：${item.message}`"
       @dragstart="startDrag($event, item.requestId)" @dragend="endDrag"
       @dragover.prevent @drop.prevent="drop(item.requestId)"
       @keydown.alt.up.prevent="moveByKey(item.requestId, -1)"
@@ -10,27 +10,21 @@
       @keydown.enter="onRowKey($event, item.requestId)"
       @keydown.space="onRowKey($event, item.requestId)">
       <div class="queue-head" @click="toggleFromRow(item.requestId)">
-        <AmitiaIcon class="queue-icon" :class="`is-${item.status}`" name="timer" />
+        <svg class="queue-icon" :class="`is-${item.status}`" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4v12a3 3 0 0 0 3 3h10M10 6h8M10 11h6M15 16h4M17 16l3 3-3 3" /></svg>
         <span class="queue-text" :class="{ 'has-error': item.error }">{{ item.message }}</span>
         <span v-if="item.status !== 'queued'" class="queue-status" :class="`is-${item.status}`">{{ statusLabel(item.status) }}</span>
         <div class="queue-actions" @click.stop>
           <button type="button" class="queue-steer" :disabled="busy || !canSteer || item.status !== 'queued'"
-            :title="canSteer ? '将消息用于引导当前任务' : '当前没有可引导的任务'" @click="$emit('steer', item.requestId)">引导</button>
+            :title="canSteer ? '将消息用于引导当前任务' : '当前没有可引导的任务'" @click="$emit('steer', item.requestId)"><span aria-hidden="true">↪</span> 引导</button>
+          <button type="button" class="queue-remove" title="删除排队消息" aria-label="删除排队消息"
+            :disabled="busy" @click="$emit('remove', item.requestId)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M10 11v6M14 11v6" /></svg></button>
           <button type="button" class="queue-more" aria-label="排队消息操作" aria-haspopup="menu" title="更多操作"
             @click="openMenu($event, item)">⋯</button>
-          <button type="button" class="queue-remove" title="删除排队消息" aria-label="删除排队消息"
-            :disabled="busy" @click="$emit('remove', item.requestId)">×</button>
         </div>
-        <button type="button" class="queue-expand" :aria-expanded="isExpanded(item.requestId)"
-          :aria-label="isExpanded(item.requestId) ? '收起排队消息详情' : '展开排队消息详情'"
-          :title="isExpanded(item.requestId) ? '收起详情' : '展开详情'"
-          @click.stop="toggle(item.requestId)">
-          <AmitiaIcon name="chevronRight" />
-        </button>
       </div>
       <div class="queue-body">
         <div v-if="item.quote || (item.attachments && item.attachments.length)" class="queue-meta">
-          <span v-if="item.quote" class="queue-tag">引用 {{ item.quote.messageId }}</span>
+          <span v-if="item.quote" class="queue-quote">引用：{{ quoteText(item.quote) }}</span>
           <span v-for="attachment in item.attachments || []" :key="attachment.name" class="queue-tag">{{ attachment.name }}</span>
         </div>
         <details v-if="item.error" class="queue-error" open><summary>查看完整原始错误</summary><pre>{{ item.error }}</pre></details>
@@ -43,15 +37,22 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
 import { openContextMenu } from "@/components/context-menu/contextMenuStore";
-import AmitiaIcon from "./icons/AmitiaIcon.vue";
 import type { QueuedMessage } from "@/composables/useConversationQueue";
 
-const props = defineProps<{ items: QueuedMessage[]; busy: boolean; canSteer: boolean; error: string; editingId?: string }>();
+const props = defineProps<{ items: QueuedMessage[]; messages?: Array<{ id: string; ownerId?: string; content?: string; fileName?: string; attachments?: Array<{ name?: string; kind?: string }> }>; busy: boolean; canSteer: boolean; error: string; editingId?: string }>();
 const emit = defineEmits<{ reorder: [ids: string[]]; remove: [id: string]; steer: [id: string]; edit: [id: string]; openSide: [id: string] }>();
 const dragged = ref("");
 const dragging = ref(false);
 const expandedIds = ref<Set<string>>(new Set());
 const lastStatus = new Map<string, string>();
+
+function quoteText(quote: NonNullable<QueuedMessage["quote"]>) {
+  const source = props.messages?.find((message) => message.id === quote.messageId && message.ownerId === quote.ownerId);
+  if (!source) return "原消息内容不可用";
+  const names = source.fileName || source.attachments?.map((attachment) => attachment.name || `[${attachment.kind || "附件"}]`).join("、") || "";
+  if (names && (!source.content || /^\[(文件|图片|视频|语音)\]$/.test(source.content))) return `${source.content || "[附件]"} ${names}`;
+  return source.content || names || "原消息内容不可用";
+}
 
 watch(
   () => props.items,
@@ -183,16 +184,16 @@ function openMenu(event: MouseEvent, item: QueuedMessage) {
 .queue {
   position: absolute;
   left: 50%;
-  bottom: calc(100% - 2px);
+  bottom: calc(100% - 8px);
   z-index: 4;
-  width: min(760px, calc(100% - 48px));
+  width: min(734px, calc(100% - 72px));
   max-height: min(42vh, 420px);
   overflow-y: auto;
   transform: translateX(-50%);
-  padding: 3px;
+  padding: 3px 5px;
   border: 1px solid var(--composer-border, var(--el-border-color-light));
-  border-radius: 12px;
-  background: var(--composer-bg, var(--el-bg-color));
+  border-radius: 16px 16px 0 0;
+  background: var(--el-fill-color-light, var(--el-bg-color));
   color: var(--text-primary, var(--el-text-color-primary));
   scrollbar-width: thin;
 }
@@ -210,13 +211,13 @@ function openMenu(event: MouseEvent, item: QueuedMessage) {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 32px;
+  min-height: 38px;
   padding: 0 4px 0 9px;
   border-radius: 9px;
 }
 .queue-icon {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   flex: none;
   color: var(--text-secondary, var(--el-text-color-secondary));
 }
@@ -227,7 +228,7 @@ function openMenu(event: MouseEvent, item: QueuedMessage) {
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  font-size: 12.5px;
+  font-size: 14px;
   line-height: 20px;
   color: var(--text-primary, var(--el-text-color-primary));
   text-overflow: ellipsis;
@@ -249,10 +250,7 @@ function openMenu(event: MouseEvent, item: QueuedMessage) {
   display: flex;
   flex: none;
   align-items: center;
-  gap: 1px;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity .12s ease;
+  gap: 2px;
 }
 .queue-item:hover .queue-actions,
 .queue-item:focus-within .queue-actions { opacity: 1; pointer-events: auto; }
@@ -265,33 +263,18 @@ function openMenu(event: MouseEvent, item: QueuedMessage) {
   padding: 3px 6px;
   background: transparent;
   color: var(--text-secondary, var(--el-text-color-secondary));
-  font-size: 11px;
+  font-size: 13px;
   line-height: 16px;
   cursor: pointer;
 }
 .queue-actions button:hover:not(:disabled) { background: var(--el-fill-color); color: var(--text-primary, var(--el-text-color-primary)); }
 .queue-actions button:disabled { opacity: .35; cursor: default; }
 .queue-actions .queue-more { font-size: 13px; letter-spacing: 1px; }
-.queue-expand {
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  flex: none;
-  border: 0;
-  border-radius: 6px;
-  padding: 0;
-  background: transparent;
-  color: var(--text-secondary, var(--el-text-color-secondary));
-  font-size: 12px;
-  cursor: pointer;
-  transition: transform .15s ease, background-color .12s ease;
-}
-.queue-expand:hover { background: var(--el-fill-color); color: var(--text-primary, var(--el-text-color-primary)); }
-.queue-item.is-expanded .queue-expand { transform: rotate(90deg); }
+.queue-remove svg { display: block; width: 16px; height: 16px; }
 .queue-body { display: none; padding: 0 10px 8px 31px; }
 .queue-item.is-expanded .queue-body { display: block; }
 .queue-meta { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+.queue-quote { flex-basis: 100%; color: var(--text-secondary, var(--el-text-color-secondary)); font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .queue-tag {
   max-width: 180px;
   overflow: hidden;

@@ -435,6 +435,7 @@ class _BackupPageState extends ConsumerState<BackupPage> {
       _show('已导入 ${result?['totalImported'] ?? 0} 条记录');
       ref.invalidate(characterListProvider);
       ref.invalidate(conversationListProvider);
+      ref.invalidate(conversationBackupListProvider);
       ref.invalidate(ownedMemoryCountProvider);
     });
   }
@@ -585,7 +586,7 @@ class _BackupPageState extends ConsumerState<BackupPage> {
   @override
   Widget build(BuildContext context) {
     final charactersAsync = ref.watch(characterListProvider);
-    final conversationsAsync = ref.watch(conversationListProvider);
+    final conversationsAsync = ref.watch(conversationBackupListProvider);
     final memoriesAsync = ref.watch(ownedMemoryCountProvider);
 
     return AmitiaScaffold(

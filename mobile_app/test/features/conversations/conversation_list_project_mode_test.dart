@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:amitia_app/core/models/character.dart';
 import 'package:amitia_app/core/models/conversation.dart';
 import 'package:amitia_app/core/models/project.dart';
 import 'package:amitia_app/core/services/providers.dart';
+import 'package:amitia_app/core/services/chat_service.dart';
+import 'package:amitia_app/core/services/device_owned_chat_service.dart';
 import 'package:amitia_app/core/widgets/amitia_misc.dart';
 import 'package:amitia_app/core/widgets/amitia_popup_menu.dart';
 import 'package:amitia_app/core/widgets/main_tab_scaffold.dart';
@@ -15,7 +19,107 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+class _ProjectPagingService extends Fake implements ChatService {
+  final first = Completer<OwnedConversationPage>();
+  final requests = <(String, ConversationListCursor?)>[];
+
+  @override
+  Future<OwnedConversationPage> projectConversationPage(
+    ProjectDto project, {
+    ConversationListCursor? cursor,
+  }) {
+    requests.add((project.id, cursor));
+    if (cursor == null) return first.future;
+    return Future.value((
+      rows: [
+        ConversationDto(id: 'next', projectId: project.id, title: '下一页项目对话'),
+      ],
+      cursor: null,
+    ));
+  }
+}
+
 void main() {
+  testWidgets('项目末尾进入视口才加载下一页并显示到底啦', (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'conversations_project_mode': true,
+    });
+    final service = _ProjectPagingService();
+    final projects = [
+      const ProjectDto(
+        id: 'project-a',
+        name: '测试项目',
+        workspaceId: '',
+        ownerId: 'owner',
+        roleId: 'role',
+      ),
+      const ProjectDto(
+        id: 'project-b',
+        name: '未展开项目',
+        workspaceId: '',
+        ownerId: 'owner',
+        roleId: 'role',
+      ),
+    ];
+    final router = GoRouter(
+      initialLocation: '/conversations',
+      routes: [
+        GoRoute(
+          path: '/conversations',
+          builder: (_, _) => const ConversationListPage(),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          chatServiceProvider.overrideWithValue(service),
+          conversationListProvider.overrideWith((ref) async => []),
+          conversationSidebarProvider.overrideWith(
+            (ref) async => ConversationSidebarDto(projects: projects),
+          ),
+          characterListProvider.overrideWith((ref) async => []),
+          currentSpaceProfileProvider.overrideWith((ref) async => null),
+        ],
+        child: MaterialApp.router(routerConfig: router),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('测试项目'));
+    await tester.pumpAndSettle();
+    expect(find.text('加载中～'), findsOneWidget);
+
+    const cursor = ConversationListCursor('scope', {'cursor': 'next'});
+    service.first.complete((
+      rows: List.generate(
+        24,
+        (index) => ConversationDto(
+          id: 'chat-$index',
+          projectId: 'project-a',
+          title: '已加载对话 $index',
+          updatedAt: '2026-01-01',
+        ),
+      ),
+      cursor: cursor,
+    ));
+    await tester.pumpAndSettle();
+    expect(service.requests, [('project-a', null)]);
+    await tester.scrollUntilVisible(
+      find.text('到底啦～'),
+      420,
+      maxScrolls: 20,
+      scrollable: find.descendant(
+        of: find.byKey(const ValueKey('project-conversation-list')),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(service.requests, [('project-a', null), ('project-a', cursor)]);
+    expect(find.text('下一页项目对话'), findsOneWidget);
+    expect(tester.widget<Text>(find.text('到底啦～')).textAlign, TextAlign.center);
+  });
+
   testWidgets('主导航中返回优先退出多选', (tester) async {
     var exitCalls = 0;
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(

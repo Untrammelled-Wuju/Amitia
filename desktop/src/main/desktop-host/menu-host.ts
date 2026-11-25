@@ -1,7 +1,7 @@
 import {
-  app,
   BrowserWindow,
   Menu,
+  MenuItem,
   type MenuItemConstructorOptions,
 } from "electron";
 import type { DesktopActionBridge } from "./action-bridge";
@@ -13,59 +13,23 @@ const ROOT_MENU_ORDER = ["file", "edit", "view", "tools", "help"] as const;
 export class MenuHost {
   private readonly mainWindow: BrowserWindow;
   private readonly actionBridge: DesktopActionBridge;
+  private readonly nativeMenu: Menu | null;
   private currentMenu: Menu | null = null;
-  private isFocused = false;
-  private focusHandler: (() => void) | null = null;
-  private blurHandler: (() => void) | null = null;
 
   constructor(mainWindow: BrowserWindow, actionBridge: DesktopActionBridge) {
     this.mainWindow = mainWindow;
     this.actionBridge = actionBridge;
-    this.isFocused = mainWindow.isFocused();
-    this.attachWindowListeners();
+    this.nativeMenu = Menu.getApplicationMenu();
   }
 
   applySnapshot(snapshot: DesktopSnapshot): void {
     this.currentMenu = this.buildMenu(snapshot);
-    if (this.isFocused) {
-      this.applyCurrentMenu();
-    }
+    Menu.setApplicationMenu(this.currentMenu);
   }
 
   cleanup(): void {
-    if (this.focusHandler) {
-      this.mainWindow.removeListener("focus", this.focusHandler);
-      this.focusHandler = null;
-    }
-    if (this.blurHandler) {
-      this.mainWindow.removeListener("blur", this.blurHandler);
-      this.blurHandler = null;
-    }
     this.currentMenu = null;
-    Menu.setApplicationMenu(null);
-  }
-
-  private attachWindowListeners(): void {
-    this.focusHandler = () => {
-      this.isFocused = true;
-      this.applyCurrentMenu();
-    };
-    this.blurHandler = () => {
-      this.isFocused = false;
-      this.clearApplicationMenu();
-    };
-    this.mainWindow.on("focus", this.focusHandler);
-    this.mainWindow.on("blur", this.blurHandler);
-  }
-
-  private applyCurrentMenu(): void {
-    if (this.currentMenu) {
-      Menu.setApplicationMenu(this.currentMenu);
-    }
-  }
-
-  private clearApplicationMenu(): void {
-    Menu.setApplicationMenu(null);
+    Menu.setApplicationMenu(this.nativeMenu);
   }
 
   private buildMenu(snapshot: DesktopSnapshot): Menu {
@@ -75,12 +39,16 @@ export class MenuHost {
       const extensionItems = this.buildExtensionMenuItems(
         snapshot.menuTree[`app.menu.${root}.extensions`] ?? [],
       );
-      template.push({
-        label: this.rootLabel(root),
-        submenu: [...hostItems, ...extensionItems],
-      });
+      if (hostItems.length === 0 && extensionItems[0]?.type === "separator") extensionItems.shift();
+      const items = [...hostItems, ...extensionItems];
+      if (items.length > 0) template.push({ label: this.rootLabel(root), submenu: items });
     }
-    return Menu.buildFromTemplate(template);
+    const menu = new Menu();
+    for (const item of this.nativeMenu?.items ?? []) menu.append(item);
+    if (template.length > 0) {
+      menu.append(new MenuItem({ label: "Amitia", submenu: template }));
+    }
+    return menu;
   }
 
   private rootLabel(root: string): string {
@@ -102,36 +70,6 @@ export class MenuHost {
 
   private buildHostMenuItems(root: string): MenuItemConstructorOptions[] {
     switch (root) {
-      case "file":
-        return [
-          {
-            label: "退出 Amitia",
-            accelerator: "CmdOrCtrl+Q",
-            click: () => app.quit(),
-          },
-        ];
-      case "edit":
-        return [
-          { role: "undo", label: "撤销" },
-          { role: "redo", label: "重做" },
-          { type: "separator" },
-          { role: "cut", label: "剪切" },
-          { role: "copy", label: "复制" },
-          { role: "paste", label: "粘贴" },
-          { role: "selectAll", label: "全选" },
-        ];
-      case "view":
-        return [
-          { role: "reload", label: "重载" },
-          { role: "forceReload", label: "强制重载" },
-          { role: "toggleDevTools", label: "开发者工具" },
-          { type: "separator" },
-          { role: "resetZoom", label: "重置缩放" },
-          { role: "zoomIn", label: "放大" },
-          { role: "zoomOut", label: "缩小" },
-          { type: "separator" },
-          { role: "togglefullscreen", label: "全屏" },
-        ];
       case "tools":
         return [
           {

@@ -8,6 +8,7 @@ interface ParsedAccelerator {
   cmd: boolean;
   alt: boolean;
   shift: boolean;
+  cmdOrCtrl: boolean;
 }
 
 interface RegisteredShortcut {
@@ -134,17 +135,10 @@ export class ShortcutHost {
 
   private matches(parsed: ParsedAccelerator, input: Electron.Input): boolean {
     const key = input.key.toLowerCase();
-    if ((input.control || input.meta) && !input.alt && ["a", "c", "v", "x", "z", "y"].includes(key)) {
-      return false;
-    }
     if (parsed.key !== key) return false;
-    const wantCmdOrCtrl = parsed.ctrl && parsed.cmd;
-    if (wantCmdOrCtrl) {
-      if (!input.control && !input.meta) return false;
-    } else {
-      if (parsed.ctrl !== input.control) return false;
-      if (parsed.cmd !== input.meta) return false;
-    }
+    const wantsControl = parsed.ctrl || (parsed.cmdOrCtrl && process.platform !== "darwin");
+    const wantsMeta = parsed.cmd || (parsed.cmdOrCtrl && process.platform === "darwin");
+    if (wantsControl !== input.control || wantsMeta !== input.meta) return false;
     if (parsed.alt !== input.alt) return false;
     if (parsed.shift !== input.shift) return false;
     return true;
@@ -160,12 +154,13 @@ export class ShortcutHost {
       cmd: false,
       alt: false,
       shift: false,
+      cmdOrCtrl: false,
     };
     for (const part of parts) {
       switch (part) {
         case "cmdorctrl":
-          parsed.ctrl = true;
-          parsed.cmd = true;
+        case "commandorcontrol":
+          parsed.cmdOrCtrl = true;
           break;
         case "ctrl":
         case "control":
@@ -173,7 +168,6 @@ export class ShortcutHost {
           break;
         case "cmd":
         case "command":
-        case "commandorcontrol":
           parsed.cmd = true;
           break;
         case "alt":

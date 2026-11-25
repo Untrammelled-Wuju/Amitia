@@ -1,7 +1,9 @@
 import argparse
+import gzip
 import hashlib
 import io
 import json
+import os
 import shutil
 import subprocess
 import tarfile
@@ -9,6 +11,21 @@ import tempfile
 import zipfile
 from pathlib import Path
 
+PACKAGE_FORMAT_VERSION = 2
+COMPRESSION = "gzip"
+GZIP_LEVEL = 9
+REPRODUCIBLE_EPOCH = int(os.environ.get("SOURCE_DATE_EPOCH", "1704067200"))
+
+COMPONENT_ROOTS = (
+    ("runtime.backend", "backend"),
+    ("runtime.node", "node"),
+    ("runtime.qdrant", "qdrant"),
+    ("runtime.plugin-host", "plugin-host"),
+    ("runtime.task-host", "task-host"),
+    ("runtime.surrealdb", "surrealdb"),
+    ("runtime.llama", "llama"),
+)
+SHARED_COMPONENT_ID = "runtime.shared"
 
 def digest(path):
     value = hashlib.sha256()
@@ -26,6 +43,35 @@ def write_json(path, value):
 def copy(source, destination):
     destination.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source, destination)
+
+
+def gzip_compress(source, destination, level=GZIP_LEVEL):
+    with source.open("rb") as reader, destination.open("wb") as writer:
+        with gzip.GzipFile(filename="", mode="wb", fileobj=writer, compresslevel=level, mtime=0) as compressor:
+            shutil.copyfileobj(reader, compressor, 1024 * 1024)
+
+
+def normalize_member(member, mode=None):
+    member.mtime = REPRODUCIBLE_EPOCH
+    member.uid = 0
+    member.gid = 0
+    member.uname = ""
+    member.gname = ""
+    if mode is not None:
+        member.mode = mode
+    return member
+
+
+def write_deterministic_tar(root, members, destination, executable):
+    with tarfile.open(destination, "w", format=tarfile.GNU_FORMAT) as archive:
+        for name in sorted(members):
+            path = root / name
+            info = tarfile.TarInfo(name)
+            info.size = path.stat().st_size
+            info.type = tarfile.REGTYPE
+            normalize_member(info, 0o755 if name in executable else 0o644)
+            with path.open("rb") as stream:
+                archive.addfile(info, stream)
 
 
 def extract_binary(archive, member_name, destination):
@@ -151,7 +197,8 @@ def compress_rootfs(
         ], check=True, capture_output=True)
         ca_certificates_tar = tarfile.open(ca_decompressed, "r:")
 
-        with tarfile.open(source, "r:gz") as archive, tarfile.open(destination, "w:xz", preset=3) as output:
+        raw_destination = destination.with_suffix(".tar")
+        with tarfile.open(source, "r:gz") as archive, tarfile.open(raw_destination, "w", format=tarfile.GNU_FORMAT) as output:
             existing = set()
             ca_bundle_parts = []
             for member in archive:
@@ -160,12 +207,13 @@ def compress_rootfs(
                 if normalized == ca_bundle_path:
                     continue
                 stream = archive.extractfile(member) if member.isfile() else None
-                output.addfile(member, stream)
+                output.addfile(normalize_member(member), stream)
             for name in required_dirs:
                 if name not in existing:
                     member = tarfile.TarInfo(name)
                     member.type = tarfile.DIRTYPE
                     member.mode = 0o755
+                    normalize_member(member)
                     output.addfile(member)
             required_library_members = {
                 "usr/lib/aarch64-linux-gnu/libatomic.so.1",
@@ -183,6 +231,7 @@ def compress_rootfs(
                     info.mode = member.mode
                     info.type = member.type
                     info.linkname = member.linkname
+                    normalize_member(info)
                     if member.isfile():
                         data = library_tar.extractfile(member).read()
                         info.size = len(data)
@@ -212,6 +261,7 @@ def compress_rootfs(
                 info.mode = member.mode
                 info.type = member.type
                 info.linkname = member.linkname
+                normalize_member(info)
                 if data is not None:
                     info.size = len(data)
                     output.addfile(info, io.BytesIO(data))
@@ -224,7 +274,10 @@ def compress_rootfs(
             info = tarfile.TarInfo(ca_bundle_path)
             info.mode = 0o644
             info.size = len(ca_bundle)
+            normalize_member(info)
             output.addfile(info, io.BytesIO(ca_bundle))
+        gzip_compress(raw_destination, destination)
+        raw_destination.unlink()
     finally:
         for library_tar in library_tars:
             library_tar.close()
@@ -233,7 +286,7 @@ def compress_rootfs(
         capture.cleanup()
 
 
-def create_runtime_tar(root, destination):
+def executable_paths(root):
     executable = {
         "backend/amitia-server",
         "node/bin/node",
@@ -245,26 +298,64 @@ def create_runtime_tar(root, destination):
         "scripts/node/amitia-node-probe.sh",
     }
     executable.update(path.relative_to(root).as_posix() for path in (root / "llama").glob("*") if path.is_file() and (path.name == "llama-server" or path.name.endswith(".so")))
-    with tarfile.open(destination, "w:xz", preset=3) as archive:
-        for path in sorted(root.rglob("*")):
-            if not path.is_file():
-                continue
-            name = path.relative_to(root).as_posix()
-            info = archive.gettarinfo(str(path), arcname=name)
-            info.mode = 0o755 if name in executable else 0o644
-            with path.open("rb") as stream:
-                archive.addfile(info, stream)
+    return executable
 
 
-def make_component(name, root, entry, version, path):
+def partition_units(root):
+    files = [path.relative_to(root).as_posix() for path in sorted(root.rglob("*")) if path.is_file()]
+    units = {component_id: [] for component_id, _ in COMPONENT_ROOTS}
+    units[SHARED_COMPONENT_ID] = []
+    for name in files:
+        owner = None
+        for component_id, prefix in COMPONENT_ROOTS:
+            if name == prefix or name.startswith(prefix + "/"):
+                owner = component_id
+                break
+        units[owner or SHARED_COMPONENT_ID].append(name)
+    if sum(len(members) for members in units.values()) != len(files):
+        raise ValueError("component unit partition lost files")
+    for component_id, members in units.items():
+        if not members:
+            raise ValueError(f"empty component unit: {component_id}")
+    return units
+
+
+def create_component_tars(root, destination):
+    executable = executable_paths(root)
+    units = partition_units(root)
+    destination.mkdir(parents=True, exist_ok=True)
+    result = {}
+    for component_id, members in units.items():
+        raw = destination / f"{component_id}.tar"
+        write_deterministic_tar(root, members, raw, executable)
+        compressed = destination / f"{component_id}.tar.gz"
+        gzip_compress(raw, compressed)
+        raw.unlink()
+        result[component_id] = compressed
+    return result
+
+
+def make_component(component_id, root, entry, version, entry_path, archive):
     return {
-        "id": f"runtime.{name}",
+        "id": component_id,
         "root": root,
         "entry": entry,
         "version": version,
         "architecture": "arm64",
-        "sha256": digest(path),
+        "sha256": digest(entry_path),
         "source": "package",
+        "payloadPath": f"payload/components/{archive.name}",
+        "payloadSha256": digest(archive),
+        "payloadSize": archive.stat().st_size,
+    }
+
+
+def make_payload_ref(component_id, archive):
+    return {
+        "id": component_id,
+        "payloadPath": f"payload/components/{archive.name}",
+        "payloadSha256": digest(archive),
+        "payloadSize": archive.stat().st_size,
     }
 
 
@@ -346,8 +437,7 @@ def main():
 
         payload = stage / "payload"
         payload.mkdir()
-        rootfs_tar = payload / "rootfs.tar.xz"
-        runtime_tar = payload / "runtime.tar.xz"
+        rootfs_tar = payload / "rootfs.tar.gz"
         compress_rootfs(
             rootfs_archive,
             rootfs_tar,
@@ -355,29 +445,31 @@ def main():
             node_executable,
             ca_certificates_deb,
         )
-        create_runtime_tar(program, runtime_tar)
+        component_archives = create_component_tars(program, payload / "components")
 
         metadata = stage / "metadata"
         copy(project / "runtime/contracts/guest-layout.json", metadata / "guest-layout.json")
         copy(project / "runtime/contracts/mount-contract.json", metadata / "mount-contract.json")
         copy(project / "THIRD_PARTY_NOTICES.md", stage / "licenses/THIRD_PARTY_NOTICES.md")
         components = [
-            make_component("backend", "backend", "backend/amitia-server", "dev", program / "backend/amitia-server"),
-            make_component("node", "node", "node/bin/node", node_lock["version"], program / "node/bin/node"),
-            make_component("qdrant", "qdrant", "qdrant/bin/qdrant", "1.19.0", program / "qdrant/bin/qdrant"),
-            make_component("plugin-host", "plugin-host", "plugin-host/dist/index.js", "1.0.0", program / "plugin-host/dist/index.js"),
-            make_component("task-host", "task-host", "task-host/dist/index.js", "1.0.0", program / "task-host/dist/index.js"),
-            make_component("surrealdb", "surrealdb", "surrealdb/surreal", "2.3.8", program / "surrealdb/surreal"),
-            make_component("llama", "llama", "llama/llama-server", "b12018", program / "llama/llama-server"),
+            make_component("runtime.backend", "backend", "backend/amitia-server", "dev", program / "backend/amitia-server", component_archives["runtime.backend"]),
+            make_component("runtime.node", "node", "node/bin/node", node_lock["version"], program / "node/bin/node", component_archives["runtime.node"]),
+            make_component("runtime.qdrant", "qdrant", "qdrant/bin/qdrant", "1.19.0", program / "qdrant/bin/qdrant", component_archives["runtime.qdrant"]),
+            make_component("runtime.plugin-host", "plugin-host", "plugin-host/dist/index.js", "1.0.0", program / "plugin-host/dist/index.js", component_archives["runtime.plugin-host"]),
+            make_component("runtime.task-host", "task-host", "task-host/dist/index.js", "1.0.0", program / "task-host/dist/index.js", component_archives["runtime.task-host"]),
+            make_component("runtime.surrealdb", "surrealdb", "surrealdb/surreal", "2.3.8", program / "surrealdb/surreal", component_archives["runtime.surrealdb"]),
+            make_component("runtime.llama", "llama", "llama/llama-server", "b12018", program / "llama/llama-server", component_archives["runtime.llama"]),
         ]
+        shared_ref = make_payload_ref(SHARED_COMPONENT_ID, component_archives[SHARED_COMPONENT_ID])
         write_json(metadata / "component-index.json", {"components": components})
         package_id = "amitia.runtime.android"
         write_json(metadata / "component-lock.json", {
             "runtimeVersion": "1.0.0",
             "packageId": package_id,
-            "components": {component["root"]: {"componentId": component["id"], "version": component["version"], "sha256": component["sha256"]} for component in components},
+            "components": {component["root"]: {"componentId": component["id"], "version": component["version"], "sha256": component["sha256"], "payloadSha256": component["payloadSha256"]} for component in components},
         })
-        files = [rootfs_tar, runtime_tar, metadata / "component-index.json", metadata / "component-lock.json", metadata / "guest-layout.json", metadata / "mount-contract.json", stage / "licenses/THIRD_PARTY_NOTICES.md"]
+        payload_files = [rootfs_tar] + sorted(component_archives.values())
+        files = payload_files + [metadata / "component-index.json", metadata / "component-lock.json", metadata / "guest-layout.json", metadata / "mount-contract.json", stage / "licenses/THIRD_PARTY_NOTICES.md"]
         write_json(metadata / "file-manifest.json", [
             {"path": path.relative_to(stage).as_posix(), "size": path.stat().st_size, "sha256": digest(path)} for path in files
         ])
@@ -385,11 +477,12 @@ def main():
         (metadata / "SHA256SUMS").write_text(
             "".join(f"{digest(path)}  {path.relative_to(stage).as_posix()}\n" for path in files), encoding="utf-8"
         )
-        payloads = [{"id": name, "role": name, "path": f"payload/{name}.tar.xz", "sha256": digest(path), "size": path.stat().st_size} for name, path in (("rootfs", rootfs_tar), ("runtime", runtime_tar))]
+        payloads = [{"id": "rootfs", "role": "rootfs", "path": "payload/rootfs.tar.gz", "sha256": digest(rootfs_tar), "size": rootfs_tar.stat().st_size}]
         meta_refs = [{"role": role, "path": f"metadata/{name}", "sha256": digest(metadata / name), "size": (metadata / name).stat().st_size} for role, name in (("guest-layout", "guest-layout.json"), ("mount-contract", "mount-contract.json"), ("sha256sums", "SHA256SUMS"))]
         write_json(metadata / "package-index.json", {
             "schemaVersion": 1,
-            "packageFormatVersion": 1,
+            "packageFormatVersion": PACKAGE_FORMAT_VERSION,
+            "compression": COMPRESSION,
             "runtimeVersion": "1.0.0",
             "packageId": package_id,
             "sourceRevision": commit,
@@ -398,6 +491,7 @@ def main():
             "payloads": payloads,
             "metadata": meta_refs,
             "components": components,
+            "shared": shared_ref,
         })
         with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_STORED, allowZip64=True) as archive:
             for path in sorted(stage.rglob("*")):

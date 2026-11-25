@@ -141,7 +141,7 @@ class _MainTabScaffoldState extends ConsumerState<MainTabScaffold> {
       ),
     ];
     const providerTabs = <(int, String, String, AmitiaIconGlyph)>[
-      (1, AppRoutes.tasks, '任务', AmitiaIconGlyph.reminder),
+      (1, AppRoutes.tasks, '任务', AmitiaIconGlyph.calendar),
       (2, AppRoutes.memoryHub, '记忆', AmitiaIconGlyph.memory),
       (3, AppRoutes.extensions, '扩展', AmitiaIconGlyph.extensions),
       (4, AppRoutes.me, '我的', AmitiaIconGlyph.profile),

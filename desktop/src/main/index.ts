@@ -1,9 +1,9 @@
-import { app, BrowserWindow, dialog, nativeTheme, shell, Tray } from "electron";
+import { app, dialog, nativeTheme, shell, type BrowserWindow, type Tray } from "electron";
 import { join } from "node:path";
 import { initLogger, closeLogger } from "./logger";
 import { ConfigStore } from "./config-store";
 import { registerIpcHandlers } from "./ipc-handlers";
-import { createMainWindow, revealMainWindow } from "./window";
+import { createMainWindow, revealMainWindow, showMainWindow } from "./window";
 import {
   closeSplashWindow,
   revealSplashWindow,
@@ -224,18 +224,18 @@ const lock = app.requestSingleInstanceLock();
 if (!lock) {
   app.quit();
 } else {
-  app.on("second-instance", () => {
-    if (mainWindow && mainWindowReady && !mainWindow.isDestroyed()) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.show();
-      mainWindow.focus();
-      return;
-    }
+  const activateMainWindow = () => {
     if (!app.isReady() || startupFailureHandled || quitting) {
       return;
     }
+    if (mainWindow && mainWindowReady && !mainWindow.isDestroyed()) {
+      showMainWindow(mainWindow);
+      return;
+    }
     revealSplashWindow();
-  });
+  };
+  app.on("activate", activateMainWindow);
+  app.on("second-instance", activateMainWindow);
 
   void app
     .whenReady()
@@ -273,19 +273,6 @@ if (!lock) {
     closeSplashWindow();
     closeLogger();
     closeUpdateLogger();
-  });
-
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      if (mainWindow) {
-        mainWindow.show();
-      } else {
-        const win = createMainWindow();
-        mainWindow = win;
-        registerRealtimeMediaHandlers(() => win);
-        void revealMainWindow(win);
-      }
-    }
   });
 }
 

@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   resolveUIHostDeviceId: vi.fn(),
   resolveUIClientInfo: vi.fn(),
   getRuntimeConnection: vi.fn(),
+  getDeploymentConfig: vi.fn(),
   loadLastKnownGoodSnapshot: vi.fn(),
   saveLastKnownGoodSnapshot: vi.fn(),
 }));
@@ -36,6 +37,7 @@ vi.mock("@/ui-runtime/clientInfo", () => ({
 
 vi.mock("@/runtime/runtime-adapter", () => ({
   getRuntimeConnection: mocks.getRuntimeConnection,
+  getDeploymentConfig: mocks.getDeploymentConfig,
 }));
 
 vi.mock("@/ui-runtime/snapshotCache", () => ({
@@ -71,6 +73,7 @@ describe("extension snapshot refresh queue", () => {
     mocks.resolveUIHostDeviceId.mockResolvedValue("device");
     mocks.resolveUIClientInfo.mockResolvedValue({ architecture: "arm64", appVersion: "test" });
     mocks.getRuntimeConnection.mockResolvedValue({ apiBaseURL: "http://127.0.0.1:1" });
+    mocks.getDeploymentConfig.mockResolvedValue({ mode: "local" });
     mocks.loadLastKnownGoodSnapshot.mockReturnValue(null);
   });
 

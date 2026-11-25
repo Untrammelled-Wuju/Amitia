@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "scope": [
+    "builtin.core",
+    "plugins-code/*/amitia-extension.json"
+  ],
+  "count": 6,
+  "entries": [
+    {
+      "source": "builtin.core",
+      "providerId": "builtin.core/core/memory.search",
+      "serviceId": "memory.search",
+      "capabilityId": "builtin/core/memory.search",
+      "version": "1.0.0"
+    },
+    {
+      "source": "manifest.providedCapability",
+      "providerId": "com.amitia/emote/ai.provider",
+      "serviceId": "ai",
+      "capabilityId": "com.amitia/emote/ai",
+      "version": "1.0.0"
+    },
+    {
+      "source": "manifest.uiProvider",
+      "providerId": "com.amitia/emote/emote-ui/emote-message-provider.provider",
+      "serviceId": "emote-message-provider",
+      "capabilityId": "com.amitia/emote/emote-ui/emote-message-provider",
+      "version": "1.1.11"
+    },
+    {
+      "source": "manifest.uiProvider",
+      "providerId": "com.amitia/emote/emote-ui/emote-page-provider.provider",
+      "serviceId": "emote-page-provider",
+      "capabilityId": "com.amitia/emote/emote-ui/emote-page-provider",
+      "version": "1.1.11"
+    },
+    {
+      "source": "manifest.uiProvider",
+      "providerId": "com.amitia/emote/emote-ui/emote-routes.provider",
+      "serviceId": "emote-routes",
+      "capabilityId": "com.amitia/emote/emote-ui/emote-routes",
+      "version": "1.1.11"
+    },
+    {
+      "source": "manifest.uiProvider",
+      "providerId": "com.amitia/emote/emote-ui/emote-workspace-sidebar-provider.provider",
+      "serviceId": "emote-workspace-sidebar-provider",
+      "capabilityId": "com.amitia/emote/emote-ui/emote-workspace-sidebar-provider",
+      "version": "1.1.11"
+    }
+  ]
+}

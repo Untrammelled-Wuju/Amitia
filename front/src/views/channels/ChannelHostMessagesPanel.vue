@@ -5,15 +5,15 @@
         <h2>{{ channelLabel }}</h2>
         <p>展示宿主已保存的渠道会话和消息。</p>
       </div>
-      <el-button :loading="loading" @click="loadConversations">刷新</el-button>
+      <el-button :loading="loading" @click="loadConversations()">刷新</el-button>
     </header>
 
-    <el-alert v-if="error" :title="error" type="warning" show-icon :closable="false" />
+    <el-alert v-if="error" type="warning" show-icon :closable="false"><pre class="host-load-error">{{ error }}</pre></el-alert>
 
     <div class="host-message-stats">
-      <div class="host-stat-card"><span>会话数</span><strong>{{ conversations.length }}</strong></div>
+      <div class="host-stat-card"><span>已加载会话</span><strong>{{ conversations.length }}</strong></div>
       <div class="host-stat-card"><span>群聊 / 私聊</span><strong>{{ groupCount }} / {{ privateCount }}</strong></div>
-      <div class="host-stat-card"><span>宿主消息数</span><strong>{{ totalMessages }}</strong></div>
+      <div class="host-stat-card"><span>已加载会话的消息数</span><strong>{{ totalMessages }}</strong></div>
       <div class="host-stat-card"><span>最近活动</span><strong>{{ lastActivity }}</strong></div>
     </div>
 
@@ -33,6 +33,7 @@
           </span>
           <small>{{ conversation.messageCount || 0 }} 条 · {{ conversation.updatedAt || "—" }}</small>
         </button>
+        <ConversationListEnd :enabled="canLoadNext" @reach="loadConversations(true)" />
       </aside>
       <div class="host-message-pane">
         <template v-if="selectedConversation">
@@ -59,11 +60,14 @@
         <el-empty v-else description="选择渠道会话查看消息" :image-size="70" />
       </div>
     </div>
-    <el-empty v-else-if="!loading" description="宿主中暂无该渠道的消息" :image-size="72" />
+    <ConversationListEnd v-else-if="listCursor" :enabled="canLoadNext" @reach="loadConversations(true)" />
+    <el-empty v-else-if="!loading && !error" description="宿主中暂无该渠道的消息" :image-size="72" />
   </section>
 </template>
 
 <script setup lang="ts">
+import ConversationListEnd from "@/components/ConversationListEnd.vue";
+import { originalErrorText } from "@/runtime/original-error";
 import { computed, onMounted, ref, watch } from "vue";
 import UIProviderHost from "@/components/ui-runtime/UIProviderHost.vue";
 import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversation";
@@ -149,19 +153,25 @@ function peerKindLabel(conversation: HostConversation): string {
   return "单聊";
 }
 
-async function loadConversations() {
+const listCursor = ref<Awaited<ReturnType<typeof owned.conversationPage>>["cursor"]>();
+const canLoadNext = computed(() => Boolean(listCursor.value) && !loading.value && !error.value && (!singleConversation.value || !conversations.value.length));
+
+async function loadConversations(append = false) {
+  if (append && !canLoadNext.value) return;
+  if (!append) listCursor.value = undefined;
   const ticket = ++generation;
   loading.value = true;
   error.value = "";
   try {
     if (!props.channelId) throw new Error("无法识别当前渠道");
-    if (!await owned.refresh()) throw new Error(owned.notice.value || "设备消息服务尚未就绪");
+    if (!append && !await owned.refresh()) throw new Error(owned.notice.value || "设备消息服务尚未就绪");
     const role = owned.selectInitialRole(localStorage.getItem(`webchat-char-id:${owned.coreId.value}:${owned.roleOwnerId.value}`) || "");
-    const groups = buildChannelConversationGroups(presentations.value, await owned.conversations(role));
+    const page = await owned.conversationPage(role, "", append ? listCursor.value : undefined, { channel: props.channelId });
+    const groups = buildChannelConversationGroups(presentations.value, page.rows);
     if (ticket !== generation) return;
     const group = groups.find((item) => item.channel === props.channelId);
     const items = singleConversation.value ? (group?.items || []).slice(0, 1) : (group?.items || []);
-    conversations.value = items.map((item: Record<string, unknown>) => ({
+    const next = items.map((item: Record<string, unknown>) => ({
       id: String(item.id || ""),
       peerKind: resolvePeerKind(item),
       title: String(item.title || item.displayName || "未命名会话"),
@@ -171,6 +181,10 @@ async function loadConversations() {
       characterId: String(item.characterId || ""),
       channel: String(item.channel || props.channelId),
     }));
+    const rows = new Map((append ? conversations.value : []).map((row) => [row.id, row]));
+    for (const row of next) rows.set(row.id, row);
+    conversations.value = [...rows.values()];
+    listCursor.value = page.cursor;
     if (selectedId.value && !conversations.value.some((item) => item.id === selectedId.value)) {
       selectedId.value = "";
       messages.value = [];
@@ -178,9 +192,7 @@ async function loadConversations() {
     if (!selectedId.value && conversations.value[0]) await selectConversation(conversations.value[0]);
   } catch (cause) {
     if (ticket === generation) {
-      conversations.value = [];
-      messages.value = [];
-      error.value = cause instanceof Error ? cause.message : "宿主消息加载失败";
+      error.value = originalErrorText(cause);
     }
   } finally {
     if (ticket === generation) loading.value = false;
@@ -203,8 +215,13 @@ async function selectConversation(conversation: HostConversation) {
   }
 }
 
-onMounted(loadConversations);
-watch(() => props.channelId, loadConversations);
+onMounted(() => void loadConversations());
+watch(() => props.channelId, () => {
+  conversations.value = [];
+  messages.value = [];
+  selectedId.value = "";
+  void loadConversations();
+});
 </script>
 
 <style scoped>
@@ -217,6 +234,7 @@ watch(() => props.channelId, loadConversations);
 .host-stat-card { display: grid; gap: 7px; padding: 14px; border: 1px solid var(--surface-border); border-radius: var(--ac-radius-md); background: var(--surface-bg); }
 .host-stat-card span { color: var(--text-muted); font-size: var(--ac-font-size-xs); }
 .host-stat-card strong { color: var(--text-primary); font-size: 20px; font-weight: 650; overflow-wrap: anywhere; }
+.host-load-error { white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; max-height: 12rem; overflow-y: auto; }
 .host-message-layout { flex: 1 1 auto; display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr); min-height: 0; border: 1px solid var(--surface-border); border-radius: var(--ac-radius-md); overflow: hidden; background: var(--surface-bg); }
 .host-message-layout--single { grid-template-columns: minmax(0, 1fr); }
 .host-conversation-list { min-height: 0; overflow-y: auto; padding: 8px; border-right: 1px solid var(--surface-border); background: var(--workbench-bg); }
@@ -236,7 +254,8 @@ watch(() => props.channelId, loadConversations);
 @media (max-width: 720px) {
   .host-channel-messages { padding: 14px; }
   .host-message-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .host-message-layout { grid-template-columns: 1fr; }
+  .host-load-error { white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; max-height: 12rem; overflow-y: auto; }
+.host-message-layout { grid-template-columns: 1fr; }
   .host-conversation-list { max-height: 200px; border-right: 0; border-bottom: 1px solid var(--surface-border); }
   .host-message-pane { min-height: 0; }
 }

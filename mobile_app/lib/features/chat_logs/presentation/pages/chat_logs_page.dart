@@ -15,6 +15,8 @@ import '../../../../core/models/project.dart';
 import '../../../../core/errors/original_error.dart';
 import '../../../../core/backend_transport/backend_service_api.dart';
 import '../../../../core/backend_transport/errors/backend_transport_error.dart';
+import '../../../../core/services/chat_service.dart';
+import '../../../../core/services/device_owned_chat_service.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/widgets/amitia_message.dart';
 import '../../../../core/widgets/amitia_misc.dart';
@@ -23,6 +25,7 @@ import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../shared/models/models.dart';
 import '../../../conversation/rendering/assistant_identity.dart';
 import '../../../conversation/rendering/role_switch_divider.dart';
+import '../../../conversations/presentation/widgets/conversation_list_scroll.dart';
 
 class ChatLogsPage extends ConsumerStatefulWidget {
   const ChatLogsPage({super.key});
@@ -33,6 +36,8 @@ class ChatLogsPage extends ConsumerStatefulWidget {
 
 class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
   List<ConversationDto> _conversations = const [];
+  ConversationPage? _page;
+  final _scroll = ScrollController();
   List<ProjectDto> _projects = const [];
   bool _loading = true;
   String _error = '';
@@ -56,6 +61,7 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
   @override
   void dispose() {
     _searchTimer?.cancel();
+    _scroll.dispose();
     _searchController.removeListener(_scheduleSearch);
     _searchController.dispose();
     super.dispose();
@@ -63,7 +69,9 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
 
   Future<void> _loadFilters() async {
     try {
-      final sidebar = await ref.read(chatServiceProvider).conversationSidebar();
+      final sidebar = await ref
+          .read(chatServiceProvider)
+          .conversationSidebar(const []);
       if (!mounted) return;
       setState(() => _projects = sidebar.projects);
     } catch (error, stackTrace) {
@@ -72,9 +80,14 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
   }
 
   void _scheduleSearch() {
-    if (mounted) setState(() {});
+    _loadRequest++;
+    if (mounted)
+      setState(() {
+        _page = null;
+        _loading = true;
+      });
     _searchTimer?.cancel();
-    _searchTimer = Timer(const Duration(milliseconds: 280), _load);
+    _searchTimer = Timer(const Duration(milliseconds: 280), () => _load());
   }
 
   Widget _buildFilters(BuildContext context) {
@@ -133,29 +146,54 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
     );
   }
 
-  Future<void> _load() async {
-    if (_batchBusy) return;
+  Future<void> _load({bool append = false}) async {
+    final previous = append ? _page : null;
+    if (_batchBusy ||
+        append &&
+            (_loading ||
+                _error.isNotEmpty ||
+                previous == null ||
+                previous.cursors.isEmpty))
+      return;
     final ticket = ++_loadRequest;
     final projectId = _projectFilter;
     final keyword = _searchController.text;
     setState(() {
       _loading = true;
       _error = '';
+      if (!append) _page = null;
     });
     try {
-      final conversations = await ref
+      final page = await ref
           .read(chatServiceProvider)
-          .archivedConversations(projectId: projectId, keyword: keyword);
+          .conversationPage(
+            keyword: keyword,
+            selectedRoleOnly: true,
+            filter: ConversationListFilter(
+              archive: 'archived',
+              projectId: projectId,
+            ),
+            cursors: previous?.cursors,
+          );
+      final conversations = {
+        for (final row in append ? _conversations : const <ConversationDto>[])
+          row.id: row,
+        for (final row in page.rows)
+          if (row.archivedAt.isNotEmpty &&
+              (projectId.isEmpty || row.projectId == projectId))
+            row.id: row,
+      }.values.toList();
       if (!mounted || ticket != _loadRequest) return;
       setState(() {
         _conversations = conversations;
+        _page = page;
         _selected.removeWhere(
           (id) => !conversations.any((row) => row.id == id),
         );
       });
-    } catch (error) {
+    } catch (error, stackTrace) {
       if (!mounted || ticket != _loadRequest) return;
-      setState(() => _error = error.toString());
+      setState(() => _error = '$error\n$stackTrace');
     } finally {
       if (mounted && ticket == _loadRequest) setState(() => _loading = false);
     }
@@ -374,118 +412,134 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
               ),
             ),
             Expanded(
-              child: RefreshIndicator(
-                onRefresh: _load,
-                child: _loading
-                    ? const Center(child: CircularProgressIndicator())
-                    : _error.isNotEmpty
-                    ? Center(child: Text(_error))
-                    : _conversations.isEmpty
-                    ? Center(
-                        child: Text(
-                          _projectFilter.isNotEmpty ||
-                                  _searchController.text.trim().isNotEmpty
-                              ? '没有匹配的归档对话'
-                              : '暂无归档对话',
-                        ),
-                      )
-                    : ListView.separated(
-                        padding: EdgeInsets.all(AppSpacing.pagePadding),
-                        itemCount: _conversations.length,
-                        separatorBuilder: (_, _) =>
-                            SizedBox(height: AppSpacing.sm),
-                        itemBuilder: (context, index) {
-                          final conversation = _conversations[index];
-                          return Material(
-                            color: context.surfacePrimary,
-                            borderRadius: BorderRadius.circular(12),
-                            child: InkWell(
+              child: ConversationListScroll(
+                controller: _scroll,
+                enabled:
+                    (_page?.cursors.isNotEmpty ?? false) &&
+                    !_loading &&
+                    !_batchBusy &&
+                    _error.isEmpty,
+                onEnd: () => _load(append: true),
+                loading: _loading && _page != null,
+                error: _error,
+                child: RefreshIndicator(
+                  onRefresh: () => _load(),
+                  child: _loading && _page == null
+                      ? const Center(child: CircularProgressIndicator())
+                      : _conversations.isEmpty &&
+                            !(_page?.cursors.isNotEmpty ?? false) &&
+                            _error.isEmpty
+                      ? Center(
+                          child: Text(
+                            _projectFilter.isNotEmpty ||
+                                    _searchController.text.trim().isNotEmpty
+                                ? '没有匹配的归档对话'
+                                : '暂无归档对话',
+                          ),
+                        )
+                      : ListView.separated(
+                          controller: _scroll,
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: EdgeInsets.all(AppSpacing.pagePadding),
+                          itemCount: _conversations.length,
+                          separatorBuilder: (_, _) =>
+                              SizedBox(height: AppSpacing.sm),
+                          itemBuilder: (context, index) {
+                            final conversation = _conversations[index];
+                            return Material(
+                              color: context.surfacePrimary,
                               borderRadius: BorderRadius.circular(12),
-                              onTap: _batchBusy
-                                  ? null
-                                  : () => _selecting
-                                        ? _toggleSelected(conversation.id)
-                                        : Navigator.of(context).push(
-                                            amitiaSlideRoute<void>(
-                                              builder: (_) =>
-                                                  ArchivedConversationDetailPage(
-                                                    conversation: conversation,
-                                                    projectName: _projectName(
-                                                      conversation.projectId,
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(12),
+                                onTap: _batchBusy
+                                    ? null
+                                    : () => _selecting
+                                          ? _toggleSelected(conversation.id)
+                                          : Navigator.of(context).push(
+                                              amitiaSlideRoute<void>(
+                                                builder: (_) =>
+                                                    ArchivedConversationDetailPage(
+                                                      conversation:
+                                                          conversation,
+                                                      projectName: _projectName(
+                                                        conversation.projectId,
+                                                      ),
                                                     ),
-                                                  ),
+                                              ),
                                             ),
+                                child: Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    14,
+                                    10,
+                                    6,
+                                    10,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      if (_selecting)
+                                        IgnorePointer(
+                                          child: Checkbox(
+                                            value: _selected.contains(
+                                              conversation.id,
+                                            ),
+                                            onChanged: (_) {},
                                           ),
-                              child: Padding(
-                                padding: const EdgeInsets.fromLTRB(
-                                  14,
-                                  10,
-                                  6,
-                                  10,
-                                ),
-                                child: Row(
-                                  children: [
-                                    if (_selecting)
-                                      IgnorePointer(
-                                        child: Checkbox(
-                                          value: _selected.contains(
-                                            conversation.id,
-                                          ),
-                                          onChanged: (_) {},
+                                        ),
+                                      Icon(
+                                        Icons.inventory_2_outlined,
+                                        color: context.textTertiary,
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text(
+                                              _conversationTitle(conversation),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: AppTypography.cardTitle(
+                                                context,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 3),
+                                            Text(
+                                              '${_formatTime(conversation.archivedAt)} · ${conversation.messageCount} 条消息',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: AppTypography.label(
+                                                context,
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
-                                    Icon(
-                                      Icons.inventory_2_outlined,
-                                      color: context.textTertiary,
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Text(
-                                            _conversationTitle(conversation),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: AppTypography.cardTitle(
-                                              context,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 3),
-                                          Text(
-                                            '${_formatTime(conversation.archivedAt)} · ${conversation.messageCount} 条消息',
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: AppTypography.label(context),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    if (!_selecting)
-                                      TextButton(
-                                        onPressed: _restoringId.isEmpty
-                                            ? () => _restore(conversation)
-                                            : null,
-                                        child: _restoringId == conversation.id
-                                            ? const SizedBox(
-                                                width: 16,
-                                                height: 16,
-                                                child:
-                                                    CircularProgressIndicator(
-                                                      strokeWidth: 2,
-                                                    ),
-                                              )
-                                            : const Text('撤销'),
-                                      ),
-                                  ],
+                                      if (!_selecting)
+                                        TextButton(
+                                          onPressed: _restoringId.isEmpty
+                                              ? () => _restore(conversation)
+                                              : null,
+                                          child: _restoringId == conversation.id
+                                              ? const SizedBox(
+                                                  width: 16,
+                                                  height: 16,
+                                                  child:
+                                                      CircularProgressIndicator(
+                                                        strokeWidth: 2,
+                                                      ),
+                                                )
+                                              : const Text('撤销'),
+                                        ),
+                                    ],
+                                  ),
                                 ),
                               ),
-                            ),
-                          );
-                        },
-                      ),
+                            );
+                          },
+                        ),
+                ),
               ),
             ),
           ],

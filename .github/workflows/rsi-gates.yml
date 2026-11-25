@@ -1,0 +1,69 @@
+name: rsi-gates
+
+on:
+  pull_request:
+  push:
+    branches: [main, master, develop]
+    paths:
+      - 'scripts/rsi/**'
+      - 'contracts/**'
+      - 'backend/config/**'
+      - 'backend/cmd/server/**'
+      - 'backend/internal/extension/kernel/**'
+      - 'front/src/router/**'
+      - '.github/workflows/rsi-gates.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rsi-gates-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  evidence-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26.12.1'
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - name: Ensure lsof and sqlite3
+        run: |
+          packages=""
+          command -v lsof >/dev/null 2>&1 || packages="$packages lsof"
+          command -v sqlite3 >/dev/null 2>&1 || packages="$packages sqlite3"
+          if [ -n "$packages" ]; then
+            sudo apt-get update
+            sudo apt-get install -y $packages
+          fi
+      - name: Run evidence gate
+        run: node scripts/rsi/ci-gate.mjs
+      - name: Static feature gate scan
+        run: node scripts/rsi/featuregate-scan.mjs
+      - name: Feature gate disabled/enabled drill
+        run: node scripts/rsi/featuregate-drill.mjs
+      - name: Disabled-state database side-effect guard
+        run: node scripts/rsi/featuregate-sideeffect-guard.mjs
+      - name: Frontend route surface guard
+        run: node scripts/rsi/frontend-route-guard.mjs
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rsi-evidence-${{ github.sha }}
+          path: |
+            artifacts/rsi/ci-*.log
+            artifacts/rsi/ci-evidence-manifest.json
+            artifacts/rsi/m01-s03-featuregate-scan.json
+            artifacts/rsi/m01-s03-featuregate-drill.json
+            artifacts/rsi/m01-s06-offstate-db-guard.json
+            artifacts/rsi/m01-s06-frontend-route-guard.json
+            artifacts/rsi/m01-s0*/runs/*/core.log
+          if-no-files-found: warn

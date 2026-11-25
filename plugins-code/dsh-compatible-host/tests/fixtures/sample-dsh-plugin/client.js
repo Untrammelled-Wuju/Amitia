@@ -4,12 +4,13 @@ window.__ModuleLoader__.load({
     const React = require("react");
     return {
       inject: ["slots"],
-      apply(ctx) {
+      async apply(ctx) {
         ctx.slots.register({
           name: "shell.overlay",
           id: "fixture-overlay",
           order: 10,
         }, () => React.createElement("button", { type: "button", "data-dsh-fixture": "overlay" }, "DSH Fixture"));
+        return await ctx.slots.registerFactory({ name: "conversation.composer" }, () => null);
       },
     };
   },

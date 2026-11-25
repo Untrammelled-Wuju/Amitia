@@ -10,6 +10,8 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/models/conversation.dart';
+import '../../../../core/services/chat_service.dart';
+import '../../../../core/services/device_owned_chat_service.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/ui_runtime/channel_plugin_navigation.dart';
 import '../../../../core/ui_runtime/channel_presentation.dart';
@@ -18,6 +20,7 @@ import '../../../../core/ui_runtime/ui_provider_host.dart';
 import '../../../../core/ui_runtime/ui_runtime_controller.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/compact_empty_state.dart';
+import '../../../conversations/presentation/widgets/conversation_list_scroll.dart';
 
 class ChannelMessagesPage extends ConsumerWidget {
   const ChannelMessagesPage({super.key});
@@ -156,6 +159,9 @@ class _ChannelHostMessagesViewState
     extends ConsumerState<ChannelHostMessagesView> {
   List<ConversationDto> _conversations = const [];
   bool _loading = true;
+  final _scroll = ScrollController();
+  ConversationPage? _page;
+  int _request = 0;
   String _error = '';
 
   @override
@@ -168,31 +174,56 @@ class _ChannelHostMessagesViewState
   void didUpdateWidget(covariant ChannelHostMessagesView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.channelId != widget.channelId) {
+      _conversations = const [];
       _load();
     }
   }
 
-  Future<void> _load() async {
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load({bool append = false}) async {
+    final previous = append ? _page : null;
+    if (append &&
+        (_loading ||
+            _error.isNotEmpty ||
+            previous == null ||
+            previous.cursors.isEmpty))
+      return;
+    final ticket = ++_request;
+    final channelId = widget.channelId;
     setState(() {
       _loading = true;
       _error = '';
+      if (!append) _page = null;
     });
     try {
-      final conversations = await ref
+      final page = await ref
           .read(chatServiceProvider)
-          .channelConversations();
-      if (!mounted) return;
+          .conversationPage(
+            selectedRoleOnly: true,
+            filter: ConversationListFilter(channel: channelId),
+            cursors: previous?.cursors,
+          );
+      if (!mounted || ticket != _request) return;
+      final rows = {
+        for (final row in append ? _conversations : const <ConversationDto>[])
+          row.id: row,
+        for (final row in _filterChannelConversations(page.rows, channelId))
+          row.id: row,
+      };
       setState(() {
-        _conversations = _filterChannelConversations(
-          conversations,
-          widget.channelId,
-        );
+        _conversations = rows.values.toList();
+        _page = page;
       });
-    } catch (error) {
-      if (!mounted) return;
-      setState(() => _error = error.toString());
+    } catch (error, stackTrace) {
+      if (!mounted || ticket != _request) return;
+      setState(() => _error = '$error\n$stackTrace');
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted && ticket == _request) setState(() => _loading = false);
     }
   }
 
@@ -209,11 +240,15 @@ class _ChannelHostMessagesViewState
       widget.channelId,
       singleConversation: presentation?.singleConversation ?? false,
     );
-    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_loading && _page == null)
+      return const Center(child: CircularProgressIndicator());
+    final hasMore =
+        (_page?.cursors.isNotEmpty ?? false) &&
+        (!(presentation?.singleConversation ?? false) || conversations.isEmpty);
     late Widget content;
-    if (_error.isNotEmpty) {
+    if (_error.isNotEmpty && _page == null) {
       if (!_error.contains('没有可用角色')) {
-        content = Center(child: Text(_error));
+        content = SingleChildScrollView(child: SelectableText(_error));
       } else {
         content = ListView(
           padding: EdgeInsets.all(AppSpacing.pagePadding),
@@ -229,61 +264,70 @@ class _ChannelHostMessagesViewState
         );
       }
     } else {
-      content = RefreshIndicator(
-        onRefresh: _load,
-        child: conversations.isEmpty
-            ? ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                children: [
-                  SizedBox(height: AppSpacing.xxl),
-                  const Center(child: Text('暂无渠道消息')),
-                ],
-              )
-            : ListView.separated(
-                padding: EdgeInsets.fromLTRB(
-                  AppSpacing.pagePadding,
-                  0,
-                  AppSpacing.pagePadding,
-                  AppSpacing.xl,
-                ),
-                itemCount: conversations.length,
-                separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
-                itemBuilder: (context, index) {
-                  final conversation = conversations[index];
-                  return ListTile(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    tileColor: context.surfacePrimary,
-                    leading: const Icon(Icons.forum_outlined),
-                    title: Text(
-                      conversation.title.trim().isEmpty
-                          ? _channelLabel(
+      content = ConversationListScroll(
+        controller: _scroll,
+        enabled: hasMore && !_loading && _error.isEmpty,
+        onEnd: () => _load(append: true),
+        loading: _loading,
+        error: _error,
+        child: RefreshIndicator(
+          onRefresh: () => _load(),
+          child: conversations.isEmpty && !hasMore
+              ? ListView(
+                  controller: _scroll,
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  children: [
+                    SizedBox(height: AppSpacing.xxl),
+                    const Center(child: Text('暂无渠道消息')),
+                  ],
+                )
+              : ListView.separated(
+                  controller: _scroll,
+                  padding: EdgeInsets.fromLTRB(
+                    AppSpacing.pagePadding,
+                    0,
+                    AppSpacing.pagePadding,
+                    AppSpacing.xl,
+                  ),
+                  itemCount: conversations.length,
+                  separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
+                  itemBuilder: (context, index) {
+                    final conversation = conversations[index];
+                    return ListTile(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      tileColor: context.surfacePrimary,
+                      leading: const Icon(Icons.forum_outlined),
+                      title: Text(
+                        conversation.title.trim().isEmpty
+                            ? _channelLabel(
+                                conversation.channel,
+                                presentationsByChannel,
+                              )
+                            : conversation.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Text(
+                        '${_channelLabel(conversation.channel, presentationsByChannel)} · ${conversation.messageCount} 条',
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => Navigator.of(context).push(
+                        amitiaSlideRoute<void>(
+                          builder: (_) => ChannelMessageDetailPage(
+                            conversation: conversation,
+                            channelName: _channelLabel(
                               conversation.channel,
                               presentationsByChannel,
-                            )
-                          : conversation.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    subtitle: Text(
-                      '${_channelLabel(conversation.channel, presentationsByChannel)} · ${conversation.messageCount} 条',
-                    ),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => Navigator.of(context).push(
-                      amitiaSlideRoute<void>(
-                        builder: (_) => ChannelMessageDetailPage(
-                          conversation: conversation,
-                          channelName: _channelLabel(
-                            conversation.channel,
-                            presentationsByChannel,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  );
-                },
-              ),
+                    );
+                  },
+                ),
+        ),
       );
     }
     if (widget.showSummary &&
@@ -352,14 +396,17 @@ class _ChannelHostMessagesViewState
             childAspectRatio: 2.35,
             children: [
               _ChannelMetric(
-                label: '会话数',
+                label: '已加载会话',
                 value: conversations.length.toString(),
               ),
               _ChannelMetric(
                 label: '群聊 / 私聊',
                 value: '$groupCount / $privateCount',
               ),
-              _ChannelMetric(label: '宿主消息数', value: totalMessages.toString()),
+              _ChannelMetric(
+                label: '已加载会话的消息数',
+                value: totalMessages.toString(),
+              ),
               _ChannelMetric(
                 label: '最近活动',
                 value: _formatActivity(lastActivity),

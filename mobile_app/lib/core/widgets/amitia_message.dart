@@ -4,6 +4,7 @@ import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'quoted_message_text.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_motion.dart';
 import '../../app/theme/app_spacing.dart';
@@ -236,10 +237,8 @@ class AmitiaMessageBubble extends StatelessWidget {
                         ),
                       ),
                     ),
-                    child: Text(
-                      '引用：${(message.replyToExcerpt ?? '原消息').trim()}',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                    child: QuotedMessageText(
+                      text: '引用：${message.replyToExcerpt ?? '原消息内容不可用'}',
                       style: AppTypography.label(
                         context,
                       ).copyWith(color: context.textSecondary),
@@ -2582,10 +2581,8 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
                                   ),
                                   const SizedBox(width: 7),
                                   Expanded(
-                                    child: Text(
-                                      widget.replyPreview!,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
+                                    child: QuotedMessageText(
+                                      text: widget.replyPreview!,
                                       style: AppTypography.caption(context),
                                     ),
                                   ),

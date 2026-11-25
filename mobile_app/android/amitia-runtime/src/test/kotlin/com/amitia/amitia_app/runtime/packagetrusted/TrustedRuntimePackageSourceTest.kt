@@ -12,7 +12,7 @@ class TrustedRuntimePackageSourceTest {
         val ref = TrustedRuntimePackageSource.createReference(packageFile)
 
         assertEquals("1.0.0", ref.expectedRuntimeVersion)
-        assertEquals("3f061598a5c0b815cdb1d536694d9e251652be13f301fb215f1d1aae0c5f7f57", ref.expectedPackageSha256)
+        assertEquals("0e449a123237d57a90129d6e013de59dcd07531020d7bcb28a51591d39efcb85", ref.expectedPackageSha256)
         assertEquals("linux", ref.expectedGuestOS)
         assertEquals("arm64", ref.expectedArchitecture)
         assertEquals(packageFile, ref.packageFile)
@@ -26,7 +26,7 @@ class TrustedRuntimePackageSourceTest {
     @Test
     fun expectedPackageSha256_returnsStep7Sha() {
         assertEquals(
-            "3f061598a5c0b815cdb1d536694d9e251652be13f301fb215f1d1aae0c5f7f57",
+            "0e449a123237d57a90129d6e013de59dcd07531020d7bcb28a51591d39efcb85",
             TrustedRuntimePackageSource.expectedPackageSha256()
         )
     }
@@ -45,7 +45,7 @@ class TrustedRuntimePackageSourceTest {
     fun constants_matchStep7BuildRecord() {
         assertEquals("1.0.0", TrustedRuntimePackageSource.RUNTIME_VERSION)
         assertEquals(
-            "3f061598a5c0b815cdb1d536694d9e251652be13f301fb215f1d1aae0c5f7f57",
+            "0e449a123237d57a90129d6e013de59dcd07531020d7bcb28a51591d39efcb85",
             TrustedRuntimePackageSource.PACKAGE_SHA256
         )
         assertEquals("linux", TrustedRuntimePackageSource.GUEST_OS)

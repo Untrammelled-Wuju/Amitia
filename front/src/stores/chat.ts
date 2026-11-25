@@ -6,6 +6,7 @@ import type { Message } from "@/types";
 import { apiClient } from "@/composables/useApi";
 import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversation";
 import type { OwnedExecutionScope } from "@/runtime/device-owned-chat";
+import { originalErrorText } from "@/runtime/original-error";
 import { ownedProjectReference } from "@/runtime/owned-project-reference";
 
 export function conversationChannel(value: Record<string, unknown>): string {
@@ -20,6 +21,8 @@ export function conversationChannel(value: Record<string, unknown>): string {
 
 export interface ConversationItem {
   id: string;
+  ownerId?: string;
+  revision?: number;
   projectId: string;
   title: string;
   channel: string;
@@ -94,11 +97,23 @@ export const useChatStore = defineStore("chat", () => {
   const projectIntent = ref<OwnedExecutionScope | null>(null);
   const historicalProjectRoles = ref<Array<{ id: string; name: string }>>([]);
   const historicalProjectRole = ref("");
+  type RolePage = Awaited<ReturnType<typeof owned.conversationPage>>;
+  type ProjectConversationPage = { loading: boolean; loaded: boolean; cursor?: RolePage["cursor"]; error: string };
+  const projectConversationPages = ref<Record<string, ProjectConversationPage>>({});
+  const sidebarHasMore = ref(false);
+  const sidebarLoading = ref(false);
+  let sidebarRole = "";
+  let sidebarPages = new Map<string, RolePage>();
   let sidebarGeneration = 0;
   let sidebarFetch: Promise<void> | null = null;
   watch([owned.coreId, () => owned.policy.value?.providerEpoch, () => owned.policy.value?.coordinated, () => owned.policy.value?.modeRevision, () => owned.policy.value?.permissionRevision], () => {
     sidebarGeneration++;
     sidebarFetch = null;
+    sidebarLoading.value = false;
+    sidebarHasMore.value = false;
+    sidebarPages = new Map();
+    projectConversationPages.value = {};
+    sidebarRole = "";
     projectIntent.value = null;
     historicalProjectRoles.value = [];
     historicalProjectRole.value = "";
@@ -134,32 +149,103 @@ export const useChatStore = defineStore("chat", () => {
     currentConversationId.value = id;
   }
 
-  async function loadSidebar() {
+  function sidebarConversation(value: any): ConversationItem {
+    return {
+      ...value,
+      channel: conversationChannel(value),
+      projectId: value.projectId && value.ownerId ? ownedProjectReference(value.ownerId, value.projectId) : "",
+      source: value.source || "device-mesh",
+      messageCount: value.messageCount || 0,
+    };
+  }
+
+  async function fetchProjectConversationPage(projectId: string) {
+    const project = sidebar.value.projects.find((row) => row.id === projectId);
+    if (!project?.resourceId || !project.roleId || !project.ownerId) return;
+
+    projectConversationPages.value[projectId] ??= { loading: false, loaded: false, error: "" };
+    const state = projectConversationPages.value[projectId];
+    if (state.loading || state.loaded && !state.cursor) return;
+    state.loading = true;
+    state.error = "";
+    try {
+      const page = await owned.conversationPage(project.roleId, "", state.cursor, {
+        archive: "active", channel: "web", projectId: project.resourceId, limit: 36,
+      });
+      if (projectConversationPages.value[projectId] !== state) return;
+      const current = sidebar.value.projects.find((row) => row.id === projectId);
+      if (!current) return;
+      const rows = new Map((state.loaded ? current.conversations : []).map((row) => [row.id, row]));
+      for (const value of page.rows) {
+        if (!value?.id || value.ownerId !== project.ownerId || value.projectId !== project.resourceId) continue;
+        const row = sidebarConversation(value);
+        if (!row.archivedAt && row.channel === "web") rows.set(row.id, row);
+      }
+      current.conversations = [...rows.values()].sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+      current.conversationCount = current.conversations.length;
+      state.loaded = true;
+      state.cursor = page.cursor;
+    } catch (error) {
+      console.error("[original-error]", error);
+      if (projectConversationPages.value[projectId] === state) state.error = originalErrorText(error);
+    } finally {
+      state.loading = false;
+    }
+  }
+
+  async function loadSidebar(append = false) {
     if (!owned.enabled.value && !await owned.refresh()) throw new Error(owned.notice.value || "设备对话服务尚未就绪");
     if (owned.enabled.value) {
       const generation = ++sidebarGeneration;
       const role=owned.selectInitialRole(localStorage.getItem(`webchat-char-id:${owned.coreId.value}:${owned.roleOwnerId.value}`) || "");
-      if (!role) { sidebar.value={pinned:[],recent:[],projects:[],removedProjects:[]};return; }
-      const roleConversations = await Promise.all(owned.roles.value.map(async (item) => ({
-        role: item.id,
-        conversations: await owned.conversations(item.id),
-      })));
-      const conversations = roleConversations.flatMap((item) => item.role === role
-        ? item.conversations
-        : item.conversations.filter((conversation) => conversation.source === "reminder" || conversation.source === "proactive"));
-      const projectPage = await owned.projects(role, historicalProjectRole.value);
+      if (!role) {
+        sidebarPages.clear();
+        projectConversationPages.value = {};
+        sidebarHasMore.value = false;
+        sidebar.value = { pinned: [], recent: [], projects: [], removedProjects: [] };
+        return;
+      }
+      append = append && sidebarRole === role;
+      const source = append ? sidebarPages : new Map<string, RolePage>();
+      const roles = owned.roles.value.filter((item) => !append || source.get(item.id)?.cursor);
+      const [roleConversations, projectPage] = await Promise.all([
+        Promise.all(roles.map(async (item) => ({
+          role: item.id,
+          page: await owned.conversationPage(item.id, "", source.get(item.id)?.cursor, { archive: "active", channel: "web", limit: 36 }),
+        }))),
+        append ? Promise.resolve(null) : owned.projects(role, historicalProjectRole.value),
+      ]);
       if (generation !== sidebarGeneration) return;
-      projectIntent.value = projectPage.executionScope;
-      historicalProjectRoles.value = projectPage.historicalRoles;
-      historicalProjectRole.value = projectPage.selectedHistoricalRole;
+      const pages = new Map(source);
+      for (const { role: roleId, page } of roleConversations) {
+        const rows = new Map(source.get(roleId)?.rows.map((row) => [row.id, row]));
+        for (const row of page.rows) rows.set(row.id, row);
+        pages.set(roleId, { rows: [...rows.values()], cursor: page.cursor });
+      }
+      const conversations = [...pages].flatMap(([roleId, page]) => roleId === role
+        ? page.rows
+        : page.rows.filter((row) => row.source === "reminder" || row.source === "proactive"));
+      sidebarPages = pages;
+      sidebarRole = role;
+      sidebarHasMore.value = [...pages.values()].some((page) => Boolean(page.cursor));
+      if (projectPage) {
+        projectConversationPages.value = {};
+        projectIntent.value = projectPage.executionScope;
+        historicalProjectRoles.value = projectPage.historicalRoles;
+        historicalProjectRole.value = projectPage.selectedHistoricalRole;
+      }
       const rows=new Map<string,ConversationItem>();
       for (const value of conversations) {
         if (!value?.id) continue;
-        const channel=conversationChannel(value as Record<string, unknown>);
-        rows.set(value.id,{...value,channel,projectId:value.projectId && value.ownerId ? ownedProjectReference(value.ownerId, value.projectId) : "",source:value.source || "device-mesh",messageCount:value.messageCount || 0});
+        rows.set(value.id, sidebarConversation(value));
       }
       const visible=[...rows.values()].filter((row)=>!row.archivedAt && row.channel === "web").sort((a,b)=>String(b.updatedAt).localeCompare(String(a.updatedAt)));
-      const projects = projectPage.projects.map((project) => projectRow(project, visible.filter((row) => row.projectId === ownedProjectReference(project.ownerId, project.id))));
+      const projects = projectPage
+        ? projectPage.projects.map((project) => projectRow(project, visible.filter((row) => row.projectId === ownedProjectReference(project.ownerId, project.id))))
+        : [...sidebar.value.projects, ...(sidebar.value.removedProjects || [])].map((project) => ({
+          ...project,
+          conversations: projectConversationPages.value[project.id]?.loaded ? project.conversations : visible.filter((row) => row.projectId === project.id),
+        }));
       const visibleProjects = projects.filter((project) => !project.hiddenAt);
       const removedProjects = projects.filter((project) => project.hiddenAt);
       const projectIds = new Set(projects.map((project) => project.id));
@@ -178,9 +264,18 @@ export const useChatStore = defineStore("chat", () => {
       }
       return sidebarFetch;
     }
-    const task = loadSidebar();
-    const wrapped = task.finally(() => {
-      if (sidebarFetch === wrapped) sidebarFetch = null;
+    return fetchSidebarPage(false);
+  }
+
+  function fetchSidebarPage(append: boolean) {
+    if (sidebarFetch) return sidebarFetch;
+    if (append && !sidebarHasMore.value) return Promise.resolve();
+    sidebarLoading.value = true;
+    const wrapped = loadSidebar(append).finally(() => {
+      if (sidebarFetch === wrapped) {
+        sidebarFetch = null;
+        sidebarLoading.value = false;
+      }
     });
     sidebarFetch = wrapped;
     return wrapped;
@@ -313,6 +408,11 @@ export const useChatStore = defineStore("chat", () => {
     historicalProjectRole,
     ownedProjects: owned.enabled,
     fetchSidebar,
+    fetchSidebarPage,
+    fetchProjectConversationPage,
+    projectConversationPages,
+    sidebarHasMore,
+    sidebarLoading,
     createProject,
     updateProject,
     hideProject,

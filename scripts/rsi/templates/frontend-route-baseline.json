@@ -1,0 +1,793 @@
+{
+  "schemaVersion": 1,
+  "approvedBy": "bootstrap:M01-S06 首次冻结前端路由面（与真实 router 98/98 对齐）",
+  "approvedAt": "2026-11-22T12:49:20.374Z",
+  "digest": "4dbfb237cbb9bfdaadb44b11d22cb96180a81a885b226037771805294da06c84",
+  "routeCount": 98,
+  "routes": [
+    {
+      "path": "/:pathMatch(.*)*",
+      "name": "catchAll",
+      "component": "@/views/NotFoundView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": false
+    },
+    {
+      "path": "/",
+      "name": null,
+      "component": null,
+      "redirect": "/chat",
+      "runtimeCapability": null,
+      "requiresAuth": false
+    },
+    {
+      "path": "/404",
+      "name": "notFound",
+      "component": "@/views/NotFoundView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": false
+    },
+    {
+      "path": "/attention",
+      "name": "attentionCenter",
+      "component": "@/views/attention/AttentionCenterView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/call/:conversationId",
+      "name": "ownedIncomingCall",
+      "component": "@/views/realtime/OwnedIncomingCallView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/channel-center",
+      "name": "channelCenter",
+      "component": "@/views/channels/ChannelHubView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/character/:id/:tab(life-rules|voice|psyche)",
+      "name": "characterTab",
+      "component": "@/views/character/CharacterView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/character/:id",
+      "name": null,
+      "component": null,
+      "redirect": "function",
+      "runtimeCapability": null,
+      "requiresAuth": false
+    },
+    {
+      "path": "/character",
+      "name": "character",
+      "component": "@/views/character/CharacterView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/characters/:id/active-task",
+      "name": null,
+      "component": null,
+      "redirect": "function",
+      "runtimeCapability": null,
+      "requiresAuth": false
+    },
+    {
+      "path": "/characters/teams",
+      "name": "characterTeams",
+      "component": "@/views/character/CharacterTeamsView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/characters",
+      "name": "characterHub",
+      "component": "@/views/SectionLandingView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/chat-import",
+      "name": null,
+      "component": null,
+      "redirect": "/import",
+      "runtimeCapability": null,
+      "requiresAuth": false
+    },
+    {
+      "path": "/chat",
+      "name": "chat",
+      "component": "@/views/web-chat/WebChatView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/continuity/:id",
+      "name": "continuityThread",
+      "component": "@/views/continuity/ContinuityThreadsView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/continuity",
+      "name": "continuity",
+      "component": "@/views/continuity/ContinuityThreadsView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/creative-workshop/character-cards",
+      "name": "characterCardWorkshop",
+      "component": "@/views/character-config/CharacterConfigView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/creative-workshop/pet/installations",
+      "name": "petInstallations",
+      "component": "@/views/creative-workshop/PetInstallationsView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/creative-workshop",
+      "name": "creativeWorkshop",
+      "component": "@/views/SectionLandingView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/decision-viz",
+      "name": "decisionViz",
+      "component": "@/views/decision-viz/DecisionVizView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/developer",
+      "name": null,
+      "component": null,
+      "redirect": "/runtime-debug",
+      "runtimeCapability": null,
+      "requiresAuth": false
+    },
+    {
+      "path": "/episodic",
+      "name": "episodic",
+      "component": "@/views/episodic/EpisodicView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/extension/page/:pageId",
+      "name": "extensionPage",
+      "component": "@/components/extension/ExtensionPageHost.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/extensions",
+      "name": "extensionsHub",
+      "component": "@/views/SectionLandingView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/game-center/plugin",
+      "name": "gamePlugin",
+      "component": "@/views/game-center/GamePluginView.vue",
+      "redirect": null,
+      "runtimeCapability": "gameMode",
+      "requiresAuth": true
+    },
+    {
+      "path": "/game-center",
+      "name": "gameCenter",
+      "component": "@/views/game-center/GameCenterView.vue",
+      "redirect": null,
+      "runtimeCapability": "gameMode",
+      "requiresAuth": true
+    },
+    {
+      "path": "/graph",
+      "name": "graph",
+      "component": "@/views/graph/GraphView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/import",
+      "name": "chatImport",
+      "component": "@/views/chat-import/ChatImportView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/kernel/desktop",
+      "name": "desktopCenter",
+      "component": "@/views/kernel/DesktopCenterView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/kernel/dev-console",
+      "name": "developerConsole",
+      "component": "@/views/kernel/DeveloperConsoleView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/kernel/dev-mode",
+      "name": "devMode",
+      "component": "@/views/kernel/DevModeView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/kernel/events",
+      "name": "eventCenter",
+      "component": "@/views/kernel/EventCenterView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/kernel/hooks",
+      "name": "hookCenter",
+      "component": "@/views/kernel/HookCenterView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/kernel/schedules",
+      "name": "scheduleCenter",
+      "component": "@/views/kernel/ScheduleCenterView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/kernel/tasks",
+      "name": "taskCenter",
+      "component": "@/views/kernel/tasks/TaskCenterView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/kernel/trusted-services",
+      "name": "trustedServices",
+      "component": "@/views/kernel/TrustedServiceView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/kernel/updates",
+      "name": "updateCenter",
+      "component": "@/views/kernel/UpdateCenterView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/kernel/wasm",
+      "name": "wasmRuntime",
+      "component": "@/views/kernel/WasmRuntimeDetailView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/kernel",
+      "name": "kernelCenter",
+      "component": "@/views/kernel/KernelCenterView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/knowledge",
+      "name": "knowledge",
+      "component": "@/views/knowledge/KnowledgeView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/logs",
+      "name": "logs",
+      "component": "@/views/chat-logs/ChatLogsView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/long-running",
+      "name": "longRunning",
+      "component": "@/views/long-running/LongRunningView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/main-panel/:panelId",
+      "name": "mainPanelHost",
+      "component": "@/views/main-panel/MainPanelHostView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/me",
+      "name": null,
+      "component": null,
+      "redirect": "/my-space",
+      "runtimeCapability": null,
+      "requiresAuth": false
+    },
+    {
+      "path": "/memory-hub",
+      "name": null,
+      "component": null,
+      "redirect": "/memory",
+      "runtimeCapability": null,
+      "requiresAuth": false
+    },
+    {
+      "path": "/memory-manager",
+      "name": "memoryManager",
+      "component": "@/views/memory-manager/MemoryManagerView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/memory-timeline",
+      "name": "memoryTimeline",
+      "component": "@/views/memory-timeline/MemoryTimeline.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/memory/episodic",
+      "name": null,
+      "component": null,
+      "redirect": "/episodic",
+      "runtimeCapability": null,
+      "requiresAuth": false
+    },
+    {
+      "path": "/memory/graph",
+      "name": null,
+      "component": null,
+      "redirect": "/graph",
+      "runtimeCapability": null,
+      "requiresAuth": false
+    },
+    {
+      "path": "/memory/knowledge",
+      "name": null,
+      "component": null,
+      "redirect": "/knowledge",
+      "runtimeCapability": null,
+      "requiresAuth": false
+    },
+    {
+      "path": "/memory/profiles",
+      "name": null,
+      "component": null,
+      "redirect": "/profiles",
+      "runtimeCapability": null,
+      "requiresAuth": false
+    },
+    {
+      "path": "/memory/timeline",
+      "name": null,
+      "component": null,
+      "redirect": "/memory-timeline",
+      "runtimeCapability": null,
+      "requiresAuth": false
+    },
+    {
+      "path": "/memory/world-book",
+      "name": null,
+      "component": null,
+      "redirect": "/world-book",
+      "runtimeCapability": null,
+      "requiresAuth": false
+    },
+    {
+      "path": "/memory",
+      "name": "memoryHub",
+      "component": "@/views/SectionLandingView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/my-space/devices",
+      "name": "mySpaceDevices",
+      "component": "@/views/user-settings/MySpaceDevicesView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": false
+    },
+    {
+      "path": "/my-space/identity",
+      "name": "mySpaceIdentity",
+      "component": "@/views/user-settings/SpaceIdentityView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": false
+    },
+    {
+      "path": "/my-space/profile",
+      "name": "mySpaceProfile",
+      "component": "@/views/user-settings/UserSettingsView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": false
+    },
+    {
+      "path": "/my-space/runtime",
+      "name": "mySpaceRuntime",
+      "component": "@/views/user-settings/MySpaceRuntimeView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": false
+    },
+    {
+      "path": "/my-space",
+      "name": null,
+      "component": "@/views/user-settings/MySpaceView.vue",
+      "redirect": "/my-space/profile",
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/onboarding",
+      "name": "onboarding",
+      "component": "../views/onboarding/OnboardingView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": false
+    },
+    {
+      "path": "/privacy",
+      "name": "privacy",
+      "component": "../views/privacy/Privacy.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": false
+    },
+    {
+      "path": "/profiles",
+      "name": "profiles",
+      "component": "@/views/profile/ProfileView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/reminders",
+      "name": "activeTasks",
+      "component": "@/views/tasks/ActiveTasksView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/runtime-debug",
+      "name": "runtimeDebug",
+      "component": "@/views/runtime-debug/RuntimeDebugView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/settings/about",
+      "name": "settingsAbout",
+      "component": "@/views/settings/AboutPanel.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/settings/advanced",
+      "name": "settingsAdvanced",
+      "component": "@/views/settings/AdvancedSystemView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/settings/data-management",
+      "name": "settingsDataManagement",
+      "component": "@/views/settings/DataManagementPanel.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/settings/data",
+      "name": "settingsData",
+      "component": "@/views/dashboard/DataView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/settings/feedback",
+      "name": "settingsFeedback",
+      "component": "@/views/settings/UserFeedbackPanel.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/settings/maintenance",
+      "name": "settingsMaintenance",
+      "component": "@/views/maintenance-diagnostics/MaintenanceDiagnosticsView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/settings/model/asr",
+      "name": "settingsModelAsr",
+      "component": "@/views/model-config/AsrModelConfigView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/settings/model/embedding",
+      "name": "settingsModelEmbedding",
+      "component": "@/views/model-config/VectorModelConfigView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": false
+    },
+    {
+      "path": "/settings/model/imagegen",
+      "name": "settingsModelImageGen",
+      "component": "@/views/model-config/ImageGenModelConfigView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/settings/model/llm",
+      "name": "settingsModelLlm",
+      "component": "@/views/model-config/ModelConfigLlmView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/settings/model/vision",
+      "name": "settingsModelVision",
+      "component": "@/views/model-config/VisionModelConfigView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/settings/model/voice",
+      "name": "settingsModelVoice",
+      "component": "@/views/model-config/VoiceModelConfigView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/settings/model",
+      "name": null,
+      "component": "@/views/model-config/ModelConfigView.vue",
+      "redirect": "/settings/model/llm",
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/settings/notifications",
+      "name": "settingsNotifications",
+      "component": "@/views/settings/NotificationSettingsView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/settings/overview",
+      "name": "settingsOverview",
+      "component": "@/views/dashboard/RunView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/settings/privacy-scan",
+      "name": "settingsPrivacyScan",
+      "component": "@/views/privacy-scan/PrivacyScanView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/settings/privacy",
+      "name": "settingsPrivacy",
+      "component": "@/views/privacy/Privacy.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/settings/prompt-trace",
+      "name": "settingsPromptTrace",
+      "component": "@/views/logs/PromptTraceView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/settings/runtime",
+      "name": "settingsRuntime",
+      "component": "@/views/settings/RuntimePanel.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/settings/safety",
+      "name": "settingsSafety",
+      "component": "@/views/safety-settings/SafetySettingsView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/settings/system-logs",
+      "name": "settingsSystemLogs",
+      "component": "@/views/logs/LogsView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/settings/system",
+      "name": "settingsSystem",
+      "component": "@/views/settings/SystemSettingsPanel.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/settings/temporal",
+      "name": "settingsTemporal",
+      "component": "@/views/settings/TemporalSettingsView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/settings/theme",
+      "name": "settingsTheme",
+      "component": "@/views/settings/ThemeSettingsView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/settings/ui-providers",
+      "name": "settingsUIProviders",
+      "component": "@/views/settings/UIProviderSettingsView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/settings/usage-boundary",
+      "name": "settingsUsageBoundary",
+      "component": "@/views/usage-boundary/UsageBoundary.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/settings",
+      "name": null,
+      "component": "@/views/settings/SettingsView.vue",
+      "redirect": "/settings/system",
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/storage",
+      "name": "storage",
+      "component": "@/views/chat-cleanup/ChatCleanupView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/tasks",
+      "name": "taskHub",
+      "component": "@/views/SectionLandingView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/usage-boundary",
+      "name": "usageBoundary",
+      "component": "../views/usage-boundary/UsageBoundary.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": false
+    },
+    {
+      "path": "/web-access",
+      "name": "webAccess",
+      "component": "../views/WebAccessLoginView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": false
+    },
+    {
+      "path": "/workshop",
+      "name": null,
+      "component": null,
+      "redirect": "/creative-workshop",
+      "runtimeCapability": null,
+      "requiresAuth": false
+    },
+    {
+      "path": "/workspaces",
+      "name": "workspaces",
+      "component": "@/views/workspace/WorkspaceBrowserView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    },
+    {
+      "path": "/world-book",
+      "name": "worldBook",
+      "component": "@/views/world-book/WorldBookView.vue",
+      "redirect": null,
+      "runtimeCapability": null,
+      "requiresAuth": true
+    }
+  ]
+}

@@ -27,6 +27,7 @@ type Config struct {
 	Runtime           RuntimeConfig           `mapstructure:"runtime"`
 	Providers         ProvidersConfig         `mapstructure:"providers"`
 	Components        ComponentsConfig        `mapstructure:"components"`
+	Features          map[string]any          `mapstructure:"features"`
 }
 
 type ProvidersConfig struct {

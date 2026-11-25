@@ -1,5 +1,6 @@
 import 'package:amitia_app/core/models/conversation.dart';
 import 'package:amitia_app/core/services/chat_service.dart';
+import 'package:amitia_app/core/services/device_owned_chat_service.dart';
 import 'package:amitia_app/core/services/extension_service.dart';
 import 'package:amitia_app/core/services/providers.dart';
 import 'package:amitia_app/core/ui_runtime/ui_provider.dart';
@@ -62,15 +63,23 @@ class _Runtime extends UIRuntimeController {
 class _Chat extends Fake implements ChatService {
   final requested = <String>[];
   @override
-  Future<List<ConversationDto>> channelConversations() async => [
-    ConversationDto(
-      id: 'first',
-      title: '当前对话',
-      channel: 'test',
-      messageCount: 1,
-    ),
-    ConversationDto(id: 'other', title: '其他渠道', channel: 'other'),
-  ];
+  Future<ConversationPage> conversationPage({
+    Map<String, ConversationListCursor>? cursors,
+    String keyword = "",
+    bool selectedRoleOnly = false,
+    ConversationListFilter filter = const ConversationListFilter(),
+  }) async => (
+    rows: [
+      ConversationDto(
+        id: 'first',
+        title: '当前对话',
+        channel: 'test',
+        messageCount: 1,
+      ),
+      ConversationDto(id: 'other', title: '其他渠道', channel: 'other'),
+    ],
+    cursors: <String, ConversationListCursor>{},
+  );
   @override
   Future<List<MessageDto>> getMessages(
     String conversationId, {

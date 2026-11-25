@@ -6,10 +6,14 @@ builds can reject stale embedded runtime assets before an APK is produced.
 """
 
 import argparse
+import gzip
 import hashlib
 import json
+import os
+import shutil
 import sys
 import tarfile
+import tempfile
 import zipfile
 
 
@@ -123,6 +127,39 @@ def parse_sha256sums(text: str) -> dict[str, str]:
     return result
 
 
+def materialize_payload(
+    archive: zipfile.ZipFile,
+    entry_path: str,
+    destination: str,
+    format_version: int,
+) -> str:
+    if format_version >= 2:
+        with archive.open(entry_path) as source, open(destination, "wb") as target:
+            with gzip.GzipFile(fileobj=source, mode="rb") as decompressed:
+                shutil.copyfileobj(decompressed, target, 1024 * 1024)
+        return destination
+    with archive.open(entry_path) as source, open(destination, "wb") as target:
+        shutil.copyfileobj(source, target, 1024 * 1024)
+    return destination
+
+
+def scan_runtime_tar(tar_path: str, runtime_names: set[str], errors: list[str]) -> None:
+    with tarfile.open(tar_path, mode="r:*") as runtime:
+        for member in runtime:
+            name = normalize_member_name(member.name)
+            runtime_names.add(name)
+            if member.isfile() and name in ELF_BINARIES:
+                source = runtime.extractfile(member)
+                header = source.read(4) if source else b""
+                if header != b"\x7fELF":
+                    errors.append("invalid ELF binary: " + name)
+            if member.isfile() and name in EXECUTABLE_FILES:
+                if not member.mode & 0o111:
+                    errors.append("required file is not executable: " + name)
+            elif member.isdir() and "/" not in name.rstrip("/") and name in FORBIDDEN_RUNTIME_DIRS:
+                errors.append("runtime root contains mutable directory: " + name)
+
+
 def validate(package_path: str) -> dict[str, object]:
     package_hash = sha256_file(package_path)
     with zipfile.ZipFile(package_path) as archive:
@@ -186,21 +223,39 @@ def validate(package_path: str) -> dict[str, object]:
             raise RuntimeError("package-index payloads must use the Android array schema")
         payloads = {item.get("id"): item for item in payload_items if isinstance(item, dict)}
 
+        format_version = int(package_index.get("packageFormatVersion") or 1)
         sums = parse_sha256sums(archive.read("metadata/SHA256SUMS").decode("utf-8"))
-        for payload_id in ("rootfs", "runtime"):
-            payload = payloads.get(payload_id)
-            if not payload:
-                raise RuntimeError(f"missing payload registration: {payload_id}")
-            path = payload.get("path")
+
+        def verify_payload(registration: object, label: str) -> str:
+            if not isinstance(registration, dict):
+                raise RuntimeError(f"missing payload registration: {label}")
+            path = registration.get("path") or registration.get("payloadPath")
             if not isinstance(path, str) or path not in names:
-                raise RuntimeError(f"payload file missing: {payload_id}")
+                raise RuntimeError(f"payload file missing: {label}")
             actual = sha256_zip_entry(archive, path)
-            expected = str(payload.get("sha256") or "").lower()
+            expected = str(registration.get("payloadSha256") or registration.get("sha256") or "").lower()
+            if not expected:
+                raise RuntimeError(f"payload has no recorded hash: {label}")
+            if actual != expected:
+                raise RuntimeError(f"payload hash mismatch in package-index: {label}")
             sum_expected = sums.get(path) or sums.get("/".join(path.split("/")[:-1]))
-            if expected and actual != expected:
-                raise RuntimeError(f"payload hash mismatch in package-index: {payload_id}")
-            if sum_expected and actual != sum_expected:
-                raise RuntimeError(f"payload hash mismatch in SHA256SUMS: {payload_id}")
+            if not sum_expected:
+                raise RuntimeError(f"payload missing from SHA256SUMS: {label}")
+            if actual != sum_expected:
+                raise RuntimeError(f"payload hash mismatch in SHA256SUMS: {label}")
+            return path
+
+        rootfs_path = verify_payload(payloads.get("rootfs"), "rootfs")
+        runtime_tar_paths: list[str] = []
+        if format_version >= 2:
+            if not isinstance(package_index.get("shared"), dict):
+                raise RuntimeError("package format v2 requires a shared payload registration")
+            for item in package_index.get("components", []):
+                label = str(item.get("id") if isinstance(item, dict) else item)
+                runtime_tar_paths.append(verify_payload(item, label))
+            runtime_tar_paths.append(verify_payload(package_index.get("shared"), "runtime.shared"))
+        else:
+            runtime_tar_paths.append(verify_payload(payloads.get("runtime"), "runtime"))
 
         component_index = json.loads(archive.read("metadata/component-index.json"))
         components = {
@@ -212,53 +267,46 @@ def validate(package_path: str) -> dict[str, object]:
         if missing_components:
             raise RuntimeError("missing runtime components: " + ", ".join(missing_components))
 
-        rootfs_path = payloads["rootfs"]["path"]
-        rootfs_seen: set[str] = set()
-        rootfs_files_seen: set[str] = set()
-        rootfs_errors: list[str] = []
-        with tarfile.open(fileobj=archive.open(rootfs_path), mode="r|xz") as rootfs:
-            for member in rootfs:
-                name = normalize_member_name(member.name)
-                if name in REQUIRED_ROOTFS_FILES:
-                    rootfs_files_seen.add(name)
-                    expected_link = ROOTFS_LIBRARY_LINKS.get(name)
-                    if expected_link:
-                        if not member.issym():
-                            rootfs_errors.append("rootfs library link is not a symlink: " + name)
-                        elif member.linkname != expected_link:
-                            rootfs_errors.append(f"rootfs library link target mismatch: {name} -> {member.linkname}")
-                    if name in ROOTFS_LIBRARY_FILES and not member.isfile():
-                        rootfs_errors.append("rootfs library is not a regular file: " + name)
-                if name in REQUIRED_ROOTFS_EXECUTABLES:
-                    rootfs_seen.add(name)
-                    if not member.isfile():
-                        rootfs_errors.append("rootfs executable is not a regular file: " + name)
-                    elif not member.mode & 0o111:
-                        rootfs_errors.append("rootfs executable is not executable: " + name)
-        for required in sorted(REQUIRED_ROOTFS_EXECUTABLES - rootfs_seen):
-            rootfs_errors.append("rootfs executable is missing: " + required)
-        for required in sorted(REQUIRED_ROOTFS_FILES - rootfs_files_seen):
-            rootfs_errors.append("rootfs library is missing: " + required)
-        if rootfs_errors:
-            raise RuntimeError("; ".join(rootfs_errors))
+        with tempfile.TemporaryDirectory(prefix="amitia-runtime-validate-") as temporary:
+            rootfs_seen: set[str] = set()
+            rootfs_files_seen: set[str] = set()
+            rootfs_errors: list[str] = []
+            rootfs_tar = materialize_payload(
+                archive, rootfs_path, os.path.join(temporary, "rootfs.tar"), format_version
+            )
+            with tarfile.open(rootfs_tar, mode="r:*") as rootfs:
+                for member in rootfs:
+                    name = normalize_member_name(member.name)
+                    if name in REQUIRED_ROOTFS_FILES:
+                        rootfs_files_seen.add(name)
+                        expected_link = ROOTFS_LIBRARY_LINKS.get(name)
+                        if expected_link:
+                            if not member.issym():
+                                rootfs_errors.append("rootfs library link is not a symlink: " + name)
+                            elif member.linkname != expected_link:
+                                rootfs_errors.append(f"rootfs library link target mismatch: {name} -> {member.linkname}")
+                        if name in ROOTFS_LIBRARY_FILES and not member.isfile():
+                            rootfs_errors.append("rootfs library is not a regular file: " + name)
+                    if name in REQUIRED_ROOTFS_EXECUTABLES:
+                        rootfs_seen.add(name)
+                        if not member.isfile():
+                            rootfs_errors.append("rootfs executable is not a regular file: " + name)
+                        elif not member.mode & 0o111:
+                            rootfs_errors.append("rootfs executable is not executable: " + name)
+            for required in sorted(REQUIRED_ROOTFS_EXECUTABLES - rootfs_seen):
+                rootfs_errors.append("rootfs executable is missing: " + required)
+            for required in sorted(REQUIRED_ROOTFS_FILES - rootfs_files_seen):
+                rootfs_errors.append("rootfs library is missing: " + required)
+            if rootfs_errors:
+                raise RuntimeError("; ".join(rootfs_errors))
 
-        runtime_path = payloads["runtime"]["path"]
-        runtime_names: set[str] = set()
-        errors: list[str] = []
-        with tarfile.open(fileobj=archive.open(runtime_path), mode="r|xz") as runtime:
-            for member in runtime:
-                name = normalize_member_name(member.name)
-                runtime_names.add(name)
-                if member.isfile() and name in ELF_BINARIES:
-                    source = runtime.extractfile(member)
-                    header = source.read(4) if source else b""
-                    if header != b"\x7fELF":
-                        errors.append("invalid ELF binary: " + name)
-                if member.isfile() and name in EXECUTABLE_FILES:
-                    if not member.mode & 0o111:
-                        errors.append("required file is not executable: " + name)
-                elif member.isdir() and "/" not in name.rstrip("/") and name in FORBIDDEN_RUNTIME_DIRS:
-                    errors.append("runtime root contains mutable directory: " + name)
+            runtime_names: set[str] = set()
+            errors: list[str] = []
+            for index, runtime_path in enumerate(runtime_tar_paths):
+                runtime_tar = materialize_payload(
+                    archive, runtime_path, os.path.join(temporary, f"runtime-{index}.tar"), format_version
+                )
+                scan_runtime_tar(runtime_tar, runtime_names, errors)
 
         missing_runtime_files = sorted(REQUIRED_RUNTIME_FILES - runtime_names)
         if missing_runtime_files:

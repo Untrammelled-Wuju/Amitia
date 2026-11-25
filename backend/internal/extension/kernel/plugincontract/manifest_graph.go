@@ -6,7 +6,7 @@ func (m Manifest) ResolveServiceGraph() ServiceGraphResolution {
 		moduleRef := ModuleRef{PluginID: m.Plugin.ID, ModuleID: module.ID}
 		for _, offer := range module.Services.Provides {
 			request.Providers = append(request.Providers, ServiceDescriptor{
-				ProviderID:   moduleRef.Key() + "/" + offer.ServiceID,
+				ProviderID:   composeProviderID(moduleRef, offer.ServiceID),
 				Module:       moduleRef,
 				ServiceID:    offer.ServiceID,
 				Version:      offer.Version,

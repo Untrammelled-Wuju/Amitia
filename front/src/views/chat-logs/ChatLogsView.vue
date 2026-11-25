@@ -3,7 +3,7 @@
     <aside class="archive-list">
       <div class="archive-list-header">
         <strong>归档对话</strong>
-        <el-button text :loading="loading" aria-label="刷新归档对话" title="刷新归档对话" @click="loadConversations">
+        <el-button text :loading="loading" aria-label="刷新归档对话" title="刷新归档对话" @click="loadConversations()">
           <el-icon><Refresh /></el-icon>
         </el-button>
       </div>
@@ -13,7 +13,7 @@
           :disabled="batchBusy"
           clearable
           placeholder="全部项目"
-          @change="loadConversations"
+          @change="loadConversations()"
         >
           <el-option
             v-for="project in projects"
@@ -61,7 +61,10 @@
           撤销
         </el-button>
       </div>
-      <el-empty v-if="!loading && conversations.length === 0" description="暂无归档对话" :image-size="60" />
+      <div v-if="listError" role="alert" class="conversation-load-error">{{ listError }}</div>
+      <div v-else-if="loading" role="status">正在加载对话</div>
+      <ConversationListEnd :enabled="Boolean(listCursor) && !loading && !batchBusy && !listError" @reach="loadConversations(true)" />
+      <el-empty v-if="!loading && !listCursor && !listError && conversations.length === 0" description="暂无归档对话" :image-size="60" />
     </aside>
 
     <section class="archive-main">
@@ -131,6 +134,7 @@
 </template>
 
 <script setup lang="ts">
+import ConversationListEnd from "@/components/ConversationListEnd.vue";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { Refresh } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
@@ -182,6 +186,8 @@ const selecting = ref(false);
 const selectedIds = ref<string[]>([]);
 const batchBusy = ref(false);
 const allSelected = computed(() => conversations.value.length > 0 && conversations.value.every((row) => selectedIds.value.includes(row.id)));
+const listError = ref("");
+const listCursor = ref<Awaited<ReturnType<typeof owned.conversationPage>>["cursor"]>();
 const loading = ref(false);
 const messageLoading = ref(false);
 const restoringId = ref("");
@@ -244,7 +250,9 @@ function conversationTitle(conversation: ArchivedConversation) {
 
 function scheduleSearch() {
   if (searchTimer) clearTimeout(searchTimer);
-  searchTimer = setTimeout(loadConversations, 280);
+  listRequest++;
+  listCursor.value = undefined;
+  searchTimer = setTimeout(() => void loadConversations(), 280);
 }
 
 function toggleSelectionMode() { selecting.value = !selecting.value; selectedIds.value = []; }
@@ -302,32 +310,39 @@ async function loadFilters() {
   characters.value = owned.roles.value;
 }
 
-async function loadConversations() {
-  if (batchBusy.value) return;
+async function loadConversations(append = false) {
+  if (batchBusy.value || append && (loading.value || !listCursor.value || listError.value)) return;
   const ticket = ++listRequest;
   const projectId = projectFilter.value;
   const search = keyword.value.trim().toLowerCase();
   loading.value = true;
+  listError.value = "";
+  if (!append) listCursor.value = undefined;
   try {
-    if (!await owned.refresh()) throw new Error(owned.notice.value || "设备对话服务尚未就绪");
+    if (!append && !await owned.refresh()) throw new Error(owned.notice.value || "设备对话服务尚未就绪");
     const role = owned.selectInitialRole(localStorage.getItem(`webchat-char-id:${owned.coreId.value}:${owned.roleOwnerId.value}`) || "");
-    const response = { items: (await owned.conversations(role, search)).filter((row) => row.archivedAt && (!projectId || row.projectId === projectId)) };
+    const page = await owned.conversationPage(role, search, append ? listCursor.value : undefined, { archive: "archived", projectId });
     if (disposed || ticket !== listRequest || projectId !== projectFilter.value || search !== keyword.value.trim().toLowerCase()) return;
-    conversations.value = [...(response?.items || [])].sort((left, right) => {
+    const rows = new Map((append ? conversations.value : []).map((row) => [row.id, row]));
+    for (const row of page.rows) {
+      if (row.archivedAt && (!projectId || row.projectId === projectId)) rows.set(row.id, row);
+    }
+    conversations.value = [...rows.values()].sort((left, right) => {
       const leftTime = Date.parse(left.archivedAt || "");
       const rightTime = Date.parse(right.archivedAt || "");
       const leftOrder = Number.isNaN(leftTime) ? 0 : leftTime;
       const rightOrder = Number.isNaN(rightTime) ? 0 : rightTime;
       return rightOrder - leftOrder;
     });
+    listCursor.value = page.cursor;
     selectedIds.value = selectedIds.value.filter((id) => conversations.value.some((item) => item.id === id));
     if (selectedId.value && !conversations.value.some((item) => item.id === selectedId.value)) {
       selectedId.value = "";
       messageRequest++;
       messages.value = [];
     }
-  } catch (error: any) {
-    if (!disposed && ticket === listRequest) ElMessage.error(error?.message || "归档对话加载失败");
+  } catch (error) {
+    if (!disposed && ticket === listRequest) listError.value = batchErrorText(error);
   } finally {
     if (ticket === listRequest) loading.value = false;
   }
@@ -432,6 +447,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .archive-page { display: grid; grid-template-columns: 300px minmax(0, 1fr); height: 100%; min-height: 0; background: var(--surface-bg); }
+.conversation-load-error { white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
 .archive-list { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; padding: 10px; border-right: 1px solid var(--surface-border); }
 .archive-list-header, .archive-main-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .archive-list-header { min-height: 36px; padding: 0 6px 8px; }

@@ -213,6 +213,13 @@ object AndroidRuntimeModule {
             manifestStore = manifestStore,
             manifestBuilder = manifestBuilder,
             activeRuntimeManager = activeRuntimeManager,
+            installerLog = { message, error ->
+                if (error == null) {
+                    android.util.Log.i("AmitiaRuntime", message)
+                } else {
+                    android.util.Log.e("AmitiaRuntime", message, error)
+                }
+            },
         )
     }
 

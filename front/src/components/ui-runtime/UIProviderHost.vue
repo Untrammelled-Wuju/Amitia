@@ -138,14 +138,15 @@ const navigateProvider = (target: string, type?: string) => {
 
 const surfaceSlotId = computed(() => providerSlotId(props.capability));
 const rootEl = computed(() => activeRef.value?.rootEl ?? activeRef.value?.$el ?? slotBoundaryRef.value?.rootEl ?? slotBoundaryRef.value?.$el ?? null);
-function focus(...args: unknown[]) { return activeRef.value?.focus?.(...args) ?? slotBoundaryRef.value?.focus?.(...args); }
-function setText(...args: unknown[]) { return activeRef.value?.setText?.(...args) ?? slotBoundaryRef.value?.setText?.(...args); }
+function focus(...args: unknown[]) { const target = typeof activeRef.value?.focus === "function" ? activeRef.value : slotBoundaryRef.value; return target?.focus?.(...args); }
+function setText(...args: unknown[]) { const target = typeof activeRef.value?.setText === "function" ? activeRef.value : slotBoundaryRef.value; return target?.setText?.(...args); }
+function getText(...args: unknown[]) { const target = typeof activeRef.value?.getText === "function" ? activeRef.value : slotBoundaryRef.value; return target?.getText?.(...args); }
 function insertText(...args: unknown[]) {
   const target = typeof activeRef.value?.insertText === "function" ? activeRef.value : slotBoundaryRef.value;
   return target?.insertText?.(...args);
 }
-function clear(...args: unknown[]) { return activeRef.value?.clear?.(...args) ?? slotBoundaryRef.value?.clear?.(...args); }
-defineExpose({ rootEl, focus, setText, insertText, clear });
+function clear(...args: unknown[]) { const target = typeof activeRef.value?.clear === "function" ? activeRef.value : slotBoundaryRef.value; return target?.clear?.(...args); }
+defineExpose({ rootEl, focus, setText, getText, insertText, clear });
 
 function advanceFallback(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);

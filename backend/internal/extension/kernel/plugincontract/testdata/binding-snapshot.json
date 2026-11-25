@@ -1,0 +1,117 @@
+{
+  "schemaVersion": 1,
+  "epoch": "boot-1",
+  "revision": 3,
+  "scopeOrder": [
+    "device",
+    "space",
+    "global"
+  ],
+  "bindings": [
+    {
+      "key": {
+        "capabilityId": "memory.search",
+        "spaceId": "space-1",
+        "deviceId": "device-1",
+        "scope": "device"
+      },
+      "providerId": "device.host",
+      "providerInstanceId": "device.host:instance"
+    },
+    {
+      "key": {
+        "capabilityId": "memory.search",
+        "spaceId": "space-1",
+        "scope": "space"
+      },
+      "providerId": "space.host",
+      "providerInstanceId": "space.host:instance"
+    },
+    {
+      "key": {
+        "capabilityId": "memory.search",
+        "scope": "global"
+      },
+      "providerId": "global.host",
+      "providerInstanceId": "global.host:instance"
+    },
+    {
+      "key": {
+        "capabilityId": "memory.delete",
+        "spaceId": "space-1",
+        "deviceId": "device-1",
+        "scope": "device"
+      },
+      "providerId": "device.host",
+      "providerInstanceId": "device.host:instance"
+    },
+    {
+      "key": {
+        "capabilityId": "memory.delete",
+        "spaceId": "space-1",
+        "scope": "space"
+      },
+      "providerId": "space.host",
+      "providerInstanceId": "space.host:instance"
+    }
+  ],
+  "digest": "6c8010e2d1259bd0b85eacd2d398da1c880dc74d6d76ec7d544c753512fbbca0",
+  "resolutions": [
+    {
+      "name": "device-first",
+      "request": {
+        "capabilityId": "memory.search",
+        "spaceId": "space-1",
+        "deviceId": "device-1"
+      },
+      "scope": "device",
+      "providerId": "device.host",
+      "trail": [
+        "device=hit"
+      ]
+    },
+    {
+      "name": "space-fallback",
+      "request": {
+        "capabilityId": "memory.search",
+        "spaceId": "space-1",
+        "deviceId": ""
+      },
+      "scope": "space",
+      "providerId": "space.host",
+      "trail": [
+        "device=skip",
+        "space=hit"
+      ]
+    },
+    {
+      "name": "global-fallback",
+      "request": {
+        "capabilityId": "memory.search",
+        "spaceId": "",
+        "deviceId": ""
+      },
+      "scope": "global",
+      "providerId": "global.host",
+      "trail": [
+        "device=skip",
+        "space=skip",
+        "global=hit"
+      ]
+    },
+    {
+      "name": "second-capability",
+      "request": {
+        "capabilityId": "memory.delete",
+        "spaceId": "space-1",
+        "deviceId": ""
+      },
+      "scope": "space",
+      "providerId": "space.host",
+      "trail": [
+        "device=skip",
+        "space=hit"
+      ]
+    }
+  ]
+}

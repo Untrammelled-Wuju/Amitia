@@ -30,7 +30,19 @@ export interface OwnedProject { id: string; title: string; workspaces: OwnedProj
 interface MeshPolicy { coordinated: boolean; modeRevision: number; providerEpoch: number; permissionRevision: number; selectedRole: string }
 interface MeshResource { kind: string; id: string; roleId: string; ownerId: string; revision: number; deleted: boolean; origin?: string; readOnly?: boolean; body: any; executionScope?: OwnedExecutionScope }
 interface MeshSnapshot { ownerId: string; resources: MeshResource[]; nextCursors?: Record<string, string>; group?: OwnedGroupState | null }
-interface MeshQueryResult { conversationReference?: string; conversationOrigin?: OwnedConversationOrigin; executionScope: OwnedExecutionScope; snapshot: MeshSnapshot; historicalSnapshot?: MeshSnapshot; historicalConversations?: any[]; nextHistoricalListCursor?: string; deliveryFailures?: Array<{ ownerId: string; requestId: string; conversationId?: string; errorCode: string; failedAt: string }> }
+interface MeshQueryResult { conversationReference?: string; conversationOrigin?: OwnedConversationOrigin; executionScope: OwnedExecutionScope; snapshot: MeshSnapshot; historicalSnapshot?: MeshSnapshot; historicalConversations?: any[]; nextHistoricalListCursor?: string; nextCoreCursor?: string; deliveryFailures?: Array<{ ownerId: string; requestId: string; conversationId?: string; errorCode: string; failedAt: string }> }
+
+interface ConversationListOptions {
+  limit?: number;
+  archive?: "active" | "archived";
+  projectId?: string;
+  channel?: string;
+}
+
+interface ConversationListCursor {
+  scope: string;
+  cursors: Record<string, string>;
+}
 
 const enabled = ref(false);
 const roles = ref<MeshRole[]>([]);
@@ -285,21 +297,23 @@ export function useDeviceOwnedConversation() {
 
   const historyKey = (conversationId: string, characterId: string, keyword = "") => JSON.stringify([conversationId, characterId, keyword]);
 
-  async function query(conversationId: string, characterId: string, older = false, keyword = "", requestScope = ""): Promise<MeshQueryResult> {
+  async function query(conversationId: string, characterId: string, older = false, keyword = "", requestScope = "", listPage?: ConversationListCursor, listOptions?: ConversationListOptions): Promise<MeshQueryResult & { nextListPage?: ConversationListCursor }> {
     const origin = parseConversationReference(conversationId);
     const path = "/api/device-mesh/v1/business/conversations" + (conversationId ? `/${encodeURIComponent(origin?.id || conversationId)}` : "");
     const captured = revision;
     const key = historyKey(conversationId, characterId, keyword);
     const ticketKey = requestScope ? `${key}\u0000${requestScope}` : key;
     const ticket = Symbol(ticketKey);
-    historyRequests.set(ticketKey, ticket);
-    if (historyRequests.size > 128) historyRequests.delete(historyRequests.keys().next().value!);
-    const previous = historyPages.get(key);
+    if (!listPage) {
+      historyRequests.set(ticketKey, ticket);
+      if (historyRequests.size > 128) historyRequests.delete(historyRequests.keys().next().value!);
+    }
+    const previous = listPage ?? historyPages.get(key);
     const kind = conversationId ? "message" : "conversation";
     const cursors = older ? previous?.cursors || {} : {};
-    const params = { characterId, ...(keyword ? { keyword } : {}), ...(origin ? { conversationOwnerId: origin.ownerId } : {}), ...(older ? { resourceKind: kind, ...cursors } : {}) };
+    const params = { characterId, ...(keyword ? { keyword } : {}), ...(origin ? { conversationOwnerId: origin.ownerId } : {}), ...(older || listPage ? { resourceKind: kind, ...cursors } : {}), ...(listPage ? { limit: 24, ...listOptions } : {}) };
     const result = unwrap<MeshQueryResult>(await apiClient.get(path, { params }));
-    if (captured !== revision || historyRequests.get(ticketKey) !== ticket) throw new Error("服务状态或加载请求已变化，旧上下文已丢弃");
+    if (captured !== revision || (!listPage && historyRequests.get(ticketKey) !== ticket)) throw new Error("服务状态或加载请求已变化，旧上下文已丢弃");
     const scope = JSON.stringify([result.executionScope.spaceId, result.executionScope.initiatorDeviceId, result.executionScope.targetDeviceId, result.executionScope.coreId, result.executionScope.providerEpoch, result.executionScope.targetProviderEpoch, result.executionScope.coordinated, result.executionScope.modeRevision, result.executionScope.permissionRevision, result.executionScope.targetPermissionRevision, result.executionScope.roleOwnerId, result.executionScope.resourceOwnerId, result.executionScope.roleId, result.executionScope.roleRevision, result.executionScope.conversationRoleId]);
     if (older && previous?.scope !== scope) throw new Error("服务或角色已变化，请重新加载当前对话");
     const next: Record<string, string> = {};
@@ -312,7 +326,9 @@ export function useDeviceOwnedConversation() {
       if (value) next[parameter] = value;
     }
     if (!conversationId && (!older || cursors.historicalListCursor) && result.nextHistoricalListCursor) next.historicalListCursor = result.nextHistoricalListCursor;
-    historyPages.set(key, { scope, cursors: next });
+    if (!conversationId && (!older || cursors.coreCursor) && result.nextCoreCursor) next.coreCursor = result.nextCoreCursor;
+    if (listPage && older && JSON.stringify(cursors) === JSON.stringify(next)) throw new Error("会话分页游标未推进");
+    if (!listPage) historyPages.set(key, { scope, cursors: next });
     if (historyPages.size > 64) {
       const oldest = historyPages.keys().next().value!;
       historyPages.delete(oldest);
@@ -331,11 +347,34 @@ export function useDeviceOwnedConversation() {
         if (summaries.size > 32) summaries.delete(summaries.keys().next().value!);
       }
     }
-    return { ...result, ...(conversationId ? { conversationReference: conversationId } : {}) };
+    return { ...result, ...(conversationId ? { conversationReference: conversationId } : {}), ...(listPage && Object.keys(next).length ? { nextListPage: { scope, cursors: next } } : {}) };
   }
 
   function hasMore(conversationId: string, characterId: string, keyword = ""): boolean {
     return Object.keys(historyPages.get(historyKey(conversationId, characterId, keyword))?.cursors || {}).length > 0;
+  }
+
+  function mergeConversationRows(rows: Map<string, any>, result: MeshQueryResult) {
+    for (const value of result.historicalConversations || []) {
+      if (!value?.id) continue;
+      const row = ownedConversationRow(value, value.ownerId || result.executionScope.targetDeviceId);
+      if (!rows.has(row.id)) rows.set(row.id, row);
+    }
+    for (const snapshot of [result.historicalSnapshot, result.snapshot]) {
+      if (!snapshot) continue;
+      for (const resource of snapshot.resources) {
+        if (resource.kind !== "conversation" || !resource.body?.id) continue;
+        const row = ownedConversationRow(resource.body, snapshot.ownerId);
+        rows.set(row.id, { ...row, revision: resource.revision });
+      }
+    }
+  }
+
+  async function conversationPage(characterId: string, keyword = "", cursor?: ConversationListCursor, options?: ConversationListOptions) {
+    const result = await query("", characterId, Boolean(cursor), keyword.trim().toLowerCase(), "", cursor ?? { scope: "", cursors: {} }, options);
+    const rows = new Map<string, any>();
+    mergeConversationRows(rows, result);
+    return { rows: [...rows.values()], cursor: result.nextListPage };
   }
 
   async function loadConversations(characterId: string, keyword: string): Promise<any[]> {
@@ -343,21 +382,7 @@ export function useDeviceOwnedConversation() {
     const visited = new Set<string>();
     let result = await query("", characterId, false, keyword);
     for (;;) {
-      for (const value of result.historicalConversations || []) {
-        if (value?.id) {
-          const row = ownedConversationRow(value, value.ownerId || result.executionScope.targetDeviceId);
-          if (!rows.has(row.id)) rows.set(row.id, row);
-        }
-      }
-      for (const snapshot of [result.historicalSnapshot, result.snapshot]) {
-        if (!snapshot) continue;
-        for (const value of snapshot.resources.filter((resource) => resource.kind === "conversation").map((resource) => ({ resource, body: resource.body }))) {
-          if (value.body?.id) {
-            const row = ownedConversationRow(value.body, snapshot.ownerId);
-            rows.set(row.id, { ...row, revision: value.resource.revision });
-          }
-        }
-      }
+      mergeConversationRows(rows, result);
       if (!hasMore("", characterId, keyword)) return [...rows.values()];
       const cursor = JSON.stringify(historyPages.get(historyKey("", characterId, keyword))?.cursors);
       if (visited.has(cursor) || rows.size > 32768) throw new Error("会话分页结果无效，请重新加载");
@@ -561,6 +586,13 @@ export function useDeviceOwnedConversation() {
   function messages(result: MeshQueryResult): any[] {
     const resultMessages: any[] = [];
     const seen = new Set<string>();
+    const quoteSources = new Map<string, any>();
+    for (const snapshot of [result.historicalSnapshot, result.snapshot]) {
+      if (!snapshot) continue;
+      for (const resource of snapshot.resources) {
+        if (resource.kind === "message" && resource.body?.id) quoteSources.set(`${snapshot.ownerId}:${resource.body.id}`, resource.body);
+      }
+    }
     for (const snapshot of [result.historicalSnapshot, result.snapshot]) {
       if (!snapshot) continue;
       const rows = snapshot.resources.filter((resource) => resource.kind === "message").map((resource) => ({ ...resource.body, origin: resource.origin, readOnly: resource.readOnly, sourceRevision: resource.readOnly ? null : resource.revision }));
@@ -571,7 +603,11 @@ export function useDeviceOwnedConversation() {
         seen.add(key);
         const attachmentContext = { messageId: String(row.id), conversationId: String(row.conversationId || ""), characterId: String(row.characterId || result.executionScope.roleId), conversationOwnerId: snapshot.ownerId, historicalRoleId: row.characterId ? String(row.characterId) : undefined };
         const files = (Array.isArray(row.attachments) ? row.attachments : []).map((item: any) => ownedAttachmentBlock(item, attachmentContext)).filter((item: any) => !!item);
-        resultMessages.push({ ...row, sourceConversationId: row.conversationId, attachments: files, ...(row.quote ? { replyToMessageId: row.quote.messageId, replyToRole: row.quote.role, replyToExcerpt: String(row.quote.content || "").slice(0, 100) } : {}), ...(result.conversationReference ? { conversationId: result.conversationReference } : {}), content: ownedMessageText(row), imageUrl: ownedImageURL(row.attachments, attachmentContext) || row.imageUrl, audioUrl: ownedAudioURL(row.attachments, attachmentContext) || row.audioUrl, videoUrl: ownedVideoURL(row.attachments, attachmentContext) || row.videoUrl, uiKey: key, ownerId: snapshot.ownerId, executionScope: result.executionScope, status: row.status || "completed" });
+        const quoteContent = String(row.quote?.content || "");
+        const source = row.quote ? quoteSources.get(`${row.quote.ownerId}:${row.quote.messageId}`) : null;
+        const quoteNames = source?.fileName || (Array.isArray(source?.attachments) ? source.attachments.map((attachment: any) => attachment.name).filter(Boolean).join("、") : "");
+        const quoteDisplay = quoteNames && (!quoteContent || /^\[(文件|图片|视频|语音)\]$/.test(quoteContent)) ? `${quoteContent || "[附件]"} ${quoteNames}` : quoteContent;
+        resultMessages.push({ ...row, sourceConversationId: row.conversationId, attachments: files, ...(row.quote ? { replyToMessageId: row.quote.messageId, replyToRole: row.quote.role, replyToExcerpt: quoteDisplay } : {}), ...(result.conversationReference ? { conversationId: result.conversationReference } : {}), content: ownedMessageText(row), imageUrl: ownedImageURL(row.attachments, attachmentContext) || row.imageUrl, audioUrl: ownedAudioURL(row.attachments, attachmentContext) || row.audioUrl, videoUrl: ownedVideoURL(row.attachments, attachmentContext) || row.videoUrl, uiKey: key, ownerId: snapshot.ownerId, executionScope: result.executionScope, status: row.status || "completed" });
       }
     }
 		const failures = (result.deliveryFailures || []).filter((row) => row.ownerId === result.executionScope.resourceOwnerId && ["mesh.owned_resource_version", "mesh.owned_request_conflict"].includes(row.errorCode));
@@ -794,5 +830,5 @@ export function useDeviceOwnedConversation() {
     if (captured !== revision || result.saved !== true || result.project?.id !== `project-${identity}` || result.project?.primaryWorkspaceId !== primaryWorkspaceId || result.executionScope?.requestId !== requestId || authorityStamp(result.executionScope) !== authorityStamp(expected) || result.acknowledgement?.ownerId !== expected.resourceOwnerId || result.acknowledgement?.requestId !== requestId || result.acknowledgement?.versions?.[`project/${result.project.id}`] !== 1 || result.acknowledgement?.versions?.[`checkpoint/project/${requestId}`] !== 1) throw new Error("项目尚未获得数据所有者保存确认");
     return { ...result.project, ownerId: expected.resourceOwnerId, roleId: expected.roleId, readOnly: false, revision: 1, executionScope: result.executionScope } as OwnedProject;
   }
-  return { enabled, roles, coreId, roleOwnerId, policy, notice, refresh, markUnavailable, selectInitialRole, chatScope, query, data, resourcePreview, historicalRoles, projections, hasMore, conversations, allMessages, exportConversation, conversationSummary, editConversationSummary, prepareSummaryGeneration, generateConversationSummary, edit, messages, send, groupState, sendGroup, createGroupConversation, inviteGroupMembers, removeGroupMember, updateGroupSettings, requestGroupReplies, retryGroupDelivery, failedGroupDeliveries, interrupt, stopLocal, previousSummary, projects, createProject };
+  return { enabled, roles, coreId, roleOwnerId, policy, notice, refresh, markUnavailable, selectInitialRole, chatScope, query, data, resourcePreview, historicalRoles, projections, hasMore, conversationPage, conversations, allMessages, exportConversation, conversationSummary, editConversationSummary, prepareSummaryGeneration, generateConversationSummary, edit, messages, send, groupState, sendGroup, createGroupConversation, inviteGroupMembers, removeGroupMember, updateGroupSettings, requestGroupReplies, retryGroupDelivery, failedGroupDeliveries, interrupt, stopLocal, previousSummary, projects, createProject };
 }

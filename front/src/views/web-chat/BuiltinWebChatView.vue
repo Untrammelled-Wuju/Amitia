@@ -61,6 +61,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       :fallback="ChatHeaderBar"
       :context="chatExtensionContext"
       :actions="conversationHostActions"
+      :character-id="characterId"
       :char-name="charName"
       :char-avatar="charAvatar"
       :char-identity="charIdentity"
@@ -72,7 +73,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       :call-active="callActive"
       :has-summary="!!convSummary"
       :is-group="Boolean(group)"
-      :group-members="group?.members?.filter((member) => member.status === 'active') || []"
+      :group-members="headerGroupMembers"
       @clear="handleClear"
       @view-memories="handleViewMemories"
       @toggle-char-picker="showCharPicker = true"
@@ -226,7 +227,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       render-fallback-while-scope-pending
     >
     <div ref="composerRegionRef" class="composer-region" data-amitia-ui="chat.composer">
-      <QueuedMessages :items="queuedMessages" :busy="queueBusy" :can-steer="sending || isSubmitting" :error="queueError"
+      <QueuedMessages :items="queuedMessages" :messages="persistedMessages" :busy="queueBusy" :can-steer="sending || isSubmitting" :error="queueError"
         :editing-id="editingQueue?.requestId || ''"
         @reorder="ids => runQueueAction(() => queue.reorder(ids))"
         @remove="id => runQueueAction(() => queue.remove(id))"
@@ -764,7 +765,7 @@ function handleSetReply(msg: any) {
     sourceRevision: msg.sourceRevision ?? 0,
     fullContent: String(msg.content || ""),
     role: msg.role,
-    content: (msg.content || "").slice(0, 100),
+    content: msg.fileName && (!msg.content || /^\[(文件|图片|视频|语音)\]$/.test(String(msg.content))) ? `${msg.content || "[文件]"} ${msg.fileName}` : String(msg.content || ""),
   };
 }
 
@@ -1117,7 +1118,6 @@ const {
     });
     if (convId.value !== conversationId) return;
     void connectSSE(false);
-    await fetchConversations();
     await chatStore.fetchSidebar();
     syncConversationTitleFromSidebar(conversationId);
   },
@@ -1295,7 +1295,6 @@ async function enqueueQueuedMessage(text: string, attachments: OwnedAttachment[]
 
 const {
   characters,
-  conversations,
   group,
   memories,
   conversationLoading,
@@ -1305,7 +1304,6 @@ const {
   clearGroupConversation,
   handleSwitchChar,
   loadCharacterConversation,
-  fetchConversations,
   handleViewMemories,
   refreshCharacters,
   fetchConvSummary,
@@ -1324,6 +1322,11 @@ const {
 );
 watch(group, (value) => { groupConversation.value = value; }, { immediate: true, flush: "sync" });
 const activeGroupMembers = computed<OwnedGroupMember[]>(() => (group.value?.members || []).filter((member) => member.status === "active").sort((left, right) => left.orderIndex - right.orderIndex));
+const headerGroupMembers = computed(() => activeGroupMembers.value.map((member) => ({
+  ...member,
+  characterAvatar: characters.value.find((role) => role.id === member.characterId)?.avatar || member.characterAvatar,
+})));
+
 const roleModelConfigs = computed(() => {
   const members = activeGroupMembers.value;
   const roleIDs = members.length > 0
@@ -1554,7 +1557,6 @@ watch(
 
 async function handleGroupReplied() {
   await loadCharacterConversation();
-  await fetchConversations();
 }
 
 provideConversationUIContext({

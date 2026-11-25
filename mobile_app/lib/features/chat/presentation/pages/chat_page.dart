@@ -1141,6 +1141,16 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   Widget _buildQueuedMessages() {
     return QueuedMessagesPanel(
       items: _runtime.queuedMessages,
+      quoteText: (quote) {
+        final id = quote['messageId']?.toString() ?? '';
+        final owner = quote['ownerId']?.toString() ?? '';
+        for (final message in _runtime.messages) {
+          if (message.id == id && message.sourceOwnerId == owner) {
+            return _replyExcerpt(message);
+          }
+        }
+        return '原消息内容不可用';
+      },
       busy: _runtime.queueBusy,
       canSteer: _runtime.isGenerating,
       error: _runtime.queueError,
@@ -1861,12 +1871,16 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   }
 
   String _replyExcerpt(ChatMessage message) {
-    final content = message.content.trim();
-    if (content.isNotEmpty) {
-      return content.length <= 120 ? content : '${content.substring(0, 120)}…';
+    final content = message.content;
+    final fileName = (message.fileName ?? '').trim();
+    if (fileName.isNotEmpty && (content.trim().isEmpty || const ['[文件]', '[图片]', '[视频]', '[语音]'].contains(content))) {
+      return '${content.trim().isEmpty ? '[文件]' : content} $fileName';
     }
-    if ((message.fileName ?? '').trim().isNotEmpty) {
-      return message.fileName!.trim();
+    if (content.trim().isNotEmpty) {
+      return content;
+    }
+    if (fileName.isNotEmpty) {
+      return fileName;
     }
     return switch (message.type) {
       MessageType.image => '[图片]',
@@ -3335,8 +3349,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         flowItems[index].key: index + (showHistoryLoader ? 1 : 0),
     };
     final workspaceName = _runtime.workspace?.workspaceName.trim() ?? '';
-    final currentConversationTitle =
-        _runtime.conversationTitle.trim().isNotEmpty
+    final currentConversationTitle = conversationId.isEmpty
+        ? '新对话'
+        : _runtime.conversationTitle.trim().isNotEmpty
         ? _runtime.conversationTitle.trim()
         : _runtime.group?.title.trim().isNotEmpty == true
         ? _runtime.group!.title.trim()
@@ -4212,17 +4227,19 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                   context: {...providerContext, 'surface': 'header-leading'},
                   actions: providerActions,
                 ),
-                extensionLineage: (fallback) => MobileExtensionSlot(
-                  slotId: 'chat.header.lineage',
-                  context: {
-                    ...providerContext,
-                    'surface': 'header-lineage',
-                    'lineageSessionId': conversationId,
-                    'displayTitle': currentConversationTitle,
-                  },
-                  actions: providerActions,
-                  fallback: fallback,
-                ),
+                extensionLineage: (fallback) => conversationId.isEmpty
+                    ? fallback
+                    : MobileExtensionSlot(
+                      slotId: 'chat.header.lineage',
+                      context: {
+                        ...providerContext,
+                        'surface': 'header-lineage',
+                        'lineageSessionId': conversationId,
+                        'displayTitle': currentConversationTitle,
+                      },
+                      actions: providerActions,
+                      fallback: fallback,
+                    ),
                 extensionCorner: MobileExtensionSlot(
                   slotId: 'chat.header.corner',
                   context: {...providerContext, 'surface': 'header-corner'},

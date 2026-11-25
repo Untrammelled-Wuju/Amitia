@@ -1,6 +1,8 @@
 package com.amitia.amitia_app.runtime.install.internal
 
 import com.amitia.amitia_app.runtime.install.ComponentLock
+import com.amitia.amitia_app.runtime.install.ComponentPayload
+import com.amitia.amitia_app.runtime.install.ComponentPayloadRef
 import com.amitia.amitia_app.runtime.install.ComponentRef
 import com.amitia.amitia_app.runtime.install.GuestLayout
 import com.amitia.amitia_app.runtime.install.MountContract
@@ -203,11 +205,54 @@ internal class DefaultPackageVerifier : PackageVerifier {
                 "rootfs payload hash mismatch"
             )
         }
-        if (!verifySha256sum(zip, packageIndex.runtimePayload, sha256sums)) {
+        val runtimePayload = packageIndex.runtimePayload
+        if (runtimePayload != null && !verifySha256sum(zip, runtimePayload, sha256sums)) {
             return PackageVerificationResult.Failure(
                 RuntimeInstallErrorCode.PACKAGE_HASH_MISMATCH,
                 "runtime payload hash mismatch"
             )
+        }
+        if (packageIndex.packageFormatVersion >= 2) {
+            if (packageIndex.components.isEmpty()) {
+                return PackageVerificationResult.Failure(
+                    RuntimeInstallErrorCode.PACKAGE_INVALID,
+                    "package format version ${packageIndex.packageFormatVersion} requires component payloads"
+                )
+            }
+            for (component in packageIndex.components) {
+                val payloadPath = component.payloadPath
+                    ?: return PackageVerificationResult.Failure(
+                        RuntimeInstallErrorCode.PACKAGE_INVALID,
+                        "component ${component.id} has no payload path"
+                    )
+                val payloadSha = component.payloadSha256
+                    ?: return PackageVerificationResult.Failure(
+                        RuntimeInstallErrorCode.PACKAGE_INVALID,
+                        "component ${component.id} has no payload hash"
+                    )
+                if (!payloadSha.matches(Regex(SHA256_PATTERN))) {
+                    return PackageVerificationResult.Failure(
+                        RuntimeInstallErrorCode.PACKAGE_INVALID,
+                        "component ${component.id} payload hash invalid format: $payloadSha"
+                    )
+                }
+                val payloadRef = PayloadRef(payloadPath, payloadSha, component.payloadSize ?: 0L)
+                if (!verifySha256sum(zip, payloadRef, sha256sums)) {
+                    return PackageVerificationResult.Failure(
+                        RuntimeInstallErrorCode.PACKAGE_HASH_MISMATCH,
+                        "component ${component.id} payload hash mismatch"
+                    )
+                }
+            }
+            packageIndex.sharedPayload?.let { shared ->
+                val payloadRef = PayloadRef(shared.path, shared.sha256, shared.size)
+                if (!verifySha256sum(zip, payloadRef, sha256sums)) {
+                    return PackageVerificationResult.Failure(
+                        RuntimeInstallErrorCode.PACKAGE_HASH_MISMATCH,
+                        "shared payload hash mismatch"
+                    )
+                }
+            }
         }
         if (!verifySha256sum(zip, packageIndex.guestLayout, sha256sums)) {
             return PackageVerificationResult.Failure(
@@ -229,17 +274,68 @@ internal class DefaultPackageVerifier : PackageVerifier {
                     RuntimeInstallErrorCode.PACKAGE_READ_FAILED,
                     "failed to extract rootfs payload"
                 )
-            val extractedRuntime = extractZipEntryToFile(zip, packageIndex.runtimePayload.path, tempDir)
-                ?: return PackageVerificationResult.Failure(
-                    RuntimeInstallErrorCode.PACKAGE_READ_FAILED,
-                    "failed to extract runtime payload"
-                )
             val extractedSha256sums = extractZipEntryToFile(zip, packageIndex.sha256sums.path, tempDir)
                 ?: return PackageVerificationResult.Failure(
                     RuntimeInstallErrorCode.PACKAGE_READ_FAILED,
                     "failed to extract SHA256SUMS"
                 )
             val metadataDir = extractedSha256sums.parentFile
+
+            val usesComponentPayloads = packageIndex.packageFormatVersion >= 2
+            var extractedRuntime: File? = null
+            val componentPayloads: List<ComponentPayload>
+            var sharedPayload: ComponentPayload? = null
+            if (usesComponentPayloads) {
+                componentPayloads = packageIndex.components.map { component ->
+                    val payloadPath = component.payloadPath
+                    val payloadSha = component.payloadSha256
+                    if (payloadPath == null || payloadSha == null) {
+                        return PackageVerificationResult.Failure(
+                            RuntimeInstallErrorCode.PACKAGE_INVALID,
+                            "component ${component.id} has no payload reference"
+                        )
+                    }
+                    val file = extractZipEntryToFile(zip, payloadPath, tempDir)
+                        ?: return PackageVerificationResult.Failure(
+                            RuntimeInstallErrorCode.PACKAGE_READ_FAILED,
+                            "failed to extract component payload: ${component.id}"
+                        )
+                    ComponentPayload(
+                        componentId = component.id,
+                        path = payloadPath,
+                        sha256 = payloadSha.lowercase(),
+                        size = component.payloadSize ?: 0L,
+                        file = file,
+                    )
+                }
+                val sharedRef = packageIndex.sharedPayload
+                if (sharedRef != null) {
+                    val file = extractZipEntryToFile(zip, sharedRef.path, tempDir)
+                        ?: return PackageVerificationResult.Failure(
+                            RuntimeInstallErrorCode.PACKAGE_READ_FAILED,
+                            "failed to extract shared payload"
+                        )
+                    sharedPayload = ComponentPayload(
+                        componentId = sharedRef.id,
+                        path = sharedRef.path,
+                        sha256 = sharedRef.sha256.lowercase(),
+                        size = sharedRef.size,
+                        file = file,
+                    )
+                }
+            } else {
+                componentPayloads = emptyList()
+                val legacyRuntimePayload = packageIndex.runtimePayload
+                    ?: return PackageVerificationResult.Failure(
+                        RuntimeInstallErrorCode.PACKAGE_INVALID,
+                        "missing runtime payload"
+                    )
+                extractedRuntime = extractZipEntryToFile(zip, legacyRuntimePayload.path, tempDir)
+                    ?: return PackageVerificationResult.Failure(
+                        RuntimeInstallErrorCode.PACKAGE_READ_FAILED,
+                        "failed to extract runtime payload"
+                    )
+            }
 
             val guestLayout = parseGuestLayoutFromZip(zip, packageIndex.guestLayout.path)
                 ?: return PackageVerificationResult.Failure(
@@ -263,6 +359,9 @@ internal class DefaultPackageVerifier : PackageVerifier {
                 runtimePayloadFile = extractedRuntime,
                 sha256sumsFile = extractedSha256sums,
                 metadataDir = metadataDir,
+                packageFormatVersion = packageIndex.packageFormatVersion,
+                componentPayloads = componentPayloads,
+                sharedPayload = sharedPayload,
             )
 
             return PackageVerificationResult.Success(verified)
@@ -379,7 +478,23 @@ internal class DefaultPackageVerifier : PackageVerifier {
         }
 
         if (rootfsPayload == null) throw IllegalArgumentException("no rootfs payload found")
-        if (runtimePayload == null) throw IllegalArgumentException("no runtime payload found")
+
+        val packageFormatVersion = (extractJsonNumberOrNull(text, "packageFormatVersion") ?: 1L).toInt()
+        if (runtimePayload == null && packageFormatVersion < 2) {
+            throw IllegalArgumentException("no runtime payload found")
+        }
+        val components = parseComponentObjects(text)
+        val sharedPayload = if (Regex("\"shared\"\\s*:\\s*\\{").containsMatchIn(text)) {
+            val shared = extractJsonObject(text, "shared")
+            ComponentPayloadRef(
+                id = extractJsonStringOrNull(shared, "id") ?: "runtime.shared",
+                path = extractJsonString(shared, "payloadPath"),
+                sha256 = extractJsonString(shared, "payloadSha256"),
+                size = extractJsonNumberOrNull(shared, "payloadSize") ?: 0L,
+            )
+        } else {
+            null
+        }
 
         var guestLayout: PayloadRef? = null
         var mountContract: PayloadRef? = null
@@ -424,6 +539,9 @@ internal class DefaultPackageVerifier : PackageVerifier {
             runtimePayload = runtimePayload,
             sha256sums = sha256sums,
             licenses = null,
+            packageFormatVersion = packageFormatVersion,
+            components = components,
+            sharedPayload = sharedPayload,
         )
     }
 
@@ -451,19 +569,27 @@ internal class DefaultPackageVerifier : PackageVerifier {
         )
     }
 
-    private fun parseComponentIndex(text: String): List<ComponentRef> {
+    private fun parseComponentIndex(text: String): List<ComponentRef> = parseComponentObjects(text)
+
+    private fun parseComponentObjects(text: String): List<ComponentRef> {
         val componentsArrayContent = extractJsonArrayContent(text, "components") ?: return emptyList()
         val objectPattern = Regex("\\{[^{}]+\\}")
-        return objectPattern.findAll(componentsArrayContent).map { objMatch ->
+        return objectPattern.findAll(componentsArrayContent).mapNotNull { objMatch ->
             val obj = objMatch.value
+            val componentId = extractJsonStringOrNull(obj, "id") ?: return@mapNotNull null
             ComponentRef(
-                id = extractJsonString(obj, "id"),
+                id = componentId,
                 version = extractJsonStringOrNull(obj, "version"),
                 architecture = extractJsonStringOrNull(obj, "architecture"),
-                path = extractJsonString(obj, "root"),
+                path = extractJsonStringOrNull(obj, "root")
+                    ?: extractJsonStringOrNull(obj, "path")
+                    ?: throw IllegalArgumentException("component $componentId has no root"),
                 sha256 = extractJsonStringOrNull(obj, "sha256")
                     ?: extractJsonStringOrNull(obj, "treeSha256")
-                    ?: throw IllegalArgumentException("component has no sha256"),
+                    ?: throw IllegalArgumentException("component $componentId has no sha256"),
+                payloadPath = extractJsonStringOrNull(obj, "payloadPath"),
+                payloadSha256 = extractJsonStringOrNull(obj, "payloadSha256"),
+                payloadSize = extractJsonNumberOrNull(obj, "payloadSize"),
             )
         }.toList()
     }
@@ -578,6 +704,11 @@ internal class DefaultPackageVerifier : PackageVerifier {
         val pattern = Regex("\"$key\"\\s*:\\s*(\\d+)")
         val match = pattern.find(json) ?: throw IllegalArgumentException("missing number key: $key")
         return match.groupValues[1].toLongOrNull() ?: throw IllegalArgumentException("invalid number for key: $key")
+    }
+
+    private fun extractJsonNumberOrNull(json: String, key: String): Long? {
+        val pattern = Regex("\"$key\"\\s*:\\s*(\\d+)")
+        return pattern.find(json)?.groupValues?.get(1)?.toLongOrNull()
     }
 
     private fun extractJsonObject(text: String, key: String): String {

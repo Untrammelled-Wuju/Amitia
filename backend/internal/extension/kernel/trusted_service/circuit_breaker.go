@@ -41,12 +41,21 @@ type CircuitBreaker struct {
 	config           CircuitConfig
 	openedAt         time.Time
 	halfOpenAttempts int
+	now              func() time.Time
 }
 
 func NewCircuitBreaker(config CircuitConfig) *CircuitBreaker {
+	return newCircuitBreaker(config, time.Now)
+}
+
+func newCircuitBreaker(config CircuitConfig, now func() time.Time) *CircuitBreaker {
+	if now == nil {
+		now = time.Now
+	}
 	return &CircuitBreaker{
 		state:  CircuitClosed,
 		config: config,
+		now:    now,
 	}
 }
 
@@ -60,7 +69,7 @@ func (c *CircuitBreaker) State() CircuitState {
 func (c *CircuitBreaker) RecordSuccess() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.lastSuccess = time.Now()
+	c.lastSuccess = c.now()
 	c.successCount++
 
 	if c.state == CircuitHalfOpen {
@@ -71,7 +80,7 @@ func (c *CircuitBreaker) RecordSuccess() {
 			c.halfOpenAttempts = 0
 		}
 	} else if c.state == CircuitClosed {
-		if time.Since(c.lastFailure) > c.config.ResetAfterHealthy {
+		if c.now().Sub(c.lastFailure) > c.config.ResetAfterHealthy {
 			c.failureCount = 0
 		}
 	}
@@ -81,17 +90,17 @@ func (c *CircuitBreaker) RecordFailure() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.failureCount++
-	c.lastFailure = time.Now()
+	c.lastFailure = c.now()
 	c.successCount = 0
 
 	if c.state == CircuitHalfOpen {
 		c.state = CircuitOpen
-		c.openedAt = time.Now()
+		c.openedAt = c.now()
 		c.halfOpenAttempts = 0
 	} else if c.state == CircuitClosed {
 		if c.failureCount >= c.config.FailureThreshold {
 			c.state = CircuitOpen
-			c.openedAt = time.Now()
+			c.openedAt = c.now()
 		}
 	}
 }
@@ -101,6 +110,36 @@ func (c *CircuitBreaker) AllowStart() bool {
 	defer c.mu.Unlock()
 	c.evaluateTransition()
 	return c.state != CircuitOpen
+}
+
+func (c *CircuitBreaker) TryAcquire() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.evaluateTransition()
+	if c.state == CircuitOpen {
+		return ErrCircuitOpen
+	}
+	if c.state == CircuitHalfOpen {
+		if c.halfOpenAttempts >= c.config.HalfOpenAttempts {
+			return ErrCircuitHalfOpenExhausted
+		}
+		c.halfOpenAttempts++
+	}
+	return nil
+}
+
+func (c *CircuitBreaker) AbortProbe() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.state == CircuitHalfOpen && c.halfOpenAttempts > 0 {
+		c.halfOpenAttempts--
+	}
+}
+
+func (c *CircuitBreaker) ProbeCount() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.halfOpenAttempts
 }
 
 func (c *CircuitBreaker) Reset() {
@@ -127,7 +166,7 @@ func (c *CircuitBreaker) FailureCount() int {
 
 func (c *CircuitBreaker) evaluateTransition() {
 	if c.state == CircuitOpen {
-		if time.Since(c.openedAt) >= c.config.RecoveryAfter {
+		if c.now().Sub(c.openedAt) >= c.config.RecoveryAfter {
 			c.state = CircuitHalfOpen
 			c.halfOpenAttempts = 0
 			c.successCount = 0
@@ -143,3 +182,5 @@ func (c *CircuitBreaker) String() string {
 }
 
 var ErrCircuitOpen = errors.New("trusted_service: circuit breaker is open")
+
+var ErrCircuitHalfOpenExhausted = errors.New("trusted_service: half-open probe limit reached")

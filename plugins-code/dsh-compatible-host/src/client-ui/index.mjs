@@ -1345,7 +1345,7 @@ function createSlotBridge(pluginId, resources) {
             },
           }, factory);
           return async () => {
-            await dispose();
+            if (dispose) await dispose();
             if (dshFactoryContributionIds.get(dshSlotId) === factoryId) dshFactoryContributionIds.delete(dshSlotId);
             if (factorySlotAliases().get(dshSlotId) === mappedOfficial) factorySlotAliases().delete(dshSlotId);
           };

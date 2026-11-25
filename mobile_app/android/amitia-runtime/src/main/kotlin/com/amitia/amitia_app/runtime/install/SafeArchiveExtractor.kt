@@ -3,10 +3,14 @@ package com.amitia.amitia_app.runtime.install
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.apache.commons.compress.compressors.xz.XZCompressorInputStream
+import java.io.BufferedInputStream
+import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
+import java.io.InputStream
+import java.util.zip.GZIPInputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 
@@ -35,7 +39,15 @@ internal interface SafeArchiveExtractor {
         targetDir: File,
         rootBoundary: String?,
     ): SafeExtractResult
+
+    fun extractTarGz(
+        tarGzFile: File,
+        targetDir: File,
+        rootBoundary: String?,
+    ): SafeExtractResult
 }
+
+private const val EXTRACT_BUFFER_SIZE = 256 * 1024
 
 internal class DefaultSafeArchiveExtractor(
     private val maxEntries: Long = 100_000L,
@@ -165,6 +177,32 @@ internal class DefaultSafeArchiveExtractor(
                 "tar.xz file not found: ${tarXzFile.absolutePath}"
             )
         }
+        return extractTarStream(targetDir, rootBoundary) {
+            XZCompressorInputStream(FileInputStream(tarXzFile).buffered(EXTRACT_BUFFER_SIZE))
+        }
+    }
+
+    override fun extractTarGz(
+        tarGzFile: File,
+        targetDir: File,
+        rootBoundary: String?,
+    ): SafeExtractResult {
+        if (!tarGzFile.isFile) {
+            return SafeExtractResult.Failure(
+                RuntimeInstallErrorCode.PACKAGE_NOT_FOUND,
+                "tar.gz file not found: ${tarGzFile.absolutePath}"
+            )
+        }
+        return extractTarStream(targetDir, rootBoundary) {
+            GZIPInputStream(FileInputStream(tarGzFile).buffered(EXTRACT_BUFFER_SIZE), EXTRACT_BUFFER_SIZE)
+        }
+    }
+
+    private fun extractTarStream(
+        targetDir: File,
+        rootBoundary: String?,
+        openStream: () -> InputStream,
+    ): SafeExtractResult {
         if (!targetDir.exists() && !targetDir.mkdirs()) {
             return SafeExtractResult.Failure(
                 RuntimeInstallErrorCode.RUNTIME_EXTRACT_FAILED,
@@ -176,51 +214,49 @@ internal class DefaultSafeArchiveExtractor(
         var totalBytes = 0L
 
         try {
-            FileInputStream(tarXzFile).use { fis ->
-                XZCompressorInputStream(fis).use { xzIn ->
-                    TarArchiveInputStream(xzIn).use { tarIn ->
-                        var entry: TarArchiveEntry? = tarIn.nextEntry
-                        while (entry != null) {
-                            val entryName = entry.name
+            openStream().use { decompressed ->
+                TarArchiveInputStream(decompressed).use { tarIn ->
+                    var entry: TarArchiveEntry? = tarIn.nextEntry
+                    while (entry != null) {
+                        val entryName = entry.name
 
-                            if (++totalExtracted > maxEntries) {
-                                return SafeExtractResult.Failure(
-                                    RuntimeInstallErrorCode.ARCHIVE_TOO_LARGE,
-                                    "too many entries in archive"
-                                )
-                            }
-
-                            val entrySize = entry.size
-                            if (entrySize > maxSingleFileSize) {
-                                return SafeExtractResult.Failure(
-                                    RuntimeInstallErrorCode.ARCHIVE_TOO_LARGE,
-                                    "single entry too large: $entryName"
-                                )
-                            }
-
-                            totalBytes += entrySize
-                            if (totalBytes > maxTotalSize) {
-                                return SafeExtractResult.Failure(
-                                    RuntimeInstallErrorCode.ARCHIVE_TOO_LARGE,
-                                    "total extraction size exceeds limit"
-                                )
-                            }
-
-                            validateAndExtractEntry(tarIn, entry, targetDir)
-
-                            if (rootBoundary != null && !entry.isSymbolicLink) {
-                                val extractedFile = File(targetDir, entryName).canonicalFile
-                                val boundary = File(rootBoundary).canonicalFile
-                                if (!extractedFile.canonicalPath.startsWith(boundary.canonicalPath)) {
-                                    return SafeExtractResult.Failure(
-                                        RuntimeInstallErrorCode.ARCHIVE_PATH_INVALID,
-                                        "entry outside root boundary: $entryName"
-                                    )
-                                }
-                            }
-
-                            entry = tarIn.nextEntry
+                        if (++totalExtracted > maxEntries) {
+                            return SafeExtractResult.Failure(
+                                RuntimeInstallErrorCode.ARCHIVE_TOO_LARGE,
+                                "too many entries in archive"
+                            )
                         }
+
+                        val entrySize = entry.size
+                        if (entrySize > maxSingleFileSize) {
+                            return SafeExtractResult.Failure(
+                                RuntimeInstallErrorCode.ARCHIVE_TOO_LARGE,
+                                "single entry too large: $entryName"
+                            )
+                        }
+
+                        totalBytes += entrySize
+                        if (totalBytes > maxTotalSize) {
+                            return SafeExtractResult.Failure(
+                                RuntimeInstallErrorCode.ARCHIVE_TOO_LARGE,
+                                "total extraction size exceeds limit"
+                            )
+                        }
+
+                        validateAndExtractEntry(tarIn, entry, targetDir)
+
+                        if (rootBoundary != null && !entry.isSymbolicLink) {
+                            val extractedFile = File(targetDir, entryName).canonicalFile
+                            val boundary = File(rootBoundary).canonicalFile
+                            if (!extractedFile.canonicalPath.startsWith(boundary.canonicalPath)) {
+                                return SafeExtractResult.Failure(
+                                    RuntimeInstallErrorCode.ARCHIVE_PATH_INVALID,
+                                    "entry outside root boundary: $entryName"
+                                )
+                            }
+                        }
+
+                        entry = tarIn.nextEntry
                     }
                 }
             }
@@ -298,10 +334,27 @@ internal class DefaultSafeArchiveExtractor(
                 if (parentDir != null && !parentDir.exists()) {
                     check(parentDir.mkdirs()) { "cannot create parent directory for: $targetFile" }
                 }
-                FileOutputStream(targetFile).use { fos ->
-                    tarIn.copyTo(fos)
+                val stagingFile = File(parentDir, ".${targetFile.name}.amitia-extract-${System.nanoTime()}")
+                try {
+                    FileOutputStream(stagingFile).use { fos ->
+                        BufferedOutputStream(fos, EXTRACT_BUFFER_SIZE).use { buffered ->
+                            tarIn.copyTo(buffered)
+                        }
+                    }
+                    applyFilePermissions(stagingFile, entry.mode)
+                    if (!stagingFile.renameTo(targetFile)) {
+                        if (targetFile.exists() && !targetFile.delete()) {
+                            throw IOException("cannot replace existing file: $entryName")
+                        }
+                        if (!stagingFile.renameTo(targetFile)) {
+                            throw IOException("cannot move extracted file into place: $entryName")
+                        }
+                    }
+                } finally {
+                    if (stagingFile.exists()) {
+                        stagingFile.delete()
+                    }
                 }
-                applyFilePermissions(targetFile, entry.mode)
             }
             else -> {
                 throw IOException("unsupported entry type: $entryName")
