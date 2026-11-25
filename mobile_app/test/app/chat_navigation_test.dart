@@ -26,6 +26,7 @@ import 'package:amitia_app/features/tasks/presentation/pages/task_hub_page.dart'
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
@@ -391,12 +392,13 @@ void main() {
       const EdgeInsets.fromLTRB(16, 12, 16, 4),
     );
 
+    final taskIcon = find.byKey(const ValueKey('main-tab-icon-任务'));
+    final taskCalendar = tester.widget<SvgPicture>(taskIcon);
     expect(
-      tester
-          .widget<AmitiaIcon>(find.byKey(const ValueKey('main-tab-icon-任务')))
-          .glyph,
-      AmitiaIconGlyph.calendar,
+      (taskCalendar.bytesLoader as SvgAssetLoader).assetName,
+      'assets/icons/calendar.svg',
     );
+    expect(tester.getSize(taskIcon), const Size.square(18));
     await tester.tap(find.byKey(const ValueKey('main-tab-任务')));
     await tester.pumpAndSettle();
     expect(find.byType(TaskHubPage), findsOneWidget);

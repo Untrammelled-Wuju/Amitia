@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/app_routes.dart';
@@ -140,8 +141,8 @@ class _MainTabScaffoldState extends ConsumerState<MainTabScaffold> {
         glyph: AmitiaIconGlyph.messages,
       ),
     ];
-    const providerTabs = <(int, String, String, AmitiaIconGlyph)>[
-      (1, AppRoutes.tasks, '任务', AmitiaIconGlyph.calendar),
+    const providerTabs = <(int, String, String, AmitiaIconGlyph?)>[
+      (1, AppRoutes.tasks, '任务', null),
       (2, AppRoutes.memoryHub, '记忆', AmitiaIconGlyph.memory),
       (3, AppRoutes.extensions, '扩展', AmitiaIconGlyph.extensions),
       (4, AppRoutes.me, '我的', AmitiaIconGlyph.profile),
@@ -163,6 +164,9 @@ class _MainTabScaffoldState extends ConsumerState<MainTabScaffold> {
               : item.tabLabel,
           glyph: icon == null ? fallbackGlyph : null,
           icon: icon,
+          svgAsset: route == AppRoutes.tasks
+              ? 'assets/icons/calendar.svg'
+              : null,
         ),
       );
     }
@@ -176,12 +180,14 @@ class _MainTabDestination {
     required this.label,
     this.glyph,
     this.icon,
+    this.svgAsset,
   });
 
   final int branchIndex;
   final String label;
   final AmitiaIconGlyph? glyph;
   final IconData? icon;
+  final String? svgAsset;
 }
 
 class _MainTabButton extends StatelessWidget {
@@ -208,7 +214,21 @@ class _MainTabButton extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            if (destination.glyph case final glyph?)
+            if (destination.svgAsset case final asset?)
+              SizedBox.square(
+                dimension: 21,
+                child: Center(
+                  child: SvgPicture.asset(
+                    asset,
+                    key: ValueKey('main-tab-icon-${destination.label}'),
+                    width: 18,
+                    height: 18,
+                    colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+                    excludeFromSemantics: true,
+                  ),
+                ),
+              )
+            else if (destination.glyph case final glyph?)
               AmitiaIcon(
                 key: ValueKey('main-tab-icon-${destination.label}'),
                 glyph,

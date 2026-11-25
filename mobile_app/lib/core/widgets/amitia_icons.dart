@@ -14,7 +14,6 @@ enum AmitiaIconGlyph {
   more,
   newChat,
   newGroup,
-  calendar,
   reminder,
   continuity,
   memoryOverview,
@@ -272,8 +271,6 @@ class _AmitiaIconPainter extends CustomPainter {
         _newChat(canvas, stroke);
       case AmitiaIconGlyph.newGroup:
         _newGroup(canvas, stroke, fill);
-      case AmitiaIconGlyph.calendar:
-        _calendar(canvas, fill);
       case AmitiaIconGlyph.reminder:
         _reminder(canvas, stroke, fill);
       case AmitiaIconGlyph.continuity:
@@ -482,27 +479,6 @@ class _AmitiaIconPainter extends CustomPainter {
     canvas.drawPath(right, stroke);
     _lines(canvas, stroke, [(18.5, 4.2, 18.5, 9.2), (16, 6.7, 21, 6.7)]);
     canvas.drawCircle(const Offset(15.6, 8.2), .9, fill);
-  }
-
-  void _calendar(Canvas canvas, Paint fill) {
-    const corner = Radius.circular(32);
-    canvas.save();
-    canvas.scale(24 / 1024);
-    final frame = Path()
-      ..fillType = PathFillType.evenOdd
-      ..addRRect(RRect.fromLTRBR(64, 128, 960, 960, corner))
-      ..addRect(const Rect.fromLTRB(128, 192, 896, 320))
-      ..addRect(const Rect.fromLTRB(128, 384, 896, 896));
-    canvas.drawPath(frame, fill);
-    for (final x in [256.0, 704.0]) {
-      canvas.drawRRect(RRect.fromLTRBR(x, 64, x + 64, 256, corner), fill);
-    }
-    for (final y in [512.0, 704.0]) {
-      for (final x in [256.0, 448.0, 640.0]) {
-        canvas.drawRRect(RRect.fromLTRBR(x, y, x + 128, y + 64, corner), fill);
-      }
-    }
-    canvas.restore();
   }
 
   void _reminder(Canvas canvas, Paint stroke, Paint fill) {
