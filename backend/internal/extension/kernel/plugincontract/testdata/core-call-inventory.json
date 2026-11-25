@@ -297,9 +297,9 @@
   "uiHosts": [
     {
       "host": "web",
-      "files": 176,
-      "calls": 847,
-      "linked": 768,
+      "files": 178,
+      "calls": 849,
+      "linked": 770,
       "prefixes": 66,
       "unlinked": 13,
       "unlinkedPaths": [
@@ -317,7 +317,7 @@
         "/api/public/auth/login",
         "/api/reminders-archive"
       ],
-      "digest": "2c3dfd8a680475d5b32f587bf85239d1753c8d110dd62162920b6643b5ff7036"
+      "digest": "bec0622892e72379de3ba2d95388e0d749026ed92ced79cc87f7184e5b3d02a4"
     },
     {
       "host": "flutter",
@@ -343,7 +343,7 @@
         "/api/extensions/workshop/sessions/:param/tests",
         "/api/local/workspaces"
       ],
-      "digest": "63fd6869b105d842dbbb05aaf50b10d9d809ba9447d013695f2377a124ea07aa"
+      "digest": "07c127fd4f0f281d844b6e551711d65a47206c1b1481b0049df54dae1a6b5f25"
     }
   ],
   "digest": "99ebd9c7c88c7b3397526deff5caf7ad94781d542b63d94ad057cc949185e585"
