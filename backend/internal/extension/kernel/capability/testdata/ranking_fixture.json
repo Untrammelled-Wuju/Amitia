@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "weights": { "lexical": 1, "domain": 1, "usage": 1, "explicit": 1 },
+  "tools": [
+    {
+      "id": "tool-report-writer",
+      "modelName": "report_writer",
+      "keywords": ["周报", "报告", "文档", "写入"],
+      "domains": ["document"]
+    },
+    {
+      "id": "tool-report-reader",
+      "modelName": "report_reader",
+      "keywords": ["周报", "报告", "读取"],
+      "domains": ["document"]
+    },
+    {
+      "id": "tool-weekly-summary",
+      "modelName": "weekly_summary",
+      "keywords": ["周报", "汇总"],
+      "domains": ["document"]
+    },
+    {
+      "id": "tool-slack-sender",
+      "modelName": "slack_sender",
+      "keywords": ["发送", "消息"],
+      "domains": ["communication"]
+    }
+  ],
+  "usage": [
+    { "toolId": "tool-report-writer", "calls": 40, "successes": 38, "failures": 2 },
+    { "toolId": "tool-report-reader", "calls": 3, "successes": 3, "failures": 0 }
+  ],
+  "queries": [
+    { "text": "用 report_writer 生成本周文档", "mode": "explicit", "top1": "tool-report-writer" },
+    { "text": "report_reader 读取周报", "mode": "explicit", "top1": "tool-report-reader" },
+    { "text": "把周报整理成报告", "mode": "confusable", "top1": "tool-report-writer" }
+  ]
+}

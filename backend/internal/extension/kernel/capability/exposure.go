@@ -3,11 +3,15 @@ package capability
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 )
 
 type ToolExposureManager struct {
 	registry         *ToolRegistry
 	availabilityEval AvailabilityEvaluator
+	taskSelector     *TaskSelector
+	schemaIndex      *DescriptorIndex
+	schemaStore      *SchemaStore
 }
 
 func NewToolExposureManager(registry *ToolRegistry, availabilityEval AvailabilityEvaluator) *ToolExposureManager {
@@ -15,6 +19,15 @@ func NewToolExposureManager(registry *ToolRegistry, availabilityEval Availabilit
 		registry:         registry,
 		availabilityEval: availabilityEval,
 	}
+}
+
+func (m *ToolExposureManager) WithTaskSelector(selector *TaskSelector) *ToolExposureManager {
+	m.taskSelector = selector
+	return m
+}
+
+func (m *ToolExposureManager) TaskSelector() *TaskSelector {
+	return m.taskSelector
 }
 
 func (m *ToolExposureManager) GetModelTools(
@@ -38,14 +51,7 @@ func (m *ToolExposureManager) GetModelTools(
 			}
 		}
 
-		descTokens := len(tool.Description) / 4
-		nameTokens := len(tool.ModelName) / 4
-		schemaTokens := 0
-		if tool.InputSchema != nil {
-			schemaTokens = len(tool.InputSchema) / 4
-		}
-		estimated := descTokens + nameTokens + schemaTokens
-
+		estimated := estimateToolTokens(tool)
 		if tokenBudget > 0 && totalTokens+estimated > tokenBudget {
 			continue
 		}
@@ -55,6 +61,45 @@ func (m *ToolExposureManager) GetModelTools(
 	}
 
 	return views
+}
+
+func (m *ToolExposureManager) GetModelToolsForTask(
+	ctx context.Context,
+	sessionCtx ToolInvocationContext,
+	query string,
+	tokenBudget int,
+	limit int,
+) ([]ModelToolView, error) {
+	if m.taskSelector == nil {
+		return m.GetModelTools(ctx, sessionCtx, tokenBudget), nil
+	}
+	report, err := m.taskSelector.Select(ctx, sessionCtx, query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("select tools for task: %w", err)
+	}
+	views := make([]ModelToolView, 0, len(report.Selected))
+	totalTokens := 0
+	for _, selected := range report.Selected {
+		estimated := estimateToolTokens(selected.Tool)
+		if tokenBudget > 0 && totalTokens+estimated > tokenBudget {
+			continue
+		}
+		views = append(views, selected.Tool.ModelToolView())
+		totalTokens += estimated
+	}
+	return views, nil
+}
+
+func (m *ToolExposureManager) SelectForTask(
+	ctx context.Context,
+	sessionCtx ToolInvocationContext,
+	query string,
+	limit int,
+) (SelectionReport, error) {
+	if m.taskSelector == nil {
+		return SelectionReport{}, fmt.Errorf("%w: exposure manager has no task selector", ErrTaskSelectorInvalid)
+	}
+	return m.taskSelector.Select(ctx, sessionCtx, query, limit)
 }
 
 type ProviderToolFormat string

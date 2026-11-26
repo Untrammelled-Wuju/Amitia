@@ -9,16 +9,19 @@ import (
 type AvailabilityReason string
 
 const (
-	ReasonModuleDisabled      AvailabilityReason = "module_disabled"
-	ReasonToolDisabled        AvailabilityReason = "tool_disabled"
-	ReasonScopeDenied         AvailabilityReason = "scope_denied"
-	ReasonPermissionMissing   AvailabilityReason = "permission_missing"
-	ReasonRuntimeNotReady     AvailabilityReason = "runtime_not_ready"
-	ReasonDependencyMissing   AvailabilityReason = "dependency_missing"
-	ReasonMCPDisconnected     AvailabilityReason = "mcp_disconnected"
-	ReasonWorkflowInvalid     AvailabilityReason = "workflow_invalid"
-	ReasonPluginCircuitOpen   AvailabilityReason = "plugin_circuit_open"
-	ReasonPlatformUnsupported AvailabilityReason = "platform_unsupported"
+	ReasonModuleDisabled       AvailabilityReason = "module_disabled"
+	ReasonToolDisabled         AvailabilityReason = "tool_disabled"
+	ReasonScopeDenied          AvailabilityReason = "scope_denied"
+	ReasonPermissionMissing    AvailabilityReason = "permission_missing"
+	ReasonRuntimeNotReady      AvailabilityReason = "runtime_not_ready"
+	ReasonDependencyMissing    AvailabilityReason = "dependency_missing"
+	ReasonMCPDisconnected      AvailabilityReason = "mcp_disconnected"
+	ReasonWorkflowInvalid      AvailabilityReason = "workflow_invalid"
+	ReasonPluginCircuitOpen    AvailabilityReason = "plugin_circuit_open"
+	ReasonPlatformUnsupported  AvailabilityReason = "platform_unsupported"
+	ReasonHealthUnavailable    AvailabilityReason = "health_unavailable"
+	ReasonNotInstalled         AvailabilityReason = "not_installed"
+	ReasonContractIncompatible AvailabilityReason = "contract_incompatible"
 )
 
 type AvailabilityResult struct {

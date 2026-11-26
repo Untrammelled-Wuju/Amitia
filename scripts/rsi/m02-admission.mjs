@@ -92,6 +92,130 @@ export const UNWIRED_SYMBOLS = [
   'CoreDescriptorCatalog'
 ]
 
+export const BACKPRESSURE_PACKAGE_DIR = 'backend/internal/extension/kernel/task_runtime'
+export const GAP_SYMBOLS = [
+  'CapabilityGapReport',
+  'GapEntry',
+  'GapState',
+  'CompositionRule',
+  'AnalyzeCapabilityGap',
+  'ErrGapInvalid'
+]
+export const RATELIMIT_SYMBOLS = [
+  'RateLimitConfig',
+  'RateLimitError',
+  'DeadLetter',
+  'EventLimiter',
+  'NewEventLimiter',
+  'ErrRateLimitInvalid',
+  'ErrRateLimited'
+]
+export const NETBUDGET_SYMBOLS = [
+  'NetworkBudget',
+  'NetworkBucket',
+  'NetworkBudgetError',
+  'NewNetworkBucket',
+  'ErrNetworkBudgetInvalid',
+  'ErrNetworkBudgetExceeded'
+]
+export const PLATFORM_SYMBOLS = [
+  'PlatformQuotaPlatform',
+  'PlatformQuotaLevel',
+  'PlatformQuotaCapability',
+  'PlatformQuotaRequest',
+  'PlatformQuotaDecision',
+  'NegotiatePlatformQuota',
+  'ErrPlatformQuotaInvalid'
+]
+export const JOBBUDGET_SYMBOLS = [
+  'JobBudget',
+  'JobBudgetSupport',
+  'JobBudgetPolicy',
+  'JobBudgetRefusal',
+  'PlanJobBudget',
+  'ErrJobBudgetInvalid',
+  'ErrJobBudgetUnsupported'
+]
+export const MEMQUOTA_SYMBOLS = [
+  'MemoryQuotaPlan',
+  'PlanMemoryQuota',
+  'ApplyMemoryQuota',
+  'ReadOOMKills',
+  'MemoryQuotaFS',
+  'OSMemoryQuotaFS',
+  'ErrMemoryQuotaInvalid',
+  'ErrMemoryQuotaNotApplied'
+]
+export const CPUQUOTA_SYMBOLS = [
+  'CPUQuotaPlan',
+  'PlanCPUQuota',
+  'ApplyCPUQuota',
+  'CPUQuotaFS',
+  'OSCPUQuotaFS',
+  'ErrCPUQuotaInvalid',
+  'ErrCPUQuotaNotApplied'
+]
+export const EXPERIMENT_SYMBOLS = [
+  'ExperimentGovernor',
+  'ExperimentJob',
+  'ExperimentCheckpoint',
+  'ExperimentGovernorConfig',
+  'ExperimentLoad',
+  'ExperimentLoadDeniedError',
+  'ExperimentPauseReport',
+  'ExperimentResumeReport',
+  'ExperimentGovernorStats'
+]
+export const PROFILE_SYMBOLS = [
+  'QuotaProfileSpec',
+  'QuotaProfile',
+  'DeviceClass',
+  'ProfileGrant',
+  'DefaultQuotaProfiles',
+  'DefaultQuotaProfile',
+  'ResolveQuotaProfile',
+  'ConfigureQuotaCeiling',
+  'AbsoluteQuotaMax'
+]
+export const QUOTA_SYMBOLS = [
+  'ResourceQuota',
+  'QuotaCeiling',
+  'QuotaLedger',
+  'QuotaRejection',
+  'QuotaViolation',
+  'QuotaBudgetError',
+  'ValidateQuota',
+  'NormalizeQuota',
+  'DefaultQuotaCeiling',
+  'ApplyQuotaSupport',
+  'NewQuotaLedger'
+]
+export const BACKPRESSURE_SYMBOLS = [
+  'BoundedQueue',
+  'NewBoundedQueue',
+  'BoundedQueueConfig',
+  'QueuePriority',
+  'QueueItem',
+  'BoundedQueueStats',
+  'QueueFullError',
+  'PressureLevel'
+]
+export const EVENTING_PACKAGE_DIR = 'backend/internal/extension/kernel/event'
+export const EVENTING_SYMBOLS = [
+  'ScopeSubscriptionKey',
+  'ScopedRegistration',
+  'ScopedRegistry',
+  'ScopedEvent',
+  'ScopedHandler',
+  'ScopedHandlerFunc',
+  'ScopedSubscription',
+  'ScopedDeliveryReport',
+  'ScopeFilter',
+  'RuntimeActivator',
+  'ErrScopedSubscriptionInvalid',
+  'ErrScopedSubscriptionConflict'
+]
+
 export const ROUTE_CACHE_PACKAGE_DIR = 'backend/internal/extension/kernel/routecache/'
 export const INVOCATION_PACKAGE_DIR = 'backend/internal/execution/'
 export const INVOCATION_SYMBOLS = [
@@ -211,6 +335,22 @@ export const LEDGER_IDENTITY_SYMBOLS = ['ErrLedgerInvocationMismatch', 'LedgerBi
 export const EFFECT_PROOF_SYMBOLS = ['EffectProof', 'EffectProofKind', 'EffectProofRecord', 'RecordEffectProof', 'InspectProofs', 'ExactlyOnceClaim', 'ProofKindForCapability', 'ErrEffectProofIncomplete', 'IsEffectProofImmutableError']
 
 export const RECOVERY_SYMBOLS = ['RecoveryRecord', 'RecoveryDecision', 'RecoveryReport', 'RecoverInFlight', 'InspectRecovery', 'IsRecoveryImmutableError', 'ErrRecoveryRequired', 'RecoveryReconcile']
+
+export const CAPABILITY_INDEX_SYMBOLS = ['DescriptorIndex', 'DescriptorEntry', 'BuildDescriptorIndex', 'SchemaStore', 'SchemaRef', 'NewSchemaStore', 'HydrateOptions', 'ErrSchemaRefImmutable', 'ErrSchemaExpired', 'ErrDescriptorUnknown']
+
+export const DESCRIPTOR_REVISION_SYMBOLS = ['DescriptorEvent', 'DescriptorEventKind', 'ApplyReport', 'RepairReport', 'RevisionGap', 'ErrDescriptorRevisionGap', 'ErrDescriptorRevisionStale', 'ErrDescriptorEventInvalid', 'DescriptorRegister', 'DescriptorUnregister', 'DescriptorUpdate']
+
+export const TASK_FILTER_SYMBOLS = ['TaskProfile', 'TaskDomain', 'TaskAction', 'ClassifyTask', 'TaskSelector', 'NewTaskSelector', 'SelectedTool', 'RejectedTool', 'SelectionReport', 'ContractResolver', 'GrantResolver', 'ErrTaskSelectorInvalid', 'ErrTaskContractInvalid']
+
+export const TASK_RANKING_SYMBOLS = ['RankingStrategy', 'RankingPolicy', 'NewRankingPolicy', 'HybridStrategy', 'LexicalStrategy', 'RankedTool', 'RankCandidate', 'StrategySnapshot', 'RankingWeights', 'UsageStat', 'ErrRankingStrategyMissing', 'ErrRankingSnapshotDrift']
+
+export const DETAIL_BUDGET_SYMBOLS = ['DetailRequest', 'DetailPage', 'TrimSchemaToBudget', 'TrimReport', 'ErrDetailRequestInvalid', 'ErrDetailBudgetExhausted', 'ErrDetailCursorInvalid', 'DefaultDetailTopK', 'MaxDetailTopK', 'DefaultSchemaTokenBudget']
+
+export const AGENT_CONTEXT_PACKAGE_DIR = 'backend/internal/extension/kernel/agentcontext/'
+export const CUTOVER_PACKAGE_DIR = 'backend/internal/extension/kernel/retrievalcutover/'
+export const AGENT_CONTEXT_SYMBOLS = ['AgentContextBuilder', 'NewAgentContextBuilder', 'AgentContextRequest', 'AgentContext', 'AgentContextMode', 'AgentContextTask', 'AgentContextLegacy', 'ErrAgentContextInvalid']
+export const CUTOVER_SYMBOLS = ['Thresholds', 'DefaultThresholds', 'Metrics', 'Evaluate', 'Verdict', 'Failure', 'Unit', 'NewUnit', 'Baseline', 'BaselineFromMetrics', 'ErrThresholdsNotMet', 'ErrCutoverInvalid']
+export const DETAIL_BUDGET_CONSUMED_SYMBOLS = ['DetailRequest', 'DetailPage']
 export const E2E_INTEGRATION_PATH = 'artifacts/rsi/m04-s08/INTEGRATION.json'
 export const E2E_INTEGRATION_MIN_FILES = 14
 export const E2E_INTEGRATION_REQUIRED_GATES = ['LEDGER', 'EFFECT_TOKEN', 'RECONCILIATION', 'FAULT_MATRIX', 'E2E_MATRIX']
@@ -296,6 +436,41 @@ export const GATES = [
   { id: 'LEDGER_IDENTITY', file: 'm04-s10-ledger-identity.log', command: 'node', args: ['scripts/rsi/m04-ledger-identity.mjs'], cwd: '.' },
   { id: 'EFFECT_PROOF', file: 'm04-s11-effect-proof.log', command: 'node', args: ['scripts/rsi/m04-s11-effect-proof.mjs'], cwd: '.' },
   { id: 'RECOVERY', file: 'm04-s12-recovery.log', command: 'node', args: ['scripts/rsi/m04-s12-recovery.mjs'], cwd: '.' }
+,  { id: 'DESCRIPTOR_INDEX', file: 'm05-s01-descriptor-index.log', command: 'node', args: ['scripts/rsi/m05-s01-descriptor-index.mjs'], cwd: '.' }
+,  { id: 'DESCRIPTOR_REVISION', file: 'm05-s02-descriptor-revision.log', command: 'node', args: ['scripts/rsi/m05-s02-descriptor-revision.mjs'], cwd: '.' }
+,  { id: 'TASK_FILTER', file: 'm05-s03-task-filter.log', command: 'node', args: ['scripts/rsi/m05-s03-task-filter.mjs'], cwd: '.' }
+,  { id: 'TASK_RANKING', file: 'm05-s04-ranking.log', command: 'node', args: ['scripts/rsi/m05-s04-ranking.mjs'], cwd: '.' }
+,  { id: 'DETAIL_BUDGET', file: 'm05-s05-detail-budget.log', command: 'node', args: ['scripts/rsi/m05-s05-detail-budget.mjs'], cwd: '.' }
+,  { id: 'AGENT_CONTEXT', file: 'm05-s06-agent-context.log', command: 'node', args: ['scripts/rsi/m05-s06-agent-context.mjs'], cwd: '.' }
+,  { id: 'SCALE_BENCH', file: 'm05-s07-scale-bench.log', command: 'node', args: ['scripts/rsi/m05-s07-scale-bench.mjs'], cwd: '.' }
+,  { id: 'RETRIEVAL_CUTOVER', file: 'm05-s08-cutover.log', command: 'node', args: ['scripts/rsi/m05-s08-cutover.mjs'], cwd: '.' }
+,  { id: 'PREAUTH_ORDER', file: 'm05-s09-preauth.log', command: 'node', args: ['scripts/rsi/m05-s09-preauth.mjs'], cwd: '.' }
+,  { id: 'SCHEMA_CACHE', file: 'm05-s10-schema-cache.log', command: 'node', args: ['scripts/rsi/m05-s10-schema-cache.mjs'], cwd: '.' }
+,  { id: 'EXACT_ROUTE', file: 'm05-s11-exact-route.log', command: 'node', args: ['scripts/rsi/m05-s11-exact-route.mjs'], cwd: '.' }
+,  { id: 'QUALITY_BENCH', file: 'm05-s12-quality.log', command: 'node', args: ['scripts/rsi/m05-s12-quality.mjs'], cwd: '.' }
+,  { id: 'LIFECYCLE_STATES', file: 'm06-s01-lifecycle.log', command: 'node', args: ['scripts/rsi/m06-s01-lifecycle.mjs'], cwd: '.' }
+,  { id: 'PLUGIN_METADATA', file: 'm06-s02-metadata.log', command: 'node', args: ['scripts/rsi/m06-s02-metadata.mjs'], cwd: '.' }
+,  { id: 'EXECUTE_ON_DEMAND', file: 'm06-s03-execute.log', command: 'node', args: ['scripts/rsi/m06-s03-execute.mjs'], cwd: '.' }
+,  { id: 'IDLE_RECLAIM', file: 'm06-s04-idle.log', command: 'node', args: ['scripts/rsi/m06-s04-idle.mjs'], cwd: '.' }
+,  { id: 'HOT_RESIDENCY', file: 'm06-s05-hot.log', command: 'node', args: ['scripts/rsi/m06-s05-hot.mjs'], cwd: '.' }
+,  { id: 'RELEASE_LEAKS', file: 'm06-s06-release.log', command: 'node', args: ['scripts/rsi/m06-s06-release.mjs'], cwd: '.' }
+,  { id: 'COLD_BASELINE', file: 'm06-s07-baseline.log', command: 'node', args: ['scripts/rsi/m06-s07-baseline.mjs'], cwd: '.' }
+,  { id: 'HOST_ISOLATION', file: 'm06-s08-host.log', command: 'node', args: ['scripts/rsi/m06-s08-host.mjs'], cwd: '.' }
+,  { id: 'RESOURCE_GOVERNANCE', file: 'm07-s01-governance.log', command: 'node', args: ['scripts/rsi/m07-s01-governance.mjs'], cwd: '.' }
+,  { id: 'EVENT_SUBSCRIPTIONS', file: 'm07-s02-eventing.log', command: 'node', args: ['scripts/rsi/m07-s02-eventing.mjs'], cwd: '.' }
+,  { id: 'BACKPRESSURE', file: 'm07-s03-backpressure.log', command: 'node', args: ['scripts/rsi/m07-s03-backpressure.mjs'], cwd: '.' }
+,  { id: 'QUOTA_SCHEMA', file: 'm07-s04-quota.log', command: 'node', args: ['scripts/rsi/m07-s04-quota.mjs'], cwd: '.' }
+,  { id: 'QUOTA_PROFILES', file: 'm07-s05-profiles.log', command: 'node', args: ['scripts/rsi/m07-s05-profiles.mjs'], cwd: '.' }
+,  { id: 'EXPERIMENT_GOVERNOR', file: 'm07-s06-experiment.log', command: 'node', args: ['scripts/rsi/m07-s06-experiment.mjs'], cwd: '.' }
+,  { id: 'STRESS_INJECTION', file: 'm07-s07-stress.log', command: 'node', args: ['scripts/rsi/m07-s07-stress.mjs'], cwd: '.' }
+,  { id: 'SOAK_VERIFY', file: 'm07-s08-soak.log', command: 'node', args: ['scripts/rsi/m07-s08-soak.mjs'], cwd: '.' }
+,  { id: 'CPU_QUOTA', file: 'm07-s09-cpuquota.log', command: 'node', args: ['scripts/rsi/m07-s09-cpuquota.mjs'], cwd: '.' }
+,  { id: 'MEMORY_QUOTA', file: 'm07-s10-memquota.log', command: 'node', args: ['scripts/rsi/m07-s10-memquota.mjs'], cwd: '.' }
+,  { id: 'JOB_BUDGET', file: 'm07-s11-jobbudget.log', command: 'node', args: ['scripts/rsi/m07-s11-jobbudget.mjs'], cwd: '.' }
+,  { id: 'PLATFORM_QUOTA', file: 'm07-s12-platformquota.log', command: 'node', args: ['scripts/rsi/m07-s12-platformquota.mjs'], cwd: '.' }
+,  { id: 'NET_BUDGET', file: 'm07-s13-netbudget.log', command: 'node', args: ['scripts/rsi/m07-s13-netbudget.mjs'], cwd: '.' }
+,  { id: 'RATE_LIMIT', file: 'm07-s14-ratelimit.log', command: 'node', args: ['scripts/rsi/m07-s14-ratelimit.mjs'], cwd: '.' }
+,  { id: 'GAP_REPORT', file: 'm08-s01-gap.log', command: 'node', args: ['scripts/rsi/m08-s01-gap.mjs'], cwd: '.' }
 ]
 
 export const POST_RESTORE_GATE = { id: 'M01_ADMISSION_VERIFY', file: 'm02-s08-m01-verify.log', command: 'node', args: ['scripts/rsi/m01-audit.mjs', '--verify'], cwd: '.' }
@@ -334,6 +509,186 @@ export function packageSources(root) {
 
 export function qualifiedRef(symbol) {
   return new RegExp(`plugincontract\\.${symbol}\\b`)
+}
+
+export function scanGapSymbols(root) {
+  const backend = resolve(root, 'backend')
+  const packagePrefix = resolve(root, 'backend/internal/extension/kernel/capability') + '/'
+  const hits = []
+  for (const path of relativeFiles(backend, '.go')) {
+    if (path.startsWith(packagePrefix)) continue
+    if (path.endsWith('_test.go')) continue
+    const source = readFileSync(path, 'utf8')
+    for (const symbol of GAP_SYMBOLS) {
+      if (new RegExp(`capability\\.${symbol}\\b`).test(source)) hits.push({ path: path.slice(resolve(root).length + 1), symbol })
+    }
+  }
+  return hits.sort((left, right) => (left.path === right.path ? (left.symbol < right.symbol ? -1 : 1) : left.path < right.path ? -1 : 1))
+}
+
+export function scanRateLimitSymbols(root) {
+  const backend = resolve(root, 'backend')
+  const packagePrefix = resolve(root, BACKPRESSURE_PACKAGE_DIR) + '/'
+  const hits = []
+  for (const path of relativeFiles(backend, '.go')) {
+    if (path.startsWith(packagePrefix)) continue
+    if (path.endsWith('_test.go')) continue
+    const source = readFileSync(path, 'utf8')
+    for (const symbol of RATELIMIT_SYMBOLS) {
+      if (new RegExp(`task_runtime\\.${symbol}\\b`).test(source)) hits.push({ path: path.slice(resolve(root).length + 1), symbol })
+    }
+  }
+  return hits.sort((left, right) => (left.path === right.path ? (left.symbol < right.symbol ? -1 : 1) : left.path < right.path ? -1 : 1))
+}
+
+export function scanNetBudgetSymbols(root) {
+  const backend = resolve(root, 'backend')
+  const packagePrefix = resolve(root, BACKPRESSURE_PACKAGE_DIR) + '/'
+  const hits = []
+  for (const path of relativeFiles(backend, '.go')) {
+    if (path.startsWith(packagePrefix)) continue
+    if (path.endsWith('_test.go')) continue
+    const source = readFileSync(path, 'utf8')
+    for (const symbol of NETBUDGET_SYMBOLS) {
+      if (new RegExp(`task_runtime\\.${symbol}\\b`).test(source)) hits.push({ path: path.slice(resolve(root).length + 1), symbol })
+    }
+  }
+  return hits.sort((left, right) => (left.path === right.path ? (left.symbol < right.symbol ? -1 : 1) : left.path < right.path ? -1 : 1))
+}
+
+export function scanPlatformSymbols(root) {
+  const backend = resolve(root, 'backend')
+  const packagePrefix = resolve(root, BACKPRESSURE_PACKAGE_DIR) + '/'
+  const hits = []
+  for (const path of relativeFiles(backend, '.go')) {
+    if (path.startsWith(packagePrefix)) continue
+    if (path.endsWith('_test.go')) continue
+    const source = readFileSync(path, 'utf8')
+    for (const symbol of PLATFORM_SYMBOLS) {
+      if (new RegExp(`task_runtime\\.${symbol}\\b`).test(source)) hits.push({ path: path.slice(resolve(root).length + 1), symbol })
+    }
+  }
+  return hits.sort((left, right) => (left.path === right.path ? (left.symbol < right.symbol ? -1 : 1) : left.path < right.path ? -1 : 1))
+}
+
+export function scanJobBudgetSymbols(root) {
+  const backend = resolve(root, 'backend')
+  const packagePrefix = resolve(root, BACKPRESSURE_PACKAGE_DIR) + '/'
+  const hits = []
+  for (const path of relativeFiles(backend, '.go')) {
+    if (path.startsWith(packagePrefix)) continue
+    if (path.endsWith('_test.go')) continue
+    const source = readFileSync(path, 'utf8')
+    for (const symbol of JOBBUDGET_SYMBOLS) {
+      if (new RegExp(`task_runtime\\.${symbol}\\b`).test(source)) hits.push({ path: path.slice(resolve(root).length + 1), symbol })
+    }
+  }
+  return hits.sort((left, right) => (left.path === right.path ? (left.symbol < right.symbol ? -1 : 1) : left.path < right.path ? -1 : 1))
+}
+
+export function scanMemoryQuotaSymbols(root) {
+  const backend = resolve(root, 'backend')
+  const packagePrefix = resolve(root, BACKPRESSURE_PACKAGE_DIR) + '/'
+  const hits = []
+  for (const path of relativeFiles(backend, '.go')) {
+    if (path.startsWith(packagePrefix)) continue
+    if (path.endsWith('_test.go')) continue
+    const source = readFileSync(path, 'utf8')
+    for (const symbol of MEMQUOTA_SYMBOLS) {
+      if (new RegExp(`task_runtime\\.${symbol}\\b`).test(source)) hits.push({ path: path.slice(resolve(root).length + 1), symbol })
+    }
+  }
+  return hits.sort((left, right) => (left.path === right.path ? (left.symbol < right.symbol ? -1 : 1) : left.path < right.path ? -1 : 1))
+}
+
+export function scanCPUQuotaSymbols(root) {
+  const backend = resolve(root, 'backend')
+  const packagePrefix = resolve(root, BACKPRESSURE_PACKAGE_DIR) + '/'
+  const hits = []
+  for (const path of relativeFiles(backend, '.go')) {
+    if (path.startsWith(packagePrefix)) continue
+    if (path.endsWith('_test.go')) continue
+    const source = readFileSync(path, 'utf8')
+    for (const symbol of CPUQUOTA_SYMBOLS) {
+      if (new RegExp(`task_runtime\\.${symbol}\\b`).test(source)) hits.push({ path: path.slice(resolve(root).length + 1), symbol })
+    }
+  }
+  return hits.sort((left, right) => (left.path === right.path ? (left.symbol < right.symbol ? -1 : 1) : left.path < right.path ? -1 : 1))
+}
+
+export function scanExperimentSymbols(root) {
+  const backend = resolve(root, 'backend')
+  const packagePrefix = resolve(root, BACKPRESSURE_PACKAGE_DIR) + '/'
+  const hits = []
+  for (const path of relativeFiles(backend, '.go')) {
+    if (path.startsWith(packagePrefix)) continue
+    if (path.endsWith('_test.go')) continue
+    const source = readFileSync(path, 'utf8')
+    for (const symbol of EXPERIMENT_SYMBOLS) {
+      if (new RegExp(`task_runtime\\.${symbol}\\b`).test(source)) hits.push({ path: path.slice(resolve(root).length + 1), symbol })
+    }
+  }
+  return hits.sort((left, right) => (left.path === right.path ? (left.symbol < right.symbol ? -1 : 1) : left.path < right.path ? -1 : 1))
+}
+
+export function scanProfileSymbols(root) {
+  const backend = resolve(root, 'backend')
+  const packagePrefix = resolve(root, BACKPRESSURE_PACKAGE_DIR) + '/'
+  const hits = []
+  for (const path of relativeFiles(backend, '.go')) {
+    if (path.startsWith(packagePrefix)) continue
+    if (path.endsWith('_test.go')) continue
+    const source = readFileSync(path, 'utf8')
+    for (const symbol of PROFILE_SYMBOLS) {
+      if (new RegExp(`task_runtime\\.${symbol}\\b`).test(source)) hits.push({ path: path.slice(resolve(root).length + 1), symbol })
+    }
+  }
+  return hits.sort((left, right) => (left.path === right.path ? (left.symbol < right.symbol ? -1 : 1) : left.path < right.path ? -1 : 1))
+}
+
+export function scanQuotaSymbols(root) {
+  const backend = resolve(root, 'backend')
+  const packagePrefix = resolve(root, BACKPRESSURE_PACKAGE_DIR) + '/'
+  const hits = []
+  for (const path of relativeFiles(backend, '.go')) {
+    if (path.startsWith(packagePrefix)) continue
+    if (path.endsWith('_test.go')) continue
+    const source = readFileSync(path, 'utf8')
+    for (const symbol of QUOTA_SYMBOLS) {
+      if (new RegExp(`task_runtime\\.${symbol}\\b`).test(source)) hits.push({ path: path.slice(resolve(root).length + 1), symbol })
+    }
+  }
+  return hits.sort((left, right) => (left.path === right.path ? (left.symbol < right.symbol ? -1 : 1) : left.path < right.path ? -1 : 1))
+}
+
+export function scanBackpressureSymbols(root) {
+  const backend = resolve(root, 'backend')
+  const packagePrefix = resolve(root, BACKPRESSURE_PACKAGE_DIR) + '/'
+  const hits = []
+  for (const path of relativeFiles(backend, '.go')) {
+    if (path.startsWith(packagePrefix)) continue
+    if (path.endsWith('_test.go')) continue
+    const source = readFileSync(path, 'utf8')
+    for (const symbol of BACKPRESSURE_SYMBOLS) {
+      if (new RegExp(`task_runtime\\.${symbol}\\b`).test(source)) hits.push({ path: path.slice(resolve(root).length + 1), symbol })
+    }
+  }
+  return hits.sort((left, right) => (left.path === right.path ? (left.symbol < right.symbol ? -1 : 1) : left.path < right.path ? -1 : 1))
+}
+
+export function scanEventingSymbols(root) {
+  const backend = resolve(root, 'backend')
+  const packagePrefix = resolve(root, EVENTING_PACKAGE_DIR) + '/'
+  const hits = []
+  for (const path of relativeFiles(backend, '.go')) {
+    if (path.startsWith(packagePrefix)) continue
+    if (path.endsWith('_test.go')) continue
+    const source = readFileSync(path, 'utf8')
+    for (const symbol of EVENTING_SYMBOLS) {
+      if (new RegExp(`\\b${symbol}\\b`).test(source)) hits.push({ path: path.slice(resolve(root).length + 1), symbol })
+    }
+  }
+  return hits.sort((left, right) => (left.path === right.path ? (left.symbol < right.symbol ? -1 : 1) : left.path < right.path ? -1 : 1))
 }
 
 export function scanUnwiredSymbols(root, symbols = UNWIRED_SYMBOLS) {
@@ -561,7 +916,7 @@ export function scanRecoverySymbols(root, symbols = RECOVERY_SYMBOLS) {
     if (path.startsWith(packagePrefix)) continue
     const source = readFileSync(path, 'utf8')
     for (const symbol of symbols) {
-      if (!new RegExp(`executionjournal\.${symbol}\b`).test(source)) continue
+      if (!new RegExp(`executionjournal\\.${symbol}\\b`).test(source)) continue
       hits.push({ path: path.slice(resolve(root).length + 1), symbol })
     }
   }
@@ -570,6 +925,74 @@ export function scanRecoverySymbols(root, symbols = RECOVERY_SYMBOLS) {
 
 export function recoveryWiringProblems(root) {
   return scanRecoverySymbols(root).map((hit) => `interrupted recovery surface reached a site before its consumption step: ${hit.path} -> ${hit.symbol}`)
+}
+
+export function scanCapabilityIndexSymbols(root, symbols = CAPABILITY_INDEX_SYMBOLS, options = {}) {
+  const backend = resolve(root, 'backend')
+  const skipDirs = options.skipDirs ?? [AGENT_CONTEXT_PACKAGE_DIR, CUTOVER_PACKAGE_DIR]
+  const skipPrefixes = [resolve(root, 'backend/internal/extension/kernel/capability') + '/', ...skipDirs.map((dir) => resolve(root, dir) + '/')]
+  const hits = []
+  for (const path of relativeFiles(backend, '.go')) {
+    if (skipPrefixes.some((prefix) => path.startsWith(prefix))) continue
+    const source = readFileSync(path, 'utf8')
+    for (const symbol of symbols) {
+      if (!new RegExp(`capability\\.${symbol}\\b`).test(source)) continue
+      hits.push({ path: path.slice(resolve(root).length + 1), symbol })
+    }
+  }
+  return hits.sort((left, right) => (left.path === right.path ? (left.symbol < right.symbol ? -1 : 1) : left.path < right.path ? -1 : 1))
+}
+
+export function scanAgentContextConsumers(root, symbols = DETAIL_BUDGET_CONSUMED_SYMBOLS) {
+  const backend = resolve(root, 'backend')
+  const capabilityPrefix = resolve(root, 'backend/internal/extension/kernel/capability') + '/'
+  const agentPrefix = resolve(root, AGENT_CONTEXT_PACKAGE_DIR) + '/'
+  const hits = []
+  for (const path of relativeFiles(backend, '.go')) {
+    if (path.startsWith(capabilityPrefix)) continue
+    if (path.endsWith('_test.go')) continue
+    const source = readFileSync(path, 'utf8')
+    for (const symbol of symbols) {
+      if (!new RegExp(`capability\\.${symbol}\\b`).test(source)) continue
+      hits.push({ path: path.slice(resolve(root).length + 1), symbol, consumer: path.startsWith(agentPrefix) })
+    }
+  }
+  return hits.sort((left, right) => (left.path === right.path ? (left.symbol < right.symbol ? -1 : 1) : left.path < right.path ? -1 : 1))
+}
+
+export function scanAgentContextSymbols(root, symbols = AGENT_CONTEXT_SYMBOLS) {
+  const backend = resolve(root, 'backend')
+  const ownPrefix = resolve(root, AGENT_CONTEXT_PACKAGE_DIR) + '/'
+  const hits = []
+  for (const path of relativeFiles(backend, '.go')) {
+    if (path.startsWith(ownPrefix)) continue
+    const source = readFileSync(path, 'utf8')
+    for (const symbol of symbols) {
+      if (!new RegExp(`agentcontext\\.${symbol}\\b`).test(source)) continue
+      hits.push({ path: path.slice(resolve(root).length + 1), symbol })
+    }
+  }
+  return hits.sort((left, right) => (left.path === right.path ? (left.symbol < right.symbol ? -1 : 1) : left.path < right.path ? -1 : 1))
+}
+
+export function scanCutoverSymbols(root, symbols = CUTOVER_SYMBOLS) {
+  const backend = resolve(root, 'backend')
+  const ownPrefix = resolve(root, CUTOVER_PACKAGE_DIR) + '/'
+  const hits = []
+  for (const path of relativeFiles(backend, '.go')) {
+    if (path.startsWith(ownPrefix)) continue
+    if (path.endsWith('_test.go')) continue
+    const source = readFileSync(path, 'utf8')
+    for (const symbol of symbols) {
+      if (!new RegExp(`retrievalcutover\\.${symbol}\\b`).test(source)) continue
+      hits.push({ path: path.slice(resolve(root).length + 1), symbol })
+    }
+  }
+  return hits.sort((left, right) => (left.path === right.path ? (left.symbol < right.symbol ? -1 : 1) : left.path < right.path ? -1 : 1))
+}
+
+export function capabilityIndexWiringProblems(root) {
+  return scanCapabilityIndexSymbols(root).map((hit) => `descriptor index surface reached a site before its consumption step: ${hit.path} -> ${hit.symbol}`)
 }
 
 export function readIntegrationPackage(root, path = E2E_INTEGRATION_PATH) {
@@ -741,6 +1164,35 @@ export function buildAdmission(root) {
   const ledgerIdentityProblems = ledgerIdentityWiringProblems(root)
   const effectProofProblems = effectProofWiringProblems(root)
   const recoveryProblems = recoveryWiringProblems(root)
+  const capabilityIndexProblems = capabilityIndexWiringProblems(root)
+  const descriptorRevisionProblems = scanCapabilityIndexSymbols(root, DESCRIPTOR_REVISION_SYMBOLS).map((hit) => `descriptor revision surface reached a site before its consumption step: ${hit.path} -> ${hit.symbol}`)
+  const taskFilterProblems = scanCapabilityIndexSymbols(root, TASK_FILTER_SYMBOLS).map((hit) => `task filter surface reached a site before its consumption step: ${hit.path} -> ${hit.symbol}`)
+  const taskRankingProblems = scanCapabilityIndexSymbols(root, TASK_RANKING_SYMBOLS).map((hit) => `task ranking surface reached a site before its consumption step: ${hit.path} -> ${hit.symbol}`)
+  const detailBudgetProblems = scanCapabilityIndexSymbols(root, DETAIL_BUDGET_SYMBOLS).map((hit) => `detail budget surface reached a site before its consumption step: ${hit.path} -> ${hit.symbol}`)
+  const agentContextProblems = scanAgentContextSymbols(root, AGENT_CONTEXT_SYMBOLS).map((hit) => `agent context surface reached a site before its consumption step: ${hit.path} -> ${hit.symbol}`)
+  const cutoverProblems = scanCutoverSymbols(root, CUTOVER_SYMBOLS).map((hit) => `retrieval cutover surface is wired before its approval step: ${hit.path} -> ${hit.symbol}`)
+  const eventingProblems = scanEventingSymbols(root).map((hit) => `scoped event surface reached a site before its consumption step: ${hit.path} -> ${hit.symbol}`)
+  const backpressureProblems = scanBackpressureSymbols(root).map((hit) => `bounded queue surface reached a site before its consumption step: ${hit.path} -> ${hit.symbol}`)
+  const quotaProblems = scanQuotaSymbols(root).map((hit) => `quota schema surface reached a site before its consumption step: ${hit.path} -> ${hit.symbol}`)
+  const profileProblems = scanProfileSymbols(root).map((hit) => `quota profile surface reached a site before its consumption step: ${hit.path} -> ${hit.symbol}`)
+  const experimentProblems = scanExperimentSymbols(root).map((hit) => `experiment governor surface reached a site before its consumption step: ${hit.path} -> ${hit.symbol}`)
+  const cpuQuotaProblems = scanCPUQuotaSymbols(root).map((hit) => `cpu quota surface reached a site before its consumption step: ${hit.path} -> ${hit.symbol}`)
+  const memQuotaProblems = scanMemoryQuotaSymbols(root).map((hit) => `memory quota surface reached a site before its consumption step: ${hit.path} -> ${hit.symbol}`)
+  const jobBudgetProblems = scanJobBudgetSymbols(root).map((hit) => `job budget surface reached a site before its consumption step: ${hit.path} -> ${hit.symbol}`)
+  const platformProblems = scanPlatformSymbols(root).map((hit) => `platform quota surface reached a site before its consumption step: ${hit.path} -> ${hit.symbol}`)
+  const netBudgetProblems = scanNetBudgetSymbols(root).map((hit) => `network budget surface reached a site before its consumption step: ${hit.path} -> ${hit.symbol}`)
+  const rateLimitProblems = scanRateLimitSymbols(root).map((hit) => `event limiter surface reached a site before its consumption step: ${hit.path} -> ${hit.symbol}`)
+  const gapProblems = scanGapSymbols(root).map((hit) => `capability gap surface reached a site before its consumption step: ${hit.path} -> ${hit.symbol}`)
+  const detailConsumerHits = scanAgentContextConsumers(root, DETAIL_BUDGET_CONSUMED_SYMBOLS)
+  const detailConsumerProblems = []
+  for (const hit of detailConsumerHits.filter((entry) => !entry.consumer)) {
+    detailConsumerProblems.push(`detail budget symbol left the approved consumer: ${hit.path} -> ${hit.symbol}`)
+  }
+  for (const symbol of DETAIL_BUDGET_CONSUMED_SYMBOLS) {
+    if (!detailConsumerHits.some((entry) => entry.consumer && entry.symbol === symbol)) {
+      detailConsumerProblems.push(`detail budget symbol has no approved consumer: ${symbol}`)
+    }
+  }
   const integration = readIntegrationPackage(root)
   const checks = [
     { id: 'GO_BUILD', ok: gateById.GO_BUILD.exitCode === 0, detail: `exit=${gateById.GO_BUILD.exitCode}` },
@@ -793,6 +1245,61 @@ export function buildAdmission(root) {
     { id: 'RECOVERY', ok: gateById.RECOVERY.exitCode === 0, detail: `exit=${gateById.RECOVERY.exitCode}` },
     { id: 'EFFECT_PROOF_UNWIRED', ok: effectProofProblems.length === 0, detail: `symbols=${EFFECT_PROOF_SYMBOLS.length} problems=${effectProofProblems.length}` },
     { id: 'RECOVERY_UNWIRED', ok: recoveryProblems.length === 0, detail: `symbols=${RECOVERY_SYMBOLS.length} problems=${recoveryProblems.length}` },
+    { id: 'DESCRIPTOR_INDEX', ok: gateById.DESCRIPTOR_INDEX.exitCode === 0, detail: `exit=${gateById.DESCRIPTOR_INDEX.exitCode}` },
+    { id: 'DESCRIPTOR_INDEX_UNWIRED', ok: capabilityIndexProblems.length === 0, detail: `symbols=${CAPABILITY_INDEX_SYMBOLS.length} problems=${capabilityIndexProblems.length}` },
+    { id: 'DESCRIPTOR_REVISION', ok: gateById.DESCRIPTOR_REVISION.exitCode === 0, detail: `exit=${gateById.DESCRIPTOR_REVISION.exitCode}` },
+    { id: 'DESCRIPTOR_REVISION_UNWIRED', ok: descriptorRevisionProblems.length === 0, detail: `symbols=${DESCRIPTOR_REVISION_SYMBOLS.length} problems=${descriptorRevisionProblems.length}` },
+    { id: 'TASK_FILTER', ok: gateById.TASK_FILTER.exitCode === 0, detail: `exit=${gateById.TASK_FILTER.exitCode}` },
+    { id: 'TASK_FILTER_UNWIRED', ok: taskFilterProblems.length === 0, detail: `symbols=${TASK_FILTER_SYMBOLS.length} problems=${taskFilterProblems.length}` },
+    { id: 'TASK_RANKING', ok: gateById.TASK_RANKING.exitCode === 0, detail: `exit=${gateById.TASK_RANKING.exitCode}` },
+    { id: 'TASK_RANKING_UNWIRED', ok: taskRankingProblems.length === 0, detail: `symbols=${TASK_RANKING_SYMBOLS.length} problems=${taskRankingProblems.length}` },
+    { id: 'DETAIL_BUDGET', ok: gateById.DETAIL_BUDGET.exitCode === 0, detail: `exit=${gateById.DETAIL_BUDGET.exitCode}` },
+    { id: 'DETAIL_BUDGET_UNWIRED', ok: detailBudgetProblems.length === 0, detail: `symbols=${DETAIL_BUDGET_SYMBOLS.length} problems=${detailBudgetProblems.length}` },
+    { id: 'DETAIL_BUDGET_CONSUMER', ok: detailConsumerProblems.length === 0, detail: `symbols=${DETAIL_BUDGET_CONSUMED_SYMBOLS.length} problems=${detailConsumerProblems.length}` },
+    { id: 'AGENT_CONTEXT', ok: gateById.AGENT_CONTEXT.exitCode === 0, detail: `exit=${gateById.AGENT_CONTEXT.exitCode}` },
+    { id: 'AGENT_CONTEXT_UNWIRED', ok: agentContextProblems.length === 0, detail: `symbols=${AGENT_CONTEXT_SYMBOLS.length} problems=${agentContextProblems.length}` },
+    { id: 'SCALE_BENCH', ok: gateById.SCALE_BENCH.exitCode === 0, detail: `exit=${gateById.SCALE_BENCH.exitCode}` },
+    { id: 'RETRIEVAL_CUTOVER', ok: gateById.RETRIEVAL_CUTOVER.exitCode === 0, detail: `exit=${gateById.RETRIEVAL_CUTOVER.exitCode}` },
+    { id: 'RETRIEVAL_CUTOVER_UNWIRED', ok: cutoverProblems.length === 0, detail: `symbols=${CUTOVER_SYMBOLS.length} problems=${cutoverProblems.length}` },
+    { id: 'PREAUTH_ORDER', ok: gateById.PREAUTH_ORDER.exitCode === 0, detail: `exit=${gateById.PREAUTH_ORDER.exitCode}` },
+    { id: 'SCHEMA_CACHE', ok: gateById.SCHEMA_CACHE.exitCode === 0, detail: `exit=${gateById.SCHEMA_CACHE.exitCode}` },
+    { id: 'EXACT_ROUTE', ok: gateById.EXACT_ROUTE.exitCode === 0, detail: `exit=${gateById.EXACT_ROUTE.exitCode}` },
+    { id: 'QUALITY_BENCH', ok: gateById.QUALITY_BENCH.exitCode === 0, detail: `exit=${gateById.QUALITY_BENCH.exitCode}` },
+    { id: 'LIFECYCLE_STATES', ok: gateById.LIFECYCLE_STATES.exitCode === 0, detail: `exit=${gateById.LIFECYCLE_STATES.exitCode}` },
+    { id: 'PLUGIN_METADATA', ok: gateById.PLUGIN_METADATA.exitCode === 0, detail: `exit=${gateById.PLUGIN_METADATA.exitCode}` },
+    { id: 'EXECUTE_ON_DEMAND', ok: gateById.EXECUTE_ON_DEMAND.exitCode === 0, detail: `exit=${gateById.EXECUTE_ON_DEMAND.exitCode}` },
+    { id: 'IDLE_RECLAIM', ok: gateById.IDLE_RECLAIM.exitCode === 0, detail: `exit=${gateById.IDLE_RECLAIM.exitCode}` },
+    { id: 'HOT_RESIDENCY', ok: gateById.HOT_RESIDENCY.exitCode === 0, detail: `exit=${gateById.HOT_RESIDENCY.exitCode}` },
+    { id: 'RELEASE_LEAKS', ok: gateById.RELEASE_LEAKS.exitCode === 0, detail: `exit=${gateById.RELEASE_LEAKS.exitCode}` },
+    { id: 'COLD_BASELINE', ok: gateById.COLD_BASELINE.exitCode === 0, detail: `exit=${gateById.COLD_BASELINE.exitCode}` },
+    { id: 'HOST_ISOLATION', ok: gateById.HOST_ISOLATION.exitCode === 0, detail: `exit=${gateById.HOST_ISOLATION.exitCode}` },
+    { id: 'RESOURCE_GOVERNANCE', ok: gateById.RESOURCE_GOVERNANCE.exitCode === 0, detail: `exit=${gateById.RESOURCE_GOVERNANCE.exitCode}` },
+    { id: 'EVENT_SUBSCRIPTIONS', ok: gateById.EVENT_SUBSCRIPTIONS.exitCode === 0, detail: `exit=${gateById.EVENT_SUBSCRIPTIONS.exitCode}` },
+    { id: 'EVENTING_UNWIRED', ok: eventingProblems.length === 0, detail: `symbols=${EVENTING_SYMBOLS.length} problems=${eventingProblems.length}` },
+    { id: 'BACKPRESSURE', ok: gateById.BACKPRESSURE.exitCode === 0, detail: `exit=${gateById.BACKPRESSURE.exitCode}` },
+    { id: 'BACKPRESSURE_UNWIRED', ok: backpressureProblems.length === 0, detail: `symbols=${BACKPRESSURE_SYMBOLS.length} problems=${backpressureProblems.length}` },
+    { id: 'QUOTA_SCHEMA', ok: gateById.QUOTA_SCHEMA.exitCode === 0, detail: `exit=${gateById.QUOTA_SCHEMA.exitCode}` },
+    { id: 'QUOTA_UNWIRED', ok: quotaProblems.length === 0, detail: `symbols=${QUOTA_SYMBOLS.length} problems=${quotaProblems.length}` },
+    { id: 'QUOTA_PROFILES', ok: gateById.QUOTA_PROFILES.exitCode === 0, detail: `exit=${gateById.QUOTA_PROFILES.exitCode}` },
+    { id: 'PROFILES_UNWIRED', ok: profileProblems.length === 0, detail: `symbols=${PROFILE_SYMBOLS.length} problems=${profileProblems.length}` },
+    { id: 'EXPERIMENT_GOVERNOR', ok: gateById.EXPERIMENT_GOVERNOR.exitCode === 0, detail: `exit=${gateById.EXPERIMENT_GOVERNOR.exitCode}` },
+    { id: 'EXPERIMENT_UNWIRED', ok: experimentProblems.length === 0, detail: `symbols=${EXPERIMENT_SYMBOLS.length} problems=${experimentProblems.length}` },
+    { id: 'STRESS_INJECTION', ok: gateById.STRESS_INJECTION.exitCode === 0, detail: `exit=${gateById.STRESS_INJECTION.exitCode}` },
+    { id: 'SOAK_VERIFY', ok: gateById.SOAK_VERIFY.exitCode === 0, detail: `exit=${gateById.SOAK_VERIFY.exitCode}` },
+    { id: 'CPU_QUOTA', ok: gateById.CPU_QUOTA.exitCode === 0, detail: `exit=${gateById.CPU_QUOTA.exitCode}` },
+    { id: 'CPUQUOTA_UNWIRED', ok: cpuQuotaProblems.length === 0, detail: `symbols=${CPUQUOTA_SYMBOLS.length} problems=${cpuQuotaProblems.length}` },
+    { id: 'MEMORY_QUOTA', ok: gateById.MEMORY_QUOTA.exitCode === 0, detail: `exit=${gateById.MEMORY_QUOTA.exitCode}` },
+    { id: 'MEMQUOTA_UNWIRED', ok: memQuotaProblems.length === 0, detail: `symbols=${MEMQUOTA_SYMBOLS.length} problems=${memQuotaProblems.length}` },
+    { id: 'JOB_BUDGET', ok: gateById.JOB_BUDGET.exitCode === 0, detail: `exit=${gateById.JOB_BUDGET.exitCode}` },
+    { id: 'JOBBUDGET_UNWIRED', ok: jobBudgetProblems.length === 0, detail: `symbols=${JOBBUDGET_SYMBOLS.length} problems=${jobBudgetProblems.length}` },
+    { id: 'PLATFORM_QUOTA', ok: gateById.PLATFORM_QUOTA.exitCode === 0, detail: `exit=${gateById.PLATFORM_QUOTA.exitCode}` },
+    { id: 'PLATFORM_UNWIRED', ok: platformProblems.length === 0, detail: `symbols=${PLATFORM_SYMBOLS.length} problems=${platformProblems.length}` },
+    { id: 'NET_BUDGET', ok: gateById.NET_BUDGET.exitCode === 0, detail: `exit=${gateById.NET_BUDGET.exitCode}` },
+    { id: 'NETBUDGET_UNWIRED', ok: netBudgetProblems.length === 0, detail: `symbols=${NETBUDGET_SYMBOLS.length} problems=${netBudgetProblems.length}` },
+    { id: 'RATE_LIMIT', ok: gateById.RATE_LIMIT.exitCode === 0, detail: `exit=${gateById.RATE_LIMIT.exitCode}` },
+    { id: 'RATELIMIT_UNWIRED', ok: rateLimitProblems.length === 0, detail: `symbols=${RATELIMIT_SYMBOLS.length} problems=${rateLimitProblems.length}` },
+    { id: 'GAP_REPORT', ok: gateById.GAP_REPORT.exitCode === 0, detail: `exit=${gateById.GAP_REPORT.exitCode}` },
+    { id: 'GAP_UNWIRED', ok: gapProblems.length === 0, detail: `symbols=${GAP_SYMBOLS.length} problems=${gapProblems.length}` },
   ]
   const { verdict, blockers } = computeVerdict(checks)
   const sources = packageSources(root)

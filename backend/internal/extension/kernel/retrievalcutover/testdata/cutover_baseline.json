@@ -1,0 +1,11 @@
+{
+  "tasks": 48,
+  "top1_hits": 48,
+  "top5_hits": 48,
+  "false_injection": 0,
+  "permission_leaks": 0,
+  "injection_drift": 0,
+  "schema_tokens": 1096,
+  "token_drift": 0,
+  "schema_reads": 8
+}

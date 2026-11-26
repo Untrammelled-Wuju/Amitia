@@ -43,6 +43,15 @@ import {
   scanReadFallbackSymbols,
   scanLedgerSymbols,
   PRESERVED_EVIDENCE,
+  TASK_FILTER_SYMBOLS,
+  TASK_RANKING_SYMBOLS,
+  DETAIL_BUDGET_SYMBOLS,
+  DETAIL_BUDGET_CONSUMED_SYMBOLS,
+  AGENT_CONTEXT_SYMBOLS,
+  scanAgentContextConsumers,
+  scanAgentContextSymbols,
+  scanCapabilityIndexSymbols,
+  scanRecoverySymbols,
   ROUTE_CACHE_PACKAGE_DIR,
   ROUTE_E2E_PACKAGE_DIR,
   ROUTE_CONFORMANCE_PACKAGE_DIR,
@@ -684,4 +693,132 @@ test('限定引用按标识符边界匹配而不是裸子串', () => {
   writeFileSync(join(cache, 'route_cache_test.go'), 'package routecache\n\nvar _ = plugincontract.BindingScopeOrder\n', 'utf8')
   const hits = scanWiredSymbols(dir)
   assert.deepEqual(hits.map((hit) => hit.symbol), [])
+})
+
+test('S03 的任务域硬过滤门禁已登记且过滤面仍冻结在包内', () => {
+  assert.equal(TASK_FILTER_SYMBOLS.length, 13)
+  for (const symbol of ['ClassifyTask', 'TaskSelector', 'SelectionReport', 'ContractResolver', 'GrantResolver', 'ErrTaskContractInvalid']) {
+    assert.ok(TASK_FILTER_SYMBOLS.includes(symbol), `missing ${symbol}`)
+  }
+  const gate = GATES.find((entry) => entry.id === 'TASK_FILTER')
+  assert.ok(gate, 'missing TASK_FILTER gate')
+  assert.deepEqual(gate.args, ['scripts/rsi/m05-s03-task-filter.mjs'])
+  assert.equal(gate.command, 'node')
+  assert.equal(gate.file, 'm05-s03-task-filter.log')
+  assert.deepEqual(scanCapabilityIndexSymbols(repoRoot, TASK_FILTER_SYMBOLS), [])
+})
+
+test('S03 的过滤 API 一旦被包外引用就会被扫描抓出', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'm02-admission-task-filter-'))
+  const outside = join(dir, 'backend', 'internal', 'extension', 'kernel', 'routecache')
+  mkdirSync(outside, { recursive: true })
+  writeFileSync(join(outside, 'cache.go'), 'package routecache\n\nvar _ = capability.ClassifyTask\n', 'utf8')
+  const hits = scanCapabilityIndexSymbols(dir, TASK_FILTER_SYMBOLS)
+  assert.equal(hits.length, 1)
+  assert.equal(hits[0].symbol, 'ClassifyTask')
+})
+
+test('S04 的排序策略门禁已登记且排序面仍冻结在包内', () => {
+  assert.equal(TASK_RANKING_SYMBOLS.length, 12)
+  for (const symbol of ['RankingStrategy', 'RankingPolicy', 'HybridStrategy', 'StrategySnapshot', 'ErrRankingSnapshotDrift']) {
+    assert.ok(TASK_RANKING_SYMBOLS.includes(symbol), `missing ${symbol}`)
+  }
+  const gate = GATES.find((entry) => entry.id === 'TASK_RANKING')
+  assert.ok(gate, 'missing TASK_RANKING gate')
+  assert.deepEqual(gate.args, ['scripts/rsi/m05-s04-ranking.mjs'])
+  assert.equal(gate.command, 'node')
+  assert.equal(gate.file, 'm05-s04-ranking.log')
+  assert.deepEqual(scanCapabilityIndexSymbols(repoRoot, TASK_RANKING_SYMBOLS), [])
+})
+
+test('S04 的排序 API 一旦被包外引用就会被扫描抓出', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'm02-admission-task-ranking-'))
+  const outside = join(dir, 'backend', 'internal', 'extension', 'kernel', 'routecache')
+  mkdirSync(outside, { recursive: true })
+  writeFileSync(join(outside, 'cache.go'), 'package routecache\n\nvar _ = capability.RankingPolicy\n', 'utf8')
+  const hits = scanCapabilityIndexSymbols(dir, TASK_RANKING_SYMBOLS)
+  assert.equal(hits.length, 1)
+  assert.equal(hits[0].symbol, 'RankingPolicy')
+})
+
+test('S05 的详情预算门禁已登记且详情面仍冻结在包内', () => {
+  assert.equal(DETAIL_BUDGET_SYMBOLS.length, 10)
+  for (const symbol of ['DetailRequest', 'DetailPage', 'TrimSchemaToBudget', 'ErrDetailBudgetExhausted', 'ErrDetailCursorInvalid']) {
+    assert.ok(DETAIL_BUDGET_SYMBOLS.includes(symbol), `missing ${symbol}`)
+  }
+  const gate = GATES.find((entry) => entry.id === 'DETAIL_BUDGET')
+  assert.ok(gate, 'missing DETAIL_BUDGET gate')
+  assert.deepEqual(gate.args, ['scripts/rsi/m05-s05-detail-budget.mjs'])
+  assert.equal(gate.command, 'node')
+  assert.equal(gate.file, 'm05-s05-detail-budget.log')
+  assert.deepEqual(scanCapabilityIndexSymbols(repoRoot, DETAIL_BUDGET_SYMBOLS), [])
+})
+
+test('S05 的详情预算 API 一旦被包外引用就会被扫描抓出', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'm02-admission-detail-budget-'))
+  const outside = join(dir, 'backend', 'internal', 'extension', 'kernel', 'routecache')
+  mkdirSync(outside, { recursive: true })
+  writeFileSync(join(outside, 'cache.go'), 'package routecache\n\nvar _ = capability.TrimSchemaToBudget\n', 'utf8')
+  const hits = scanCapabilityIndexSymbols(dir, DETAIL_BUDGET_SYMBOLS)
+  assert.equal(hits.length, 1)
+  assert.equal(hits[0].symbol, 'TrimSchemaToBudget')
+})
+
+test('S06 的 Agent Context 门禁已登记且构建器面仍冻结在包内', () => {
+  assert.equal(AGENT_CONTEXT_SYMBOLS.length, 8)
+  for (const symbol of ['AgentContextBuilder', 'NewAgentContextBuilder', 'AgentContextRequest', 'ErrAgentContextInvalid']) {
+    assert.ok(AGENT_CONTEXT_SYMBOLS.includes(symbol), `missing ${symbol}`)
+  }
+  const gate = GATES.find((entry) => entry.id === 'AGENT_CONTEXT')
+  assert.ok(gate, 'missing AGENT_CONTEXT gate')
+  assert.deepEqual(gate.args, ['scripts/rsi/m05-s06-agent-context.mjs'])
+  assert.equal(gate.command, 'node')
+  assert.equal(gate.file, 'm05-s06-agent-context.log')
+  assert.deepEqual(scanAgentContextSymbols(repoRoot, AGENT_CONTEXT_SYMBOLS), [])
+})
+
+test('S06 的构建器一旦被包外引用就会被扫描抓出', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'm02-admission-agent-context-'))
+  const outside = join(dir, 'backend', 'internal', 'extension', 'kernel', 'routecache')
+  mkdirSync(outside, { recursive: true })
+  writeFileSync(join(outside, 'cache.go'), 'package routecache\n\nvar _ = agentcontext.NewAgentContextBuilder\n', 'utf8')
+  const hits = scanAgentContextSymbols(dir, AGENT_CONTEXT_SYMBOLS)
+  assert.equal(hits.length, 1)
+  assert.equal(hits[0].symbol, 'NewAgentContextBuilder')
+})
+
+test('S06 的放行消费方只允许 agentcontext，且必须真的消费', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'm02-admission-detail-consumer-'))
+  const base = join(dir, 'backend', 'internal', 'extension', 'kernel')
+  const approved = join(base, 'agentcontext')
+  const other = join(base, 'routecache')
+  mkdirSync(approved, { recursive: true })
+  mkdirSync(other, { recursive: true })
+  writeFileSync(join(approved, 'builder.go'), 'package agentcontext\n\nvar _ = capability.DetailRequest{}\n', 'utf8')
+  const hits = scanAgentContextConsumers(dir, DETAIL_BUDGET_CONSUMED_SYMBOLS)
+  assert.deepEqual(hits.filter((hit) => hit.consumer).map((hit) => hit.symbol), ['DetailRequest'])
+  assert.deepEqual(hits.filter((hit) => !hit.consumer), [])
+
+  writeFileSync(join(other, 'cache.go'), 'package routecache\n\nvar _ = capability.DetailPage{}\n', 'utf8')
+  const leaked = scanAgentContextConsumers(dir, DETAIL_BUDGET_CONSUMED_SYMBOLS)
+  assert.deepEqual(leaked.filter((hit) => !hit.consumer).map((hit) => hit.symbol), ['DetailPage'])
+})
+
+test('冻结扫描的正则对包外引用真的命中且守住标识符边界', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'm02-admission-scan-regex-'))
+  const capabilityOut = join(dir, 'backend', 'internal', 'extension', 'kernel', 'routecache')
+  mkdirSync(capabilityOut, { recursive: true })
+  writeFileSync(
+    join(capabilityOut, 'cache.go'),
+    'package routecache\n\nvar _ = capability.ClassifyTask\nvar _ = capability.ClassifyTaskExtra\n',
+    'utf8'
+  )
+  const capabilityHits = scanCapabilityIndexSymbols(dir, TASK_FILTER_SYMBOLS)
+  assert.deepEqual(capabilityHits.map((hit) => hit.symbol), ['ClassifyTask'])
+
+  const recoveryOut = join(dir, 'backend', 'internal', 'devicemesh', 'runtime')
+  mkdirSync(recoveryOut, { recursive: true })
+  writeFileSync(join(recoveryOut, 'recover.go'), 'package runtime\n\nvar _ = executionjournal.RecoverInFlight\n', 'utf8')
+  const recoveryHits = scanRecoverySymbols(dir, ['RecoverInFlight'])
+  assert.deepEqual(recoveryHits.map((hit) => hit.symbol), ['RecoverInFlight'])
 })

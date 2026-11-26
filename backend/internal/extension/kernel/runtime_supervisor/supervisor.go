@@ -78,6 +78,14 @@ func (s *DefaultSupervisor) RegisterFactory(factory RuntimeFactory) error {
 }
 
 func (s *DefaultSupervisor) Reconcile(ctx context.Context, request ReconcileRequest) ReconcileResult {
+	if err := ctx.Err(); err != nil {
+		return ReconcileResult{
+			DefinitionID: request.DefinitionID,
+			Desired:      request.Desired,
+			Actual:       ActualFailed,
+			Error:        err,
+		}
+	}
 	s.mu.Lock()
 	factory, ok := s.factories[request.Spec.RuntimeType]
 	s.mu.Unlock()
